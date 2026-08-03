@@ -239,11 +239,16 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
                 Err(e) => return e,
             };
 
-            if !confirm(&format!("Разрешить выполнить команду '{command}'?")) {
+            if !confirm(&format!("Разрешить выполнить команду '{command}'?"))
+            {
                 return "Пользователь отклонил выполнение команды".to_string();
             }
 
-            let output = match std::process::Command::new("sh").arg("-c").arg(command).output() {
+            let output = match std::process::Command::new("sh")
+                .arg("-c")
+                .arg(command)
+                .output()
+            {
                 Ok(o) => o,
                 Err(e) => return format!("Не удалось запустить команду: {e}"),
             };
@@ -289,7 +294,8 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
                 );
             }
 
-            if !confirm(&format!("Разрешить редактирование файла '{path}'?")) {
+            if !confirm(&format!("Разрешить редактирование файла '{path}'?"))
+            {
                 return "Пользователь отклонил редактирование файла".to_string();
             }
 
