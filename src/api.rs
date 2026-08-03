@@ -28,15 +28,14 @@ pub struct FunctionCall {
     pub arguments: String,
 }
 
-const API_URL: &str = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/57453037-879f-4306-aa42-0fe9b1696bc6/v1/chat/completions";
-
 pub async fn call_model(
     client: &reqwest::Client,
+    api_url: &str,
     token: &str,
     history: &[serde_json::Value],
 ) -> Result<ChatResponse, Box<dyn std::error::Error>> {
     let response = client
-        .post(API_URL)
+        .post(api_url)
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({

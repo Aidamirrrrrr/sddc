@@ -10,6 +10,7 @@ const MAX_TOOL_ROUNDS: u32 = 20;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     let token = std::env::var("AI_API_TOKEN").expect("AI_API_TOKEN не найден — проверь .env");
+    let api_url = std::env::var("AI_API_URL").expect("AI_API_URL не найден — проверь .env");
     let client = reqwest::Client::new();
     let mut history: Vec<serde_json::Value> = Vec::new();
 
@@ -58,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
 
-            let parsed = call_model(&client, &token, &history).await?;
+            let parsed = call_model(&client, &api_url, &token, &history).await?;
 
             let Some(choice) = parsed.choices.first() else {
                 println!("Модель не вернула ответ");
