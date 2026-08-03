@@ -1,14 +1,170 @@
+pub fn tool_definitions() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "Прочитать содержимое текстового файла с диска по пути",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Путь к файлу"
+                        }
+                    },
+                    "required": ["path"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "write_file",
+                "description": "Записать (создать или перезаписать целиком) текстовый файл на диске. Для уже существующего файла, когда нужно изменить только часть содержимого, предпочитай edit_file или multi_edit_file — так меньше риск случайно затереть остальное",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Путь к файлу"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Содержимое, которое нужно записать в файл"
+                        }
+                    },
+                    "required": ["path", "content"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_dir",
+                "description": "Показать список файлов и папок внутри указанной директории",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Путь к папке (по умолчанию текущая директория)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "run_command",
+                "description": "Выполнить shell-команду и вернуть её вывод",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Команда для выполнения в shell"
+                        }
+                    },
+                    "required": ["command"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "edit_file",
+                "description": "Заменить точное вхождение old_string на new_string в уже существующем файле — предпочтительнее write_file для точечных правок. old_string должен быть уникальным в файле, иначе используй replace_all: true. Если нужно сделать несколько правок в одном файле за раз — используй multi_edit_file вместо повторных вызовов edit_file",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Путь к файлу"
+                        },
+                        "old_string": {
+                            "type": "string",
+                            "description": "Точный текст, который нужно найти и заменить"
+                        },
+                        "new_string": {
+                            "type": "string",
+                            "description": "Текст, на который нужно заменить"
+                        },
+                        "replace_all": {
+                            "type": "boolean",
+                            "description": "Заменить все вхождения, а не только первое (по умолчанию false)"
+                        }
+                    },
+                    "required": ["path", "old_string", "new_string"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "multi_edit_file",
+                "description": "Применить несколько последовательных замен old_string -> new_string к одному файлу за один вызов. Каждый old_string должен быть уникальным в файле на момент своей правки",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Путь к файлу"
+                        },
+                        "edits": {
+                            "type": "array",
+                            "description": "Список правок, применяются по порядку",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "old_string": { "type": "string" },
+                                    "new_string": { "type": "string" }
+                                },
+                                "required": ["old_string", "new_string"]
+                            }
+                        }
+                    },
+                    "required": ["path", "edits"]
+                }
+            }
+        }
+    ])
+}
+
+fn parse_args(arguments: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str(arguments).map_err(|e| format!("Ошибка парсинга аргументов: {e}"))
+}
+
+fn require_str<'a>(parsed: &'a serde_json::Value, key: &str) -> Result<&'a str, String> {
+    parsed[key]
+        .as_str()
+        .ok_or_else(|| format!("Аргумент {key} не передан"))
+}
+
+fn confirm(message: &str) -> bool {
+    print!("{message} (y/n): ");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+
+    let mut input = String::new();
+    if std::io::stdin().read_line(&mut input).is_err() {
+        return false;
+    }
+
+    input.trim() == "y"
+}
+
 pub fn run_tool(name: &str, arguments: &str) -> String {
     match name {
         "read_file" => {
-            let parsed: serde_json::Value = match serde_json::from_str(arguments) {
+            let parsed = match parse_args(arguments) {
                 Ok(v) => v,
-                Err(e) => return format!("Ошибка парсинга аргументов: {e}"),
+                Err(e) => return e,
             };
-
-            let path = match parsed["path"].as_str() {
-                Some(p) => p,
-                None => return "Аргумент path не передан".to_string(),
+            let path = match require_str(&parsed, "path") {
+                Ok(p) => p,
+                Err(e) => return e,
             };
 
             match std::fs::read_to_string(path) {
@@ -17,30 +173,20 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
             }
         }
         "write_file" => {
-            let parsed: serde_json::Value = match serde_json::from_str(arguments) {
+            let parsed = match parse_args(arguments) {
                 Ok(v) => v,
-                Err(e) => return format!("Ошибка парсинга аргументов: {e}"),
+                Err(e) => return e,
+            };
+            let path = match require_str(&parsed, "path") {
+                Ok(p) => p,
+                Err(e) => return e,
+            };
+            let content = match require_str(&parsed, "content") {
+                Ok(c) => c,
+                Err(e) => return e,
             };
 
-            let path = match parsed["path"].as_str() {
-                Some(p) => p,
-                None => return "Аргумент path не передан".to_string(),
-            };
-
-            let content = match parsed["content"].as_str() {
-                Some(c) => c,
-                None => return "Аргумент content не передан".to_string(),
-            };
-
-            print!("Разрешить запись в файл '{path}'? (y/n): ");
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-
-            let mut confirm = String::new();
-            if std::io::stdin().read_line(&mut confirm).is_err() {
-                return "Не удалось прочитать подтверждение от пользователя".to_string();
-            }
-
-            if confirm.trim() != "y" {
+            if !confirm(&format!("Разрешить запись в файл '{path}'?")) {
                 return "Пользователь отклонил запись файла".to_string();
             }
 
@@ -50,11 +196,10 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
             }
         }
         "list_dir" => {
-            let parsed: serde_json::Value = match serde_json::from_str(arguments) {
+            let parsed = match parse_args(arguments) {
                 Ok(v) => v,
-                Err(e) => return format!("Ошибка парсинга аргументов: {e}"),
+                Err(e) => return e,
             };
-
             let path = parsed["path"].as_str().unwrap_or(".");
 
             let entries = match std::fs::read_dir(path) {
@@ -70,9 +215,8 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
                 };
 
                 let file_name = entry.file_name().to_string_lossy().to_string();
-                let is_dir = entry.path().is_dir();
 
-                if is_dir {
+                if entry.path().is_dir() {
                     names.push(format!("{file_name}/"));
                 } else {
                     names.push(file_name);
@@ -86,33 +230,20 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
             }
         }
         "run_command" => {
-            let parsed: serde_json::Value = match serde_json::from_str(arguments) {
+            let parsed = match parse_args(arguments) {
                 Ok(v) => v,
-                Err(e) => return format!("Ошибка парсинга аргументов: {e}"),
+                Err(e) => return e,
+            };
+            let command = match require_str(&parsed, "command") {
+                Ok(c) => c,
+                Err(e) => return e,
             };
 
-            let command = match parsed["command"].as_str() {
-                Some(c) => c,
-                None => return "Аргумент command не передан".to_string(),
-            };
-
-            print!("Разрешить выполнить команду '{command}'? (y/n): ");
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-
-            let mut confirm = String::new();
-            if std::io::stdin().read_line(&mut confirm).is_err() {
-                return "Не удалось прочитать подтверждение от пользователя".to_string();
-            }
-
-            if confirm.trim() != "y" {
+            if !confirm(&format!("Разрешить выполнить команду '{command}'?")) {
                 return "Пользователь отклонил выполнение команды".to_string();
             }
 
-            let output = match std::process::Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .output()
-            {
+            let output = match std::process::Command::new("sh").arg("-c").arg(command).output() {
                 Ok(o) => o,
                 Err(e) => return format!("Не удалось запустить команду: {e}"),
             };
@@ -123,26 +254,22 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
             format!("stdout:\n{stdout}\nstderr:\n{stderr}")
         }
         "edit_file" => {
-            let parsed: serde_json::Value = match serde_json::from_str(arguments) {
+            let parsed = match parse_args(arguments) {
                 Ok(v) => v,
-                Err(e) => return format!("Ошибка парсинга аргументов: {e}"),
+                Err(e) => return e,
             };
-
-            let path = match parsed["path"].as_str() {
-                Some(p) => p,
-                None => return "Аргумент path не передан".to_string(),
+            let path = match require_str(&parsed, "path") {
+                Ok(p) => p,
+                Err(e) => return e,
             };
-
-            let old_string = match parsed["old_string"].as_str() {
-                Some(s) => s,
-                None => return "Аргумент old_string не передан".to_string(),
+            let old_string = match require_str(&parsed, "old_string") {
+                Ok(s) => s,
+                Err(e) => return e,
             };
-
-            let new_string = match parsed["new_string"].as_str() {
-                Some(s) => s,
-                None => return "Аргумент new_string не передан".to_string(),
+            let new_string = match require_str(&parsed, "new_string") {
+                Ok(s) => s,
+                Err(e) => return e,
             };
-
             let replace_all = parsed["replace_all"].as_bool().unwrap_or(false);
 
             let content = match std::fs::read_to_string(path) {
@@ -162,15 +289,7 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
                 );
             }
 
-            print!("Разрешить редактирование файла '{path}'? (y/n): ");
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-
-            let mut confirm = String::new();
-            if std::io::stdin().read_line(&mut confirm).is_err() {
-                return "Не удалось прочитать подтверждение от пользователя".to_string();
-            }
-
-            if confirm.trim() != "y" {
+            if !confirm(&format!("Разрешить редактирование файла '{path}'?")) {
                 return "Пользователь отклонил редактирование файла".to_string();
             }
 
@@ -186,16 +305,14 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
             }
         }
         "multi_edit_file" => {
-            let parsed: serde_json::Value = match serde_json::from_str(arguments) {
+            let parsed = match parse_args(arguments) {
                 Ok(v) => v,
-                Err(e) => return format!("Ошибка парсинга аргументов: {e}"),
+                Err(e) => return e,
             };
-
-            let path = match parsed["path"].as_str() {
-                Some(p) => p,
-                None => return "Аргумент path не передан".to_string(),
+            let path = match require_str(&parsed, "path") {
+                Ok(p) => p,
+                Err(e) => return e,
             };
-
             let edits = match parsed["edits"].as_array() {
                 Some(e) => e,
                 None => return "Аргумент edits не передан или не является массивом".to_string(),
@@ -207,14 +324,13 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
             };
 
             for (i, edit) in edits.iter().enumerate() {
-                let old_string = match edit["old_string"].as_str() {
-                    Some(s) => s,
-                    None => return format!("В правке #{} не передан old_string", i + 1),
+                let old_string = match require_str(edit, "old_string") {
+                    Ok(s) => s,
+                    Err(e) => return format!("Правка #{}: {e}", i + 1),
                 };
-
-                let new_string = match edit["new_string"].as_str() {
-                    Some(s) => s,
-                    None => return format!("В правке #{} не передан new_string", i + 1),
+                let new_string = match require_str(edit, "new_string") {
+                    Ok(s) => s,
+                    Err(e) => return format!("Правка #{}: {e}", i + 1),
                 };
 
                 let occurrences = content.matches(old_string).count();
@@ -237,18 +353,10 @@ pub fn run_tool(name: &str, arguments: &str) -> String {
                 content = content.replacen(old_string, new_string, 1);
             }
 
-            print!(
-                "Разрешить применить {} правок к файлу '{path}'? (y/n): ",
+            if !confirm(&format!(
+                "Разрешить применить {} правок к файлу '{path}'?",
                 edits.len()
-            );
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-
-            let mut confirm = String::new();
-            if std::io::stdin().read_line(&mut confirm).is_err() {
-                return "Не удалось прочитать подтверждение от пользователя".to_string();
-            }
-
-            if confirm.trim() != "y" {
+            )) {
                 return "Пользователь отклонил применение правок".to_string();
             }
 
