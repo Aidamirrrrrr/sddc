@@ -4,6 +4,8 @@ mod tools;
 use api::call_model;
 use tools::run_tool;
 
+const MAX_TOOL_ROUNDS: u32 = 20;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -45,7 +47,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "content": input
         }));
 
+        let mut rounds = 0;
+
         loop {
+            rounds += 1;
+            if rounds > MAX_TOOL_ROUNDS {
+                println!(
+                    "[остановлено: превышен лимит в {MAX_TOOL_ROUNDS} кругов вызова инструментов подряд]"
+                );
+                break;
+            }
+
             let parsed = call_model(&client, &token, &history).await?;
 
             let Some(choice) = parsed.choices.first() else {
