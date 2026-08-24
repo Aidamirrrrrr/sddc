@@ -1,5 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
-import { askRequired, askReviewDecision } from "../cli/review";
+import { document, info, required, review, success, withSpinner } from "../cli/ui";
 import { loadInputPrice } from "../config/env";
 import { createRepositoryContextSelector } from "../repository/context-selector";
 import { discoverRepository, reviseRepositoryDiscovery } from "../repository/pipeline";
@@ -12,25 +12,37 @@ export async function createApprovedDiscovery(
   spec: Spec,
   root: string,
 ): Promise<RepositoryDiscovery> {
-  console.log("Discovering repository...");
+  info({
+    en: "Choose the repository context for discovery",
+    ru: "Выберите контекст репозитория для исследования",
+  });
   let discovery = await discoverRepository(
     client,
     spec,
     root,
     createRepositoryContextSelector(root, { inputUsdPerMillion: loadInputPrice() }),
   );
+  success({ en: "Repository discovery is ready", ru: "Исследование репозитория готово" });
   while (true) {
-    console.log(`\n${Bun.YAML.stringify(discovery, null, 2).trimEnd()}\n`);
+    document(
+      { en: "Repository discovery", ru: "Исследование репозитория" },
+      Bun.YAML.stringify(discovery, null, 2).trimEnd(),
+    );
     if (
-      (await askReviewDecision("Accept repository discovery? [a]ccept/[r]evise: ")) === "accept"
+      (await review({ en: "Accept this discovery?", ru: "Принять это исследование?" })) === "accept"
     ) {
-      console.log(
-        `Repository discovery written to ${await writeRepositoryDiscovery(spec.feature, discovery)}`,
-      );
+      const path = await writeRepositoryDiscovery(spec.feature, discovery);
+      success({ en: `Discovery saved to ${path}`, ru: `Исследование сохранено: ${path}` });
       return discovery;
     }
-    const feedback = await askRequired("What should be changed in discovery? ");
-    console.log("Revising repository discovery...");
-    discovery = await reviseRepositoryDiscovery(client, spec, discovery, feedback, root);
+    const feedback = await required({
+      en: "What should be changed in discovery?",
+      ru: "Что нужно изменить в исследовании?",
+    });
+    discovery = await withSpinner(
+      { en: "Revising repository discovery", ru: "Исправляю исследование репозитория" },
+      { en: "Discovery revised", ru: "Исследование исправлено" },
+      () => reviseRepositoryDiscovery(client, spec, discovery, feedback, root),
+    );
   }
 }

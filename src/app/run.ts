@@ -2,7 +2,7 @@ import { ModelClient } from "../ai/model-client";
 import { parseCli } from "../cli/args";
 import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
-import { askRequired } from "../cli/review";
+import { begin, info, required, setUiLanguage, success } from "../cli/ui";
 import { initializeUserConfig, loadModelConfig, loadUserEnvironment } from "../config/env";
 import { PRODUCT_NAME, VERSION } from "../config/product";
 import { classifyRequest } from "../intake/classify";
@@ -36,13 +36,23 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
 
-  let request = await readInput(cli.input, "Describe the task: ");
+  begin();
+  let request = await readInput(cli.input, "Task or question / Задача или вопрос");
   let intent = await classifyRequest(client, request);
+  setUiLanguage(intent.language);
+  info(
+    intent.intent === "inquiry"
+      ? { en: "Mode: read-only repository question", ru: "Режим: read-only вопрос о проекте" }
+      : intent.intent === "change"
+        ? { en: "Mode: controlled project change", ru: "Режим: контролируемое изменение проекта" }
+        : { en: "The request needs clarification", ru: "Запрос нужно уточнить" },
+  );
   while (intent.intent === "unclear") {
-    console.log(intent.question);
+    info({ en: intent.question, ru: intent.question });
     if (!process.stdin.isTTY) return;
-    request += `\n\nUser clarification:\n${await askRequired("> ")}`;
+    request += `\n\nUser clarification:\n${await required({ en: "Your intent", ru: "Ваше намерение" })}`;
     intent = await classifyRequest(client, request);
+    setUiLanguage(intent.language);
   }
   if (intent.intent === "inquiry") {
     await runRepositoryInquiry(client, request, intent.language, process.cwd());
@@ -55,7 +65,8 @@ export async function runCli(arguments_: string[]): Promise<void> {
   const discovery = await createApprovedDiscovery(client, spec, root);
   const policy = await loadPolicy(root);
   const plan = await createApprovedPlan(client, spec, discovery, policy, root);
-  console.log(`Implementation plan written to ${await writeImplementationPlan(plan)}`);
+  const planPath = await writeImplementationPlan(plan);
+  success({ en: `Implementation plan saved to ${planPath}`, ru: `План сохранён: ${planPath}` });
   await persistGovernance(root, spec, discovery, plan, policy);
   await runApprovedExecution(client, root, spec, plan, policy);
 }

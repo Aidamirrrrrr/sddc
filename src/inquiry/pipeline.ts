@@ -6,6 +6,8 @@ import { inquiryPrompts } from "./prompts";
 import { type InquiryAnswer, inquiryAnswerSchema } from "./schemas";
 
 type ObjectGenerator = Pick<ModelClient, "generateObject">;
+export type InquiryStage = "select" | "expand" | "answer" | "review";
+type StageRunner = <T>(stage: InquiryStage, operation: () => Promise<T>) => Promise<T>;
 type ContextSelector = (
   selection: FileSelection,
   index: Awaited<ReturnType<typeof indexRepository>>,
@@ -18,22 +20,27 @@ export async function answerRepositoryInquiry(
   language: string,
   root: string,
   selectContext: ContextSelector,
+  runStage: StageRunner = async (_stage, operation) => operation(),
 ): Promise<InquiryAnswer> {
   const index = await indexRepository(root);
-  const selected = await client.generateObject(
-    inquiryPrompts.select,
-    pretty({ question: request, files: index }),
-    fileSelectionSchema,
+  const selected = await runStage("select", () =>
+    client.generateObject(
+      inquiryPrompts.select,
+      pretty({ question: request, files: index }),
+      fileSelectionSchema,
+    ),
   );
   const initialContext = await selectContext(selected, index);
   const initialSnapshots = await readSnapshots(root, index, initialContext.files);
   if (initialSnapshots.length === 0)
     throw new Error("Repository inquiry selected no readable files");
 
-  const expansion = await client.generateObject(
-    inquiryPrompts.expand,
-    pretty({ question: request, files: index, currentSnapshots: initialSnapshots }),
-    fileSelectionSchema,
+  const expansion = await runStage("expand", () =>
+    client.generateObject(
+      inquiryPrompts.expand,
+      pretty({ question: request, files: index, currentSnapshots: initialSnapshots }),
+      fileSelectionSchema,
+    ),
   );
   const combined: FileSelection = {
     rationale: expansion.rationale,
@@ -55,15 +62,15 @@ export async function answerRepositoryInquiry(
     userContext: finalContext.userContext || undefined,
     snapshots,
   };
-  const candidate = await client.generateObject(
-    inquiryPrompts.answer,
-    pretty(context),
-    inquiryAnswerSchema,
+  const candidate = await runStage("answer", () =>
+    client.generateObject(inquiryPrompts.answer, pretty(context), inquiryAnswerSchema),
   );
-  const reviewed = await client.generateObject(
-    inquiryPrompts.review,
-    pretty({ ...context, candidate }),
-    inquiryAnswerSchema,
+  const reviewed = await runStage("review", () =>
+    client.generateObject(
+      inquiryPrompts.review,
+      pretty({ ...context, candidate }),
+      inquiryAnswerSchema,
+    ),
   );
   return normalizeAnswer(reviewed, new Set(snapshots.map((snapshot) => snapshot.path)));
 }

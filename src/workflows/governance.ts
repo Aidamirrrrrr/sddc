@@ -1,3 +1,4 @@
+import { success } from "../cli/ui";
 import { buildDecisionRegistry } from "../decisions/build";
 import { writeGovernanceArtifacts } from "../decisions/storage";
 import type { ImplementationPlan } from "../planning/schemas";
@@ -18,6 +19,12 @@ export async function persistGovernance(
     buildDecisionRegistry(spec, discovery, plan),
     policy,
   );
-  console.log(`Decision registry written to ${governance.decisions}`);
-  console.log(`Effective policy written to ${governance.policy}`);
+  success({
+    en: `Decision registry saved to ${governance.decisions}`,
+    ru: `Реестр решений сохранён: ${governance.decisions}`,
+  });
+  success({
+    en: `Effective policy saved to ${governance.policy}`,
+    ru: `Политика сохранена: ${governance.policy}`,
+  });
 }

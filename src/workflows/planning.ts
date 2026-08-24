@@ -1,5 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
-import { askRequired, askReviewDecision } from "../cli/review";
+import { document, required, review, withSpinner } from "../cli/ui";
 import { buildImplementationPlan, preparePlanningContext } from "../planning/pipeline";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
@@ -16,31 +16,32 @@ export async function createApprovedPlan(
   let userInput = "";
   const repository = await preparePlanningContext(root, discovery);
   while (true) {
-    console.log("Building implementation plan...");
-    const plan = await buildImplementationPlan(
-      client,
-      spec,
-      discovery,
-      userInput,
-      repository,
-      policy,
+    const plan = await withSpinner(
+      { en: "Building implementation plan", ru: "Составляю план реализации" },
+      { en: "Implementation plan analyzed", ru: "План реализации проанализирован" },
+      () => buildImplementationPlan(client, spec, discovery, userInput, repository, policy),
     );
     if (plan.status === "needs_clarification") {
       userInput += "\n\nUser planning clarifications:\n";
       for (const question of plan.questions) {
-        console.log(`- ${question.question}`);
-        console.log(`  ${question.reason}`);
-        userInput += `${question.id}: ${await askRequired("> ")}\n`;
+        document(
+          { en: `Planning question ${question.id}`, ru: `Вопрос по плану ${question.id}` },
+          `${question.question}\n\n${question.reason}`,
+        );
+        userInput += `${question.id}: ${await required({ en: "Your answer", ru: "Ваш ответ" })}\n`;
       }
       continue;
     }
 
     const rendered = Bun.YAML.stringify(plan, null, 2).trimEnd();
-    console.log(`\n${rendered}\n`);
-    if ((await askReviewDecision("Accept implementation plan? [a]ccept/[r]evise: ")) === "accept") {
+    document({ en: "Implementation plan", ru: "План реализации" }, rendered);
+    if ((await review({ en: "Accept this plan?", ru: "Принять этот план?" })) === "accept") {
       return plan;
     }
-    const feedback = await askRequired("What should be changed in the plan? ");
+    const feedback = await required({
+      en: "What should be changed in the plan?",
+      ru: "Что нужно изменить в плане?",
+    });
     userInput += `\n\nRejected implementation plan:\n${rendered}\n\nUser review feedback:\n${feedback}\n`;
   }
 }

@@ -28,6 +28,9 @@ Read-only questions about an existing project use a separate inquiry flow. The
 user approves repository context, and Codekeeper answers with file evidence
 without creating a specification, plan, or source changes.
 
+The interactive terminal follows the request language, shows progress for model
+stages, and presents context, reviews, and saved artifacts as one guided flow.
+
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
 which the agent is run after interactive approval. Non-interactive input writes
 `spec.draft.yaml` instead.
@@ -91,6 +94,9 @@ CLI-приложение на Bun и TypeScript, которое превраща
 Вопросы о существующем проекте обрабатываются отдельным read-only режимом.
 Пользователь подтверждает контекст репозитория, после чего Codekeeper отвечает
 с файловыми evidence без создания спеки, плана или изменений кода.
+
+Интерактивный терминал следует языку запроса, показывает прогресс модельных
+этапов и объединяет контекст, проверки и сохранённые артефакты в цельный сценарий.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
 запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск
