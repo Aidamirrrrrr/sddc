@@ -52,7 +52,7 @@ pub async fn call_model(
     match serde_json::from_str::<ChatResponse>(&response_text) {
         Ok(parsed) => Ok(parsed),
         Err(e) => {
-            Err(format!("Не удалось разобрать ответ API: {e}. Сырой ответ: {response_text}").into())
+            Err(format!("Failed to parse API response: {e}. Raw response: {response_text}").into())
         }
     }
 }

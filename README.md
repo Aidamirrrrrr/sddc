@@ -41,8 +41,8 @@ cargo run
 ```
 
 ```
-> прочитай Cargo.toml и скажи какие там зависимости
-[выполняю: inspect {"operation":"read","path":"Cargo.toml"}]
+> read Cargo.toml and tell me which dependencies it uses
+[running: inspect {"operation":"read","path":"Cargo.toml"}]
 ...
 
 > exit

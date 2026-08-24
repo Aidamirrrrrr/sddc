@@ -9,22 +9,22 @@ const MAX_TOOL_ROUNDS: u32 = 20;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
-    let token = std::env::var("AI_API_TOKEN").expect("AI_API_TOKEN не найден — проверь .env");
-    let api_url = std::env::var("AI_API_URL").expect("AI_API_URL не найден — проверь .env");
+    let token = std::env::var("AI_API_TOKEN").expect("AI_API_TOKEN is missing; check .env");
+    let api_url = std::env::var("AI_API_URL").expect("AI_API_URL is missing; check .env");
     let client = reqwest::Client::new();
     let mut history: Vec<serde_json::Value> = Vec::new();
 
     let cwd = std::env::current_dir()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "неизвестно".to_string());
+        .unwrap_or_else(|_| "unknown".to_string());
 
     history.push(serde_json::json!({
         "role": "system",
         "content": format!(
-            "Ты — коддинг-агент, работающий в терминале. Текущая рабочая директория: {cwd}.\n\
-             Используй inspect для чтения и поиска, modify для любых изменений файлов, execute для команд и проверок. \
-             Перед тем как что-то менять на диске или выполнять команды, кратко объясняй, что и зачем собираешься делать. \
-             Отвечай на русском языке, кратко и по делу."
+            "You are a coding agent working in a terminal. Current working directory: {cwd}.\n\
+             Use inspect for reading and searching, modify for all file changes, and execute for commands and checks. \
+             Before changing files or running commands, briefly explain what you are going to do and why. \
+             Answer concisely and directly."
         )
     }));
 
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rounds += 1;
             if rounds > MAX_TOOL_ROUNDS {
                 println!(
-                    "[остановлено: превышен лимит в {MAX_TOOL_ROUNDS} кругов вызова инструментов подряд]"
+                    "[stopped: exceeded the limit of {MAX_TOOL_ROUNDS} consecutive tool-call rounds]"
                 );
                 break;
             }
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parsed = call_model(&client, &api_url, &token, &history).await?;
 
             let Some(choice) = parsed.choices.first() else {
-                println!("Модель не вернула ответ");
+                println!("The model returned no response");
                 break;
             };
 
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 for call in tool_calls {
                     println!(
-                        "[выполняю: {} {}]",
+                        "[running: {} {}]",
                         call.function.name, call.function.arguments
                     );
                     let result = run_tool(&call.function.name, &call.function.arguments);
