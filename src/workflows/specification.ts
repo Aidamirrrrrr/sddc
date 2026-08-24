@@ -1,6 +1,8 @@
 import type { ModelClient } from "../ai/model-client";
 import { formatSpec } from "../cli/approval";
-import { document, required, review, success, withSpinner } from "../cli/ui";
+import { specSummary } from "../cli/presentation";
+import { document, required, reviewDocument, success, withSpinner } from "../cli/ui";
+import type { RequestRepositoryContext } from "../repository/request-context";
 import { buildSpec } from "../spec/pipeline";
 import type { Spec } from "../spec/schemas";
 import { writeSpec } from "../spec/storage";
@@ -8,15 +10,17 @@ import { writeSpec } from "../spec/storage";
 export async function createApprovedSpecification(
   client: ModelClient,
   initialRequest: string,
+  repository?: RequestRepositoryContext,
+  interactive = process.stdin.isTTY,
 ): Promise<Spec | null> {
   let request = initialRequest;
   while (true) {
     const spec = await withSpinner(
       { en: "Building specification", ru: "Составляю спецификацию" },
       { en: "Specification analyzed", ru: "Спецификация проанализирована" },
-      () => buildSpec(client, request),
+      () => buildSpec(client, request, repository),
     );
-    if (!process.stdin.isTTY) {
+    if (!interactive) {
       document({ en: "Draft specification", ru: "Черновик спецификации" }, formatSpec(spec));
       const path = await writeSpec(spec, false);
       success({
@@ -29,7 +33,7 @@ export async function createApprovedSpecification(
       request += "\n\nUser clarifications:\n";
       for (const question of spec.questions) {
         document(
-          { en: `Question ${question.id}`, ru: `Вопрос ${question.id}` },
+          { en: `Decision needed · ${question.id}`, ru: `Нужно решение · ${question.id}` },
           `${question.question}\n\n${question.reason}`,
         );
         request += `${question.id}: ${await required({ en: "Your answer", ru: "Ваш ответ" })}\n`;
@@ -38,10 +42,13 @@ export async function createApprovedSpecification(
     }
 
     const rendered = formatSpec(spec);
-    document({ en: "Specification", ru: "Спецификация" }, rendered);
     if (
-      (await review({ en: "Accept this specification?", ru: "Принять эту спецификацию?" })) ===
-      "accept"
+      (await reviewDocument(
+        { en: "Accept this specification?", ru: "Принять эту спецификацию?" },
+        { en: "Specification summary", ru: "Краткая спецификация" },
+        specSummary(spec),
+        rendered,
+      )) === "accept"
     ) {
       const path = await writeSpec(spec);
       success({ en: `Specification saved to ${path}`, ru: `Спецификация сохранена: ${path}` });

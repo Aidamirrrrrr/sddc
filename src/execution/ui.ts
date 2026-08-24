@@ -7,6 +7,7 @@ import {
   select,
   text,
 } from "@clack/prompts";
+import { phrase } from "../cli/ui";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import {
@@ -24,17 +25,45 @@ export async function configureExecution(
   plan: ImplementationPlan,
   policy: Policy,
 ): Promise<{ mode: ExecutionJournal["mode"]; hooks: ExecutionHooks } | null> {
-  note(contractSummary(plan, policy), "Implementation contract");
-  if (!unwrap(await confirm({ message: "Start implementation?", initialValue: false })))
+  note(
+    contractSummary(plan, policy),
+    phrase({ en: "Implementation contract", ru: "Контракт реализации" }),
+  );
+  if (
+    !unwrap(
+      await confirm({
+        message: phrase({ en: "Start implementation?", ru: "Начать реализацию?" }),
+        initialValue: false,
+      }),
+    )
+  )
     return null;
   const mode = unwrap(
     await select({
-      message: "Approval mode",
+      message: phrase({ en: "Approval mode", ru: "Режим подтверждений" }),
       initialValue: policy.execution.default_approval_mode,
       options: [
-        { value: "strict", label: "Strict", hint: "approve files and every command" },
-        { value: "normal", label: "Normal", hint: "approve each task diff" },
-        { value: "trusted", label: "Trusted", hint: "automatic diffs; verification still runs" },
+        {
+          value: "strict",
+          label: phrase({ en: "Strict", ru: "Строгий" }),
+          hint: phrase({
+            en: "approve files and every command",
+            ru: "подтверждать файлы и команды",
+          }),
+        },
+        {
+          value: "normal",
+          label: phrase({ en: "Normal", ru: "Обычный" }),
+          hint: phrase({ en: "approve each task diff", ru: "подтверждать diff каждой задачи" }),
+        },
+        {
+          value: "trusted",
+          label: phrase({ en: "Trusted", ru: "Доверенный" }),
+          hint: phrase({
+            en: "automatic diffs; verification still runs",
+            ru: "diff принимается автоматически; проверки выполняются",
+          }),
+        },
       ],
     }),
   ) as ExecutionJournal["mode"];
@@ -49,7 +78,10 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
       const files = [...task.files.modify, ...task.files.create];
       const selected = unwrap(
         await autocompleteMultiselect({
-          message: `${task.id} approved write scope`,
+          message: phrase({
+            en: `${task.id} approved write scope`,
+            ru: `${task.id}: разрешённые файлы`,
+          }),
           initialValues: files,
           required: true,
           options: files.map((path) => ({
@@ -60,7 +92,13 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         }),
       );
       if (selected.length === files.length) return true;
-      note("Scope changed. Revise the accepted plan before implementation.", "Execution blocked");
+      note(
+        phrase({
+          en: "Scope changed. Revise the accepted plan before implementation.",
+          ru: "Область изменена. Исправьте принятый план до реализации.",
+        }),
+        phrase({ en: "Execution blocked", ru: "Реализация остановлена" }),
+      );
       return false;
     },
     async review(task, proposal, diff) {
@@ -69,7 +107,7 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         const paths = proposal.changes.map((change) => change.path);
         const selected = unwrap(
           await autocompleteMultiselect({
-            message: "Accept changed files",
+            message: phrase({ en: "Accept changed files", ru: "Принять изменённые файлы" }),
             initialValues: paths,
             required: true,
             options: paths.map((path) => ({ value: path, label: path })),
@@ -78,7 +116,13 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         if (selected.length !== paths.length) {
           const omitted = paths.filter((path) => !selected.includes(path));
           const feedback = unwrap(
-            await text({ message: "Revision feedback", placeholder: "Explain the desired change" }),
+            await text({
+              message: phrase({ en: "Revision feedback", ru: "Комментарий к исправлению" }),
+              placeholder: phrase({
+                en: "Explain the desired change",
+                ru: "Опишите желаемое изменение",
+              }),
+            }),
           );
           return {
             accepted: false,
@@ -87,13 +131,19 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         }
       }
       const accepted = unwrap(
-        await confirm({ message: "Accept this task diff?", initialValue: false }),
+        await confirm({
+          message: phrase({ en: "Accept this task diff?", ru: "Принять изменения задачи?" }),
+          initialValue: false,
+        }),
       );
       if (accepted) return { accepted: true };
       const feedback = unwrap(
         await text({
-          message: "What should be changed?",
-          validate: (value) => (!value?.trim() ? "Feedback is required" : undefined),
+          message: phrase({ en: "What should be changed?", ru: "Что нужно изменить?" }),
+          validate: (value) =>
+            !value?.trim()
+              ? phrase({ en: "Feedback is required", ru: "Нужно описать изменения" })
+              : undefined,
         }),
       );
       return { accepted: false, feedback: feedback.trim() };
@@ -102,16 +152,25 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
       const blocker = proposal.blocker;
       note(
         `${blocker?.reason ?? proposal.summary}\nRequired files: ${blocker?.required_files.join(", ") || "none"}\nDecision: ${blocker?.required_decision ?? "none"}`,
-        `${task.id} needs replanning`,
+        phrase({ en: `${task.id} needs replanning`, ru: `${task.id} требует нового плана` }),
       );
     },
     async approveSensitive(task) {
       note(
         `Permissions: ${task.permissions.join(", ")}\nFiles: ${[...task.files.modify, ...task.files.create].join(", ")}`,
-        `${task.id} sensitive operation`,
+        phrase({
+          en: `${task.id} sensitive operation`,
+          ru: `${task.id}: чувствительная операция`,
+        }),
       );
       return unwrap(
-        await confirm({ message: "Confirm these permissions now?", initialValue: false }),
+        await confirm({
+          message: phrase({
+            en: "Confirm these permissions now?",
+            ru: "Подтвердить эти разрешения?",
+          }),
+          initialValue: false,
+        }),
       );
     },
     async approveCommand(task, verification) {
@@ -119,11 +178,21 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         `$ ${verification.command.program} ${verification.command.args.join(" ")}\nPurpose: ${verification.purpose}\nEnvironment: sanitized\nTimeout: ${policy.execution.command_timeout_seconds}s`,
         `${task.id} verification`,
       );
-      return unwrap(await confirm({ message: "Run this command?", initialValue: false }));
+      return unwrap(
+        await confirm({
+          message: phrase({ en: "Run this command?", ru: "Запустить эту команду?" }),
+          initialValue: false,
+        }),
+      );
     },
     async retryAfterFailure(task, result) {
       note(formatVerification(result.verification), `${task.id} failed and was rolled back`);
-      return unwrap(await confirm({ message: "Generate another proposal?", initialValue: false }));
+      return unwrap(
+        await confirm({
+          message: phrase({ en: "Generate another proposal?", ru: "Подготовить другой вариант?" }),
+          initialValue: false,
+        }),
+      );
     },
     async afterTask(task) {
       const options: Array<{
@@ -131,27 +200,45 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         label: string;
         hint?: string;
       }> = [
-        { value: "continue", label: "Continue" },
-        { value: "rollback", label: "Roll back task", hint: "generate another proposal" },
+        { value: "continue", label: phrase({ en: "Continue", ru: "Продолжить" }) },
+        {
+          value: "rollback",
+          label: phrase({ en: "Roll back task", ru: "Откатить задачу" }),
+          hint: phrase({ en: "generate another proposal", ru: "подготовить другой вариант" }),
+        },
       ];
       if (policy.execution.allow_git_checkpoints) {
-        options.splice(1, 0, { value: "checkpoint", label: "Create Git checkpoint" });
+        options.splice(1, 0, {
+          value: "checkpoint",
+          label: phrase({ en: "Create Git checkpoint", ru: "Создать Git checkpoint" }),
+        });
       }
       return unwrap(await select({ message: `${task.id} verified`, options }));
     },
     async finalReview(journal, revisableTaskIds) {
-      note(`${finalSummary(journal)}\n\n${await workingDiff(root)}`, "Final acceptance");
+      note(
+        `${finalSummary(journal)}\n\n${await workingDiff(root)}`,
+        phrase({ en: "Final acceptance", ru: "Финальная приёмка" }),
+      );
       const action = unwrap(
         await select({
-          message: "Accept implementation?",
+          message: phrase({ en: "Accept implementation?", ru: "Принять реализацию?" }),
           options: [
-            { value: "accept", label: "Accept implementation" },
+            {
+              value: "accept",
+              label: phrase({ en: "Accept implementation", ru: "Принять реализацию" }),
+            },
             {
               value: "revise",
-              label: "Revise a task",
+              label: phrase({ en: "Revise a task", ru: "Исправить задачу" }),
               disabled: revisableTaskIds.length === 0,
               hint:
-                revisableTaskIds.length === 0 ? "no reversible tasks in this session" : undefined,
+                revisableTaskIds.length === 0
+                  ? phrase({
+                      en: "no reversible tasks in this session",
+                      ru: "в этой сессии нет обратимых задач",
+                    })
+                  : undefined,
             },
           ],
         }),
@@ -159,25 +246,37 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
       if (action === "accept") return { accepted: true };
       const taskId = unwrap(
         await select({
-          message: "Task to revise",
+          message: phrase({ en: "Task to revise", ru: "Задача для исправления" }),
           options: revisableTaskIds.map((id) => ({ value: id, label: id })),
         }),
       );
       const feedback = unwrap(
         await text({
-          message: "What should be changed?",
-          validate: (value) => (!value?.trim() ? "Feedback is required" : undefined),
+          message: phrase({ en: "What should be changed?", ru: "Что нужно изменить?" }),
+          validate: (value) =>
+            !value?.trim()
+              ? phrase({ en: "Feedback is required", ru: "Нужно описать изменения" })
+              : undefined,
         }),
       );
       return { accepted: false, taskId, feedback: feedback.trim() };
     },
     async resumeExisting(journal) {
       note(
-        `${journal.tasks.length} recorded tasks; status: ${journal.status}`,
-        "Previous execution",
+        phrase({
+          en: `${journal.tasks.length} recorded tasks; status: ${journal.status}`,
+          ru: `Сохранено задач: ${journal.tasks.length}; статус: ${journal.status}`,
+        }),
+        phrase({ en: "Previous execution", ru: "Предыдущий запуск" }),
       );
       return unwrap(
-        await confirm({ message: "Resume it after validating file hashes?", initialValue: true }),
+        await confirm({
+          message: phrase({
+            en: "Resume after validating completed file hashes?",
+            ru: "Продолжить после проверки хэшей завершённых файлов?",
+          }),
+          initialValue: true,
+        }),
       );
     },
     taskCompleted(result) {
@@ -188,6 +287,6 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
 
 function unwrap<T>(value: T | symbol): T {
   if (!isCancel(value)) return value as T;
-  cancel("Execution cancelled");
+  cancel(phrase({ en: "Execution cancelled", ru: "Реализация отменена" }));
   process.exit(0);
 }

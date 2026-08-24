@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
+import type { RequestRepositoryContext } from "../repository/request-context";
 import { normalizeSpec } from "./normalize";
 import { prompts } from "./prompts";
 import {
@@ -15,9 +16,20 @@ import { normalizeClarificationQuestions, validateReview, validateSpec } from ".
 type ObjectGenerator = Pick<ModelClient, "generateObject">;
 type Analysis = z.infer<typeof analysisSchema>;
 
-export async function buildSpec(client: ObjectGenerator, request: string): Promise<Spec> {
+export async function buildSpec(
+  client: ObjectGenerator,
+  request: string,
+  repository?: RequestRepositoryContext,
+): Promise<Spec> {
   const extraction = await client.generateObject(prompts.extract, request, extractionSchema);
-  const context = { request, outputLanguage: extraction.language, extraction };
+  const context = {
+    request,
+    outputLanguage: extraction.language,
+    extraction,
+    repositoryContext: repository
+      ? { userContext: repository.userContext || undefined, snapshots: repository.snapshots }
+      : undefined,
+  };
   const proposedAnalysis = await client.generateObject(
     prompts.analyze,
     pretty(context),
@@ -28,7 +40,7 @@ export async function buildSpec(client: ObjectGenerator, request: string): Promi
     pretty({ ...context, proposedAnalysis }),
     analysisSchema,
   );
-  let analysis = conservativeAnalysis(proposedAnalysis, reviewedAnalysis);
+  let analysis = conservativeAnalysis(proposedAnalysis, reviewedAnalysis, repository !== undefined);
   let error = analysisError(extraction, analysis);
   if (error !== null) {
     analysis = await client.generateObject(
@@ -157,7 +169,12 @@ function analysisError(extraction: Extraction, analysis: Analysis): string | nul
   return null;
 }
 
-function conservativeAnalysis(proposed: Analysis, reviewed: Analysis): Analysis {
+function conservativeAnalysis(
+  proposed: Analysis,
+  reviewed: Analysis,
+  repositoryContextAvailable: boolean,
+): Analysis {
+  if (repositoryContextAvailable) return reviewed;
   if (proposed.decision === "needs_clarification" && reviewed.decision === "ready") {
     return proposed;
   }

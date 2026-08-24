@@ -16,17 +16,23 @@ evidence and explicit unknowns. This path cannot plan or execute source changes.
 
 ## Pipeline
 
-1. Extract only explicit facts and detect the request language.
-2. A unified analysis decides whether the request is ready, needs questions, or
+1. Classify the request as a project change, read-only inquiry, or ambiguous intent.
+2. For a change, propose repository files and let the user approve context before specification.
+3. Extract explicit request facts and detect the request language.
+4. A unified analysis decides whether the request is ready, needs questions, or
    needs decomposition.
-3. A separate reviewer checks that analysis against the source facts. The
+5. A separate reviewer checks that analysis against request facts and approved code context. The
    pipeline ends after this third call for clarification and decomposition.
-4. A ready request is turned into a specification.
-5. The specification passes a final checklist review.
+6. A ready request is turned into a specification.
+7. The specification passes a final checklist review.
 
-An incomplete or oversized request therefore uses three regular LLM calls; a
-ready specification uses five. Invalid analysis gets one additional repair
-call.
+Repository facts such as existing signatures, usages, tests, and module wiring
+are resolved from approved snapshots. Only missing product or irreversible
+architecture decisions are returned to the user as questions.
+
+Context selection and expansion use two LLM calls before specification. An
+incomplete or oversized specification then uses three calls; a ready one uses
+five. Invalid analysis gets one additional repair call.
 
 If a stage returns empty or schema-invalid structured output, the client sends
 the original context and validation error back to the model for one retry. It
@@ -47,15 +53,16 @@ prints the result and writes it as `spec.draft.yaml`.
 
 ## Repository Discovery
 
-After a `ready` specification is accepted, the agent runs read-only discovery:
+After a `ready` specification is accepted, the agent turns the already approved
+context into a read-only discovery:
 
 1. Index safe project files without reading their contents.
-2. Let the model recommend no more than 24 relevant files and explain each choice.
+2. Let the model recommend no more than 12 relevant files and explain each choice.
 3. Let the user search, enable, or disable files and add optional project context.
 4. Read only the confirmed text files within bounded size limits.
-5. Let the model request up to eight additional files, then confirm the expanded
-   selection with the user.
-6. Describe the stack, structure, relevant files, conventions, tests,
+5. Let the model request up to six additional files. Ask for a second approval
+   only when the selection actually changes.
+6. After specification approval, describe the stack, structure, relevant files, conventions, tests,
    constraints, and unknowns.
 7. Use a second call to remove findings without file evidence.
 8. Show the discovery for explicit acceptance or repeated revision before saving.
@@ -190,6 +197,10 @@ curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/codekeeper/master/inst
 codekeeper --init
 codekeeper "Describe the task"
 ```
+
+Use `codekeeper --dry-run "Describe the task"` to stop after the accepted plan
+without changing source files. `--plain` and `--json` provide stable output,
+`--no-input` prevents prompts, and `--debug` includes stack traces in errors.
 
 For multiline input:
 

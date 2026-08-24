@@ -4,11 +4,27 @@ export type Cli = {
   help: boolean;
   init: boolean;
   version: boolean;
+  dryRun: boolean;
+  plain: boolean;
+  json: boolean;
+  noInput: boolean;
+  debug: boolean;
   input: string[];
 };
 
 export function parseCli(args: string[]): Cli {
-  const cli: Cli = { thinking: false, help: false, init: false, version: false, input: [] };
+  const cli: Cli = {
+    thinking: false,
+    help: false,
+    init: false,
+    version: false,
+    dryRun: false,
+    plain: false,
+    json: false,
+    noInput: false,
+    debug: false,
+    input: [],
+  };
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     if (value === undefined) break;
@@ -18,6 +34,17 @@ export function parseCli(args: string[]): Cli {
       cli.init = true;
     } else if (value === "--version" || value === "-v") {
       cli.version = true;
+    } else if (value === "--dry-run" || value === "-n") {
+      cli.dryRun = true;
+    } else if (value === "--plain") {
+      cli.plain = true;
+    } else if (value === "--json") {
+      cli.json = true;
+      cli.noInput = true;
+    } else if (value === "--no-input") {
+      cli.noInput = true;
+    } else if (value === "--debug") {
+      cli.debug = true;
     } else if (value === "--stage") {
       cli.stage = requireArgument(args, ++index, "--stage");
     } else if (value === "--thinking") {
@@ -29,6 +56,8 @@ export function parseCli(args: string[]): Cli {
     } else if (value === "--") {
       cli.input.push(...args.slice(index + 1));
       break;
+    } else if (value.startsWith("-")) {
+      throw new Error(`Unknown option: ${value}. Run codekeeper --help.`);
     } else {
       cli.input.push(value);
     }

@@ -1,5 +1,6 @@
 import type { ModelClient } from "../ai/model-client";
-import { document, required, review, withSpinner } from "../cli/ui";
+import { planSummary } from "../cli/presentation";
+import { document, required, reviewDocument, withSpinner } from "../cli/ui";
 import { buildImplementationPlan, preparePlanningContext } from "../planning/pipeline";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
@@ -25,7 +26,7 @@ export async function createApprovedPlan(
       userInput += "\n\nUser planning clarifications:\n";
       for (const question of plan.questions) {
         document(
-          { en: `Planning question ${question.id}`, ru: `Вопрос по плану ${question.id}` },
+          { en: `Decision needed · ${question.id}`, ru: `Нужно решение · ${question.id}` },
           `${question.question}\n\n${question.reason}`,
         );
         userInput += `${question.id}: ${await required({ en: "Your answer", ru: "Ваш ответ" })}\n`;
@@ -34,8 +35,14 @@ export async function createApprovedPlan(
     }
 
     const rendered = Bun.YAML.stringify(plan, null, 2).trimEnd();
-    document({ en: "Implementation plan", ru: "План реализации" }, rendered);
-    if ((await review({ en: "Accept this plan?", ru: "Принять этот план?" })) === "accept") {
+    if (
+      (await reviewDocument(
+        { en: "Accept this plan?", ru: "Принять этот план?" },
+        { en: "Implementation plan", ru: "План реализации" },
+        planSummary(plan),
+        rendered,
+      )) === "accept"
+    ) {
       return plan;
     }
     const feedback = await required({

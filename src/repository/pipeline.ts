@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
 import type { Spec } from "../spec/schemas";
 import { repositoryPrompts } from "./prompts";
-import { indexRepository, readSnapshots } from "./scan";
+import { type FileSnapshot, indexRepository, readSnapshots } from "./scan";
 import {
   type FileSelection,
   fileSelectionSchema,
@@ -67,27 +67,15 @@ export async function discoverRepository(
   const snapshots = await readSnapshots(root, index, finalContext.files);
   if (snapshots.length === 0) throw new Error("Repository discovery selected no readable files");
 
-  const evidenceContext = {
-    specification: spec,
-    outputLanguage: "the language used by the specification",
-    userContext: finalContext.userContext || undefined,
-    snapshots,
-  };
-  const candidate = await stage("repository-discover", () =>
-    client.generateObject(
-      repositoryPrompts.discover,
-      pretty(evidenceContext),
-      repositoryDiscoverySchema,
-    ),
-  );
-  const reviewed = await stage("repository-review", () =>
-    client.generateObject(
-      repositoryPrompts.review,
-      pretty({ ...evidenceContext, candidate }),
-      repositoryDiscoverySchema,
-    ),
-  );
-  return normalizeDiscovery(reviewed, snapshots, finalContext.userContext);
+  return buildDiscovery(client, spec, snapshots, finalContext.userContext);
+}
+
+export function discoverRepositoryFromContext(
+  client: ObjectGenerator,
+  spec: Spec,
+  context: RepositoryContext & { snapshots: FileSnapshot[] },
+): Promise<RepositoryDiscovery> {
+  return buildDiscovery(client, spec, context.snapshots, context.userContext);
 }
 
 export async function reviseRepositoryDiscovery(
@@ -145,6 +133,35 @@ function normalizeDiscovery(
     testing: findings(discovery.testing),
     constraints: findings(discovery.constraints),
   };
+}
+
+async function buildDiscovery(
+  client: ObjectGenerator,
+  spec: Spec,
+  snapshots: Array<{ path: string; content: string }>,
+  userContext: string,
+): Promise<RepositoryDiscovery> {
+  const evidenceContext = {
+    specification: spec,
+    outputLanguage: "the language used by the specification",
+    userContext: userContext || undefined,
+    snapshots,
+  };
+  const candidate = await stage("repository-discover", () =>
+    client.generateObject(
+      repositoryPrompts.discover,
+      pretty(evidenceContext),
+      repositoryDiscoverySchema,
+    ),
+  );
+  const reviewed = await stage("repository-review", () =>
+    client.generateObject(
+      repositoryPrompts.review,
+      pretty({ ...evidenceContext, candidate }),
+      repositoryDiscoverySchema,
+    ),
+  );
+  return normalizeDiscovery(reviewed, snapshots, userContext);
 }
 
 function pretty(value: unknown): string {

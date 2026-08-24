@@ -1,4 +1,15 @@
 export const repositoryPrompts = {
+  requestSelect: `Select repository files needed to understand a requested project change before a
+specification is written. The input contains the original request and a safe path/size index. Select
+only indexed paths. Prefer named files and symbols, their definitions and usages, adjacent tests,
+module wiring, and relevant configuration. Select at most 12 files with a short reason for each. Do
+not write requirements or design a solution. Return JSON only.`,
+
+  requestExpand: `Review approved snapshots for an original project-change request and request only
+additional indexed files needed to understand existing contracts, usages, tests, and constraints.
+Do not request paths already supplied. Select at most six files and return an empty files array
+when context is sufficient. Do not write requirements or design a solution. Return JSON only.`,
+
   select: `Select repository files that are most useful for understanding how an accepted product
 specification fits the existing codebase. The input contains the specification and a path/size index.
 Select only paths present in the index. Prefer manifests, configuration, entry points, architecture

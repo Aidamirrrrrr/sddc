@@ -131,6 +131,44 @@ describe("specification flow", () => {
     expect(client.inputs).toHaveLength(5);
   });
 
+  test("drops a repository question answered by approved code context", async () => {
+    const unnecessaryQuestion = {
+      decision: "needs_clarification",
+      rationale: "Неизвестна сигнатура.",
+      questions: [
+        {
+          question: "Какие параметры принимает setRefreshCookie?",
+          reason: "Нужен текущий контракт.",
+        },
+      ],
+      subfeatures: [],
+    };
+    const candidate = readySpec();
+    const client = new StubModelClient(
+      extraction(["Перенести setRefreshCookie в cookie.service.ts."]),
+      unnecessaryQuestion,
+      ready,
+      candidate,
+      { spec: candidate, checks: checks() },
+    );
+
+    const spec = await buildSpec(client, "Перенести setRefreshCookie в cookie.service.ts.", {
+      files: ["auth.service.ts"],
+      userContext: "",
+      snapshots: [
+        {
+          path: "auth.service.ts",
+          size: 55,
+          content: "setRefreshCookie(token: string, response: Response): void {}",
+        },
+      ],
+    });
+
+    expect(spec.status).toBe("ready");
+    expect(client.inputs[1]).toContain("setRefreshCookie(token: string");
+    expect(client.inputs).toHaveLength(5);
+  });
+
   test("repairs a structurally invalid product analysis once", async () => {
     const invalid = {
       decision: "needs_decomposition",

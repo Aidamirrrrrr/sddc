@@ -4,6 +4,11 @@ import type { ReviewDecision } from "./approval";
 export type Copy = { en: string; ru: string };
 
 let russian = false;
+let outputMode: "interactive" | "plain" | "json" = "interactive";
+
+export function setOutputMode(mode: "interactive" | "plain" | "json"): void {
+  outputMode = mode;
+}
 
 export function setUiLanguage(language: string): void {
   russian = /^(ru|russian|рус)/i.test(language.trim());
@@ -14,26 +19,63 @@ export function phrase(copy: Copy): string {
 }
 
 export function begin(): void {
+  if (outputMode === "json") {
+    emit("start", { name: "Codekeeper" });
+    return;
+  }
+  if (outputMode === "plain") {
+    console.log("Codekeeper");
+    return;
+  }
   intro("Codekeeper");
 }
 
 export function finish(copy: Copy): void {
+  if (writeSimple("finish", phrase(copy))) return;
   outro(phrase(copy));
 }
 
 export function info(copy: Copy): void {
+  if (writeSimple("info", phrase(copy))) return;
   log.info(phrase(copy));
 }
 
 export function success(copy: Copy): void {
+  if (writeSimple("success", phrase(copy))) return;
   log.success(phrase(copy));
 }
 
+export function step(current: number, total: number, copy: Copy): void {
+  if (outputMode === "json") {
+    emit("step", { current, total, message: phrase(copy) });
+    return;
+  }
+  if (outputMode === "plain") {
+    console.log(`[${current}/${total}] ${phrase(copy)}`);
+    return;
+  }
+  log.step(`${current}/${total} ${phrase(copy)}`);
+}
+
 export function document(title: Copy, content: string): void {
+  if (outputMode === "json") {
+    emit("document", { title: phrase(title), content });
+    return;
+  }
+  if (outputMode === "plain") {
+    console.log(`\n${phrase(title)}\n${content}`);
+    return;
+  }
   note(content, phrase(title));
 }
 
 export async function withSpinner<T>(progress: Copy, complete: Copy, operation: () => Promise<T>) {
+  if (outputMode !== "interactive") {
+    info(progress);
+    const result = await operation();
+    success(complete);
+    return result;
+  }
   const indicator = spinner();
   indicator.start(phrase(progress));
   try {
@@ -44,6 +86,22 @@ export async function withSpinner<T>(progress: Copy, complete: Copy, operation: 
     indicator.stop(phrase({ en: "Stage failed", ru: "Ошибка этапа" }));
     throw error;
   }
+}
+
+function emit(type: string, payload: Record<string, unknown>): void {
+  console.log(JSON.stringify({ type, ...payload }));
+}
+
+function writeSimple(type: string, message: string): boolean {
+  if (outputMode === "json") {
+    emit(type, { message });
+    return true;
+  }
+  if (outputMode === "plain") {
+    console.log(message);
+    return true;
+  }
+  return false;
 }
 
 export async function review(message: Copy): Promise<ReviewDecision> {
@@ -64,6 +122,43 @@ export async function review(message: Copy): Promise<ReviewDecision> {
       ],
     }),
   );
+}
+
+export async function reviewDocument(
+  message: Copy,
+  title: Copy,
+  summary: string,
+  content: string,
+): Promise<ReviewDecision> {
+  document(title, summary);
+  while (true) {
+    const action = unwrap(
+      await select({
+        message: phrase(message),
+        options: [
+          {
+            value: "accept" as const,
+            label: phrase({ en: "Accept", ru: "Принять" }),
+            hint: phrase({ en: "continue to the next stage", ru: "перейти к следующему этапу" }),
+          },
+          {
+            value: "details" as const,
+            label: phrase({ en: "View full document", ru: "Показать документ полностью" }),
+          },
+          {
+            value: "revise" as const,
+            label: phrase({ en: "Revise", ru: "Исправить" }),
+            hint: phrase({ en: "describe what should change", ru: "описать, что нужно изменить" }),
+          },
+        ],
+      }),
+    );
+    if (action === "details") {
+      document(title, content);
+      continue;
+    }
+    return action;
+  }
 }
 
 export async function required(message: Copy): Promise<string> {

@@ -25,15 +25,21 @@ export function createRepositoryContextSelector(
     context.files = safePaths(context.files, sizes);
 
     while (true) {
-      showEstimate(context.files, sizes, cost);
+      showEstimate(context.files, sizes, cost, reasons, current?.files ?? []);
+      const added = current
+        ? context.files.filter((path) => !current.files.includes(path)).length
+        : 0;
       const action = unwrap(
         await select({
           message: current
             ? phrase({
-                en: "Review expanded repository context",
-                ru: "Проверьте расширенный контекст",
+                en: `Review ${added} additional context file${added === 1 ? "" : "s"}`,
+                ru: `Проверьте новые файлы контекста: ${added}`,
               })
-            : phrase({ en: "Repository context", ru: "Контекст репозитория" }),
+            : phrase({
+                en: "Allow the model to read this repository context",
+                ru: "Разрешить модели прочитать этот контекст",
+              }),
           options: [
             {
               value: "edit",
@@ -197,15 +203,34 @@ export function estimateContext(bytes: number, cost: ContextCost = {}) {
   return { tokens, costUsd: price === undefined ? undefined : (tokens / 1_000_000) * price };
 }
 
-function showEstimate(files: string[], sizes: Map<string, number>, cost: ContextCost): void {
+function showEstimate(
+  files: string[],
+  sizes: Map<string, number>,
+  cost: ContextCost,
+  reasons: Map<string, string>,
+  previous: string[],
+): void {
   const bytes = files.reduce((sum, path) => sum + (sizes.get(path) ?? 0), 0);
   const estimate = estimateContext(bytes, cost);
   const price =
     estimate.costUsd === undefined
       ? phrase({ en: "cost unavailable", ru: "стоимость не указана" })
       : `~$${estimate.costUsd.toFixed(4)}`;
+  const added = files.filter((path) => !previous.includes(path)).length;
+  const tests = files.filter((path) => category(path, reasons.has(path)) === "tests").length;
+  const config = files.filter((path) => category(path, reasons.has(path)) === "config").length;
+  const details = [
+    tests > 0 ? phrase({ en: `${tests} tests`, ru: `тестов: ${tests}` }) : "",
+    config > 0 ? phrase({ en: `${config} config`, ru: `конфигураций: ${config}` }) : "",
+    added > 0 ? phrase({ en: `+${added} new`, ru: `новых: +${added}` }) : "",
+  ].filter(Boolean);
   note(
-    `${files.length} files · ${formatSize(bytes)} · ~${estimate.tokens.toLocaleString()} tokens · ${price}`,
+    [
+      `${files.length} files · ${formatSize(bytes)} · ~${estimate.tokens.toLocaleString()} tokens · ${price}`,
+      details.join(" · "),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     phrase({ en: "Selected context", ru: "Выбранный контекст" }),
   );
 }

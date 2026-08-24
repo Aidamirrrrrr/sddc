@@ -1,8 +1,14 @@
 import type { ModelClient } from "../ai/model-client";
-import { document, info, required, review, success, withSpinner } from "../cli/ui";
+import { discoverySummary } from "../cli/presentation";
+import { info, required, reviewDocument, success, withSpinner } from "../cli/ui";
 import { loadInputPrice } from "../config/env";
 import { createRepositoryContextSelector } from "../repository/context-selector";
-import { discoverRepository, reviseRepositoryDiscovery } from "../repository/pipeline";
+import {
+  discoverRepository,
+  discoverRepositoryFromContext,
+  reviseRepositoryDiscovery,
+} from "../repository/pipeline";
+import type { RequestRepositoryContext } from "../repository/request-context";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import { writeRepositoryDiscovery } from "../spec/storage";
@@ -11,25 +17,36 @@ export async function createApprovedDiscovery(
   client: ModelClient,
   spec: Spec,
   root: string,
+  requestContext?: RequestRepositoryContext,
 ): Promise<RepositoryDiscovery> {
-  info({
-    en: "Choose the repository context for discovery",
-    ru: "Выберите контекст репозитория для исследования",
-  });
-  let discovery = await discoverRepository(
-    client,
-    spec,
-    root,
-    createRepositoryContextSelector(root, { inputUsdPerMillion: loadInputPrice() }),
-  );
+  if (!requestContext) {
+    info({
+      en: "Choose the repository context for discovery",
+      ru: "Выберите контекст репозитория для исследования",
+    });
+  }
+  let discovery = requestContext
+    ? await withSpinner(
+        { en: "Checking how the change fits the project", ru: "Проверяю устройство проекта" },
+        { en: "Project understanding is ready", ru: "Устройство проекта изучено" },
+        () => discoverRepositoryFromContext(client, spec, requestContext),
+      )
+    : await discoverRepository(
+        client,
+        spec,
+        root,
+        createRepositoryContextSelector(root, { inputUsdPerMillion: loadInputPrice() }),
+      );
   success({ en: "Repository discovery is ready", ru: "Исследование репозитория готово" });
   while (true) {
-    document(
-      { en: "Repository discovery", ru: "Исследование репозитория" },
-      Bun.YAML.stringify(discovery, null, 2).trimEnd(),
-    );
+    const rendered = Bun.YAML.stringify(discovery, null, 2).trimEnd();
     if (
-      (await review({ en: "Accept this discovery?", ru: "Принять это исследование?" })) === "accept"
+      (await reviewDocument(
+        { en: "Is this project understanding correct?", ru: "Верно ли понято устройство проекта?" },
+        { en: "Project understanding", ru: "Понимание проекта" },
+        discoverySummary(discovery),
+        rendered,
+      )) === "accept"
     ) {
       const path = await writeRepositoryDiscovery(spec.feature, discovery);
       success({ en: `Discovery saved to ${path}`, ru: `Исследование сохранено: ${path}` });

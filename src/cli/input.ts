@@ -1,10 +1,16 @@
 import { createInterface } from "node:readline/promises";
 import { cancel, isCancel, text } from "@clack/prompts";
 
-export async function readInput(arguments_: string[], label: string): Promise<string> {
+export async function readInput(
+  arguments_: string[],
+  label: string,
+  options: { noInput?: boolean } = {},
+): Promise<string> {
   let input: string;
   if (arguments_.length > 0) input = arguments_.join(" ");
-  else if (process.stdin.isTTY) {
+  else if (process.stdin.isTTY && options.noInput) {
+    throw new Error("Input is required with --no-input. Pass it after -- or through stdin.");
+  } else if (process.stdin.isTTY) {
     const value = await text({
       message: label.replace(/:\s*$/, ""),
       validate: (answer) => (answer?.trim() ? undefined : "Input cannot be empty"),
@@ -16,6 +22,8 @@ export async function readInput(arguments_: string[], label: string): Promise<st
     input = value;
   } else input = await Bun.stdin.text();
   input = input.trim();
+  if (!input && options.noInput)
+    throw new Error("Input is required with --no-input. Pass it after -- or through stdin.");
   if (!input) throw new Error("Input cannot be empty");
   return input;
 }

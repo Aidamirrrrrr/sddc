@@ -14,4 +14,17 @@ describe("CLI arguments", () => {
       input: ["--thinking", "on"],
     });
   });
+
+  test("recognizes interaction and output modes", () => {
+    expect(parseCli(["--dry-run", "--plain", "--debug"])).toMatchObject({
+      dryRun: true,
+      plain: true,
+      debug: true,
+    });
+    expect(parseCli(["--json"])).toMatchObject({ json: true, noInput: true });
+  });
+
+  test("rejects unknown options", () => {
+    expect(() => parseCli(["--wat"])).toThrow("Unknown option: --wat");
+  });
 });
