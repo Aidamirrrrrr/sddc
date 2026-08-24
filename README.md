@@ -7,7 +7,7 @@
 A Bun and TypeScript CLI that turns a task description into a validated product
 specification. While drafting the specification, the model cannot access the
 repository or make missing product decisions on the user's behalf. The agent
-never writes implementation code.
+does not write implementation code while requirements are unsettled.
 
 After approval, a ready specification triggers a read-only, evidence-backed
 repository discovery. The user confirms its searchable file selection and may
@@ -18,6 +18,11 @@ The agent asks about missing decisions and writes `plan.yaml` only after the
 user explicitly accepts it. A deterministic project policy limits file changes,
 commands, network access, and sensitive operations. Accepted decisions and their
 provenance are recorded separately. The agent still does not modify source code.
+
+Implementation starts only after a separate confirmation. The user approves each
+task diff, verification runs without a shell, and a failed task is rolled back.
+Strict, normal, and trusted approval modes control interaction density; sensitive
+permissions always require confirmation. Interrupted runs can be resumed safely.
 
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
 which the agent is run after interactive approval. Non-interactive input writes
@@ -56,7 +61,7 @@ AI_INPUT_USD_PER_MILLION=optional-input-price
 CLI-приложение на Bun и TypeScript, которое превращает описание задачи в
 проверенную продуктовую спецификацию. При подготовке спеки модель не получает
 доступ к репозиторию и не принимает отсутствующие продуктовые решения за
-пользователя. Агент не пишет код реализации.
+пользователя. Пока требования не согласованы, агент не пишет код реализации.
 
 После подтверждения готовой спеки запускается read-only исследование проекта с
 файловыми evidence. Перед отправкой содержимого модели пользователь подтверждает
@@ -67,6 +72,13 @@ CLI-приложение на Bun и TypeScript, которое превраща
 подтверждения. Детерминированная политика проекта ограничивает изменения файлов,
 команды, доступ к сети и чувствительные операции. Принятые решения и их источники
 фиксируются отдельно. Исходный код на этом этапе по-прежнему не изменяется.
+
+Реализация запускается только после отдельного подтверждения. Пользователь
+принимает diff каждой задачи, проверки запускаются без shell, а неуспешная задача
+откатывается.
+Режимы strict, normal и trusted регулируют количество подтверждений, но
+чувствительные permissions подтверждаются всегда. Прерванный запуск можно
+безопасно продолжить.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
 запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск

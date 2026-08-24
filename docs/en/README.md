@@ -105,7 +105,14 @@ A project may override these limits in `.spec-agent/policy.yaml`:
 version: 1
 changes:
   max_files_per_task: 4
+  max_generated_file_bytes: 131072
   require_dependency_permission: true
+execution:
+  default_approval_mode: normal
+  max_changed_lines_per_task: 400
+  max_proposal_revisions: 1
+  command_timeout_seconds: 120
+  allow_git_checkpoints: false
 commands:
   allowed_programs: [bun, node]
   allow_external_network: false
@@ -121,6 +128,43 @@ requirements, user-supplied repository context, reversible implementation
 decisions, and granted permissions with their owner and source. This makes it
 possible to distinguish a user decision from repository evidence or an agent
 inference. No source files or commands are executed at this stage.
+
+## Controlled Execution
+
+After planning, a contract summary shows tasks, files, permissions, commands, and
+network policy. Implementation starts only with separate confirmation. Tasks run
+in dependency order. For each task, the model receives its approved scope and
+current snapshots and either returns complete file contents or an explicit
+blocker requiring replanning. The host checks paths, operations, changed-line and
+content-size limits, requirement traces, and SHA-256 snapshots.
+
+A separate read-only model call checks coverage, scope, public behavior, secrets,
+error handling, test quality, and undeclared decisions. It may reject but cannot
+edit a proposal. Revision attempts are limited by policy.
+
+- `strict` confirms task scope, selected diff files, and every command;
+- `normal` confirms each task diff;
+- `trusted` automatically accepts ordinary task diffs.
+
+Sensitive permissions and network commands require immediate confirmation in
+every mode. Removing a file from strict scope blocks execution and requires plan
+revision instead of silently producing a partial implementation.
+
+Accepted changes are written atomically and the plan's verification commands run
+directly without a shell. Only a small environment allowlist is inherited. A
+failed command restores every file changed by that task before asking whether to
+try another proposal. Progress and bounded command output are stored in
+`.specs/<feature>/execution.yaml`.
+
+After verification, the user can continue, roll the task back for another
+proposal, or create an explicitly enabled Git checkpoint. Resume is allowed only
+while completed file hashes match. Final acceptance shows the overall Git diff
+and verification summary and can return an uncheckpointed task from the current
+session for another revision.
+
+This is application-level containment, not an operating-system sandbox. An
+approved project command can still execute arbitrary project code, so the user
+must inspect both the plan and diff before accepting them.
 
 ## Statuses
 
@@ -176,7 +220,7 @@ Available stages are `extract`, `analyze`, `analysis-review`, `analysis-repair`,
 `write`, `review`, `repository-select`, `repository-expand`,
 `repository-discover`, `repository-review`, `repository-revise`,
 `planning-draft`, `planning-audit`, `planning-review`, `planning-questions`, and
-`planning-repair`.
+`planning-repair`, plus `execution-implement` and `execution-review`.
 
 Except for `extract`, stages expect the JSON context produced for that pipeline
 step. This lets one model call be tested without rerunning the entire pipeline.

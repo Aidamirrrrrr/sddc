@@ -7,6 +7,9 @@ import { ask, readInput } from "./cli/input";
 import { loadInputPrice, loadModelConfig } from "./config/env";
 import { buildDecisionRegistry } from "./decisions/build";
 import { writeGovernanceArtifacts } from "./decisions/storage";
+import { runExecutionStage } from "./execution/pipeline";
+import { executePlan } from "./execution/runner";
+import { configureExecution } from "./execution/ui";
 import {
   buildImplementationPlan,
   preparePlanningContext,
@@ -16,6 +19,7 @@ import type { ImplementationPlan } from "./planning/schemas";
 import { writeImplementationPlan } from "./planning/storage";
 import { loadPolicy } from "./policy/load";
 import type { Policy } from "./policy/schemas";
+import { validatePlanPolicy } from "./policy/validate";
 import { createRepositoryContextSelector } from "./repository/context-selector";
 import {
   discoverRepository,
@@ -36,7 +40,9 @@ async function main(): Promise<void> {
       ? await runRepositoryStage(client, cli.stage, input)
       : cli.stage.startsWith("planning-")
         ? await runPlanningStage(client, cli.stage, input)
-        : await runStage(client, cli.stage, input);
+        : cli.stage.startsWith("execution-")
+          ? await runExecutionStage(client, cli.stage, input)
+          : await runStage(client, cli.stage, input);
     if (result === undefined) throw new Error(`Unknown stage "${cli.stage}"`);
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -104,6 +110,22 @@ async function main(): Promise<void> {
     );
     console.log(`Decision registry written to ${governance.decisions}`);
     console.log(`Effective policy written to ${governance.policy}`);
+    const execution = await configureExecution(process.cwd(), plan, policy);
+    if (execution) {
+      validatePlanPolicy(plan, policy);
+      const journal = await executePlan(
+        client,
+        process.cwd(),
+        spec,
+        plan,
+        execution.hooks,
+        policy,
+        execution.mode,
+      );
+      console.log(
+        `Execution ${journal.status}. Journal written to .specs/${plan.feature}/execution.yaml`,
+      );
+    }
   }
 }
 
@@ -153,11 +175,11 @@ async function askDiscoveryReviewDecision(): Promise<ReviewDecision> {
   }
 }
 
-async function askPlanReviewDecision(): Promise<ReviewDecision> {
+async function askPlanReviewDecision(
+  prompt = "Accept implementation plan? [a]ccept/[r]evise: ",
+): Promise<ReviewDecision> {
   while (true) {
-    const decision = parseReviewDecision(
-      await ask("Accept implementation plan? [a]ccept/[r]evise: "),
-    );
+    const decision = parseReviewDecision(await ask(prompt));
     if (decision !== null) return decision;
     console.log("Enter 'a' to accept or 'r' to revise.");
   }
