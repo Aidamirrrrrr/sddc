@@ -26,7 +26,7 @@ export class ModelClient {
         system,
         prompt: currentPrompt,
         temperature: 0,
-        maxOutputTokens: this.thinking ? 4096 : 2048,
+        maxOutputTokens: 4096,
         maxRetries: 0,
         output: Output.object({
           name: "stage_output",

@@ -5,8 +5,12 @@
 ## English
 
 A Bun and TypeScript CLI that turns a task description into a validated product
-specification. The model cannot access the repository, write code, or make
-missing product decisions on the user's behalf.
+specification. While drafting the specification, the model cannot access the
+repository or make missing product decisions on the user's behalf. The agent
+never writes implementation code.
+
+After approval, a ready specification triggers a read-only, evidence-backed
+repository discovery saved beside the specification.
 
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
 which the agent is run after interactive approval. Non-interactive input writes
@@ -42,8 +46,12 @@ AI_MODEL=model-id
 ## Русский
 
 CLI-приложение на Bun и TypeScript, которое превращает описание задачи в
-проверенную продуктовую спецификацию. Модель не получает доступ к репозиторию,
-не пишет код и не принимает отсутствующие продуктовые решения за пользователя.
+проверенную продуктовую спецификацию. При подготовке спеки модель не получает
+доступ к репозиторию и не принимает отсутствующие продуктовые решения за
+пользователя. Агент не пишет код реализации.
+
+После подтверждения готовой спеки запускается read-only исследование проекта с
+файловыми evidence, которое сохраняется рядом со спецификацией.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
 запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск

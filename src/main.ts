@@ -5,9 +5,10 @@ import { formatSpec, parseReviewDecision, type ReviewDecision } from "./cli/appr
 import { parseCli } from "./cli/args";
 import { ask, readInput } from "./cli/input";
 import { loadModelConfig } from "./config/env";
+import { discoverRepository, runRepositoryStage } from "./repository/pipeline";
 import { buildSpec, runStage } from "./spec/pipeline";
 import type { Spec } from "./spec/schemas";
-import { writeSpec } from "./spec/storage";
+import { writeRepositoryDiscovery, writeSpec } from "./spec/storage";
 
 async function main(): Promise<void> {
   const cli = parseCli(Bun.argv.slice(2));
@@ -15,7 +16,11 @@ async function main(): Promise<void> {
 
   if (cli.stage) {
     const input = await readInput(cli.input, "Stage input: ");
-    console.log(JSON.stringify(await runStage(client, cli.stage, input), null, 2));
+    const result = cli.stage.startsWith("repository-")
+      ? await runRepositoryStage(client, cli.stage, input)
+      : await runStage(client, cli.stage, input);
+    if (result === undefined) throw new Error(`Unknown stage "${cli.stage}"`);
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 
@@ -50,6 +55,14 @@ async function main(): Promise<void> {
   }
 
   console.log(`Specification written to ${await writeSpec(spec)}`);
+  if (spec.status === "ready") {
+    console.log("Discovering repository...");
+    const discovery = await discoverRepository(client, spec, process.cwd());
+    console.log(`\n${Bun.YAML.stringify(discovery, null, 2).trimEnd()}\n`);
+    console.log(
+      `Repository discovery written to ${await writeRepositoryDiscovery(spec.feature, discovery)}`,
+    );
+  }
 }
 
 async function askReviewDecision(): Promise<ReviewDecision> {
