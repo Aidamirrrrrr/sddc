@@ -5,48 +5,33 @@ on:
     tags:
       - "v*.*.*"
 
-env:
-  CARGO_TERM_COLOR: always
-  BIN_NAME: learn-rust
-
 permissions:
   contents: write
 
 jobs:
   build:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            asset_name: learn-rust-linux-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            asset_name: learn-rust-macos-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            asset_name: learn-rust-windows-x86_64.exe
+          - target: bun-linux-x64
+            asset_name: spec-agent-linux-x64
+          - target: bun-darwin-arm64
+            asset_name: spec-agent-macos-arm64
+          - target: bun-windows-x64
+            asset_name: spec-agent-windows-x64.exe
 
-    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
         with:
-          targets: ${{ matrix.target }}
+          bun-version: latest
 
-      - uses: Swatinem/rust-cache@v2
+      - run: bun install --frozen-lockfile
 
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Rename binary (unix)
-        if: runner.os != 'Windows'
-        run: cp target/${{ matrix.target }}/release/${{ env.BIN_NAME }} ${{ matrix.asset_name }}
-
-      - name: Rename binary (windows)
-        if: runner.os == 'Windows'
-        run: cp target/${{ matrix.target }}/release/${{ env.BIN_NAME }}.exe ${{ matrix.asset_name }}
+      - name: Build standalone executable
+        run: bun build src/main.ts --compile --minify --target=${{ matrix.target }} --outfile=${{ matrix.asset_name }}
 
       - uses: actions/upload-artifact@v4
         with:
