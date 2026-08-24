@@ -5,6 +5,7 @@ import type { Policy } from "../policy/schemas";
 import { validatePlanPolicy } from "../policy/validate";
 import { type FileSnapshot, indexRepository, readSnapshots } from "../repository/scan";
 import type { RepositoryDiscovery } from "../repository/schemas";
+import { specificationLanguage } from "../spec/language";
 import type { Spec } from "../spec/schemas";
 import { planningPrompts } from "./prompts";
 import {
@@ -42,7 +43,7 @@ export async function buildImplementationPlan(
   policy: Policy = defaultPolicy,
 ): Promise<ImplementationPlan> {
   const context = {
-    outputLanguage: "the language used by the specification",
+    outputLanguage: specificationLanguage(spec),
     specification: spec,
     discovery,
     repositoryIndex: repository.paths,

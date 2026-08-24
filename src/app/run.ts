@@ -4,6 +4,7 @@ import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
 import {
   begin,
+  chooseUiLanguage,
   finish,
   info,
   required,
@@ -40,6 +41,9 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
 
+  if (!cli.stage) begin();
+  if (interactive && !cli.stage) await chooseUiLanguage(cli.language);
+  else setUiLanguage(cli.language ?? (/^ru/i.test(process.env.LANG ?? "") ? "ru" : "en"));
   await loadUserEnvironment();
   const client = new ModelClient(loadModelConfig(), cli.thinking);
   if (cli.stage) {
@@ -50,12 +54,10 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
 
-  begin();
   let request = await readInput(cli.input, "Task or question / Задача или вопрос", {
     noInput: cli.noInput,
   });
   let intent = await classifyRequest(client, request);
-  setUiLanguage(intent.language);
   info(
     intent.intent === "inquiry"
       ? { en: "Mode: read-only repository question", ru: "Режим: read-only вопрос о проекте" }
@@ -68,7 +70,6 @@ export async function runCli(arguments_: string[]): Promise<void> {
     if (!interactive) return;
     request += `\n\nUser clarification:\n${await required({ en: "Your intent", ru: "Ваше намерение" })}`;
     intent = await classifyRequest(client, request);
-    setUiLanguage(intent.language);
   }
   if (intent.intent === "inquiry") {
     if (!interactive) {
@@ -80,15 +81,15 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
   const root = process.cwd();
-  step(1, 4, { en: "Repository context", ru: "Контекст проекта" });
+  step(1, 4, { en: "Choose source access", ru: "Выбор доступа к коду" });
   const requestContext = interactive
     ? await createRequestContext(client, request, root)
     : undefined;
-  step(2, 4, { en: "Specification", ru: "Спецификация" });
+  step(2, 4, { en: "Agree on requirements", ru: "Согласование требований" });
   const spec = await createApprovedSpecification(client, request, requestContext, interactive);
   if (spec?.status !== "ready") return;
 
-  step(3, 4, { en: "Project understanding and plan", ru: "Устройство проекта и план" });
+  step(3, 4, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
   const discovery = await createApprovedDiscovery(client, spec, root, requestContext);
   const policy = await loadPolicy(root);
   const plan = await createApprovedPlan(client, spec, discovery, policy, root);

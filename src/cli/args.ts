@@ -1,5 +1,6 @@
 export type Cli = {
   stage?: string;
+  language?: "en" | "ru";
   thinking: boolean;
   help: boolean;
   init: boolean;
@@ -47,6 +48,10 @@ export function parseCli(args: string[]): Cli {
       cli.debug = true;
     } else if (value === "--stage") {
       cli.stage = requireArgument(args, ++index, "--stage");
+    } else if (value === "--lang") {
+      const language = requireArgument(args, ++index, "--lang");
+      if (language !== "en" && language !== "ru") throw new Error("--lang must be 'en' or 'ru'");
+      cli.language = language;
     } else if (value === "--thinking") {
       const mode = requireArgument(args, ++index, "--thinking");
       if (mode !== "on" && mode !== "off") {

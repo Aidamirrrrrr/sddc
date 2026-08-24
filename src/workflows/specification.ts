@@ -1,6 +1,6 @@
 import type { ModelClient } from "../ai/model-client";
 import { formatSpec } from "../cli/approval";
-import { specSummary } from "../cli/presentation";
+import { specDocument, specSummary } from "../cli/presentation";
 import { document, required, reviewDocument, success, withSpinner } from "../cli/ui";
 import type { RequestRepositoryContext } from "../repository/request-context";
 import { buildSpec } from "../spec/pipeline";
@@ -16,12 +16,12 @@ export async function createApprovedSpecification(
   let request = initialRequest;
   while (true) {
     const spec = await withSpinner(
-      { en: "Building specification", ru: "Составляю спецификацию" },
-      { en: "Specification analyzed", ru: "Спецификация проанализирована" },
+      { en: "Preparing requirements", ru: "Готовлю требования" },
+      { en: "Requirements are ready for review", ru: "Требования готовы к проверке" },
       () => buildSpec(client, request, repository),
     );
     if (!interactive) {
-      document({ en: "Draft specification", ru: "Черновик спецификации" }, formatSpec(spec));
+      document({ en: "Draft requirements", ru: "Черновик требований" }, specDocument(spec));
       const path = await writeSpec(spec, false);
       success({
         en: `Draft written to ${path}`,
@@ -44,14 +44,14 @@ export async function createApprovedSpecification(
     const rendered = formatSpec(spec);
     if (
       (await reviewDocument(
-        { en: "Accept this specification?", ru: "Принять эту спецификацию?" },
-        { en: "Specification summary", ru: "Краткая спецификация" },
+        { en: "Accept these requirements?", ru: "Принять эти требования?" },
+        { en: "Requirements", ru: "Требования" },
         specSummary(spec),
-        rendered,
+        specDocument(spec),
       )) === "accept"
     ) {
       const path = await writeSpec(spec);
-      success({ en: `Specification saved to ${path}`, ru: `Спецификация сохранена: ${path}` });
+      success({ en: `Requirements saved to ${path}`, ru: `Требования сохранены: ${path}` });
       return spec;
     }
     const feedback = await required({

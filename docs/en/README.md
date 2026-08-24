@@ -4,6 +4,16 @@ Codekeeper builds a specification from the original request and the user's
 answers. It acts as a requirements quality gate: it detects missing decisions,
 contradictions, and oversized requests without inventing answers.
 
+## What You Approve
+
+- **Requirements** describe the expected change and acceptance criteria.
+- **Project map** records related existing code, tests, and constraints.
+- **Work plan** lists concrete file changes and verification commands.
+
+These are not three versions of the same document. Each stage adds only the
+detail unavailable to the previous one. The terminal renders human-readable
+text; YAML remains in `.specs` for resuming and deterministic validation.
+
 Before specification, an intent gate separates change requests from read-only
 repository questions. Ambiguous requests are returned to the user for clarification.
 

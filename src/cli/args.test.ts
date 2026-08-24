@@ -16,15 +16,17 @@ describe("CLI arguments", () => {
   });
 
   test("recognizes interaction and output modes", () => {
-    expect(parseCli(["--dry-run", "--plain", "--debug"])).toMatchObject({
+    expect(parseCli(["--dry-run", "--plain", "--debug", "--lang", "ru"])).toMatchObject({
       dryRun: true,
       plain: true,
       debug: true,
+      language: "ru",
     });
     expect(parseCli(["--json"])).toMatchObject({ json: true, noInput: true });
   });
 
   test("rejects unknown options", () => {
     expect(() => parseCli(["--wat"])).toThrow("Unknown option: --wat");
+    expect(() => parseCli(["--lang", "de"])).toThrow("--lang must be 'en' or 'ru'");
   });
 });

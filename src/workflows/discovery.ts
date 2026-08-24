@@ -1,5 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
-import { discoverySummary } from "../cli/presentation";
+import { discoverySummary, projectMapDocument } from "../cli/presentation";
 import { info, required, reviewDocument, success, withSpinner } from "../cli/ui";
 import { loadInputPrice } from "../config/env";
 import { createRepositoryContextSelector } from "../repository/context-selector";
@@ -27,8 +27,8 @@ export async function createApprovedDiscovery(
   }
   let discovery = requestContext
     ? await withSpinner(
-        { en: "Checking how the change fits the project", ru: "Проверяю устройство проекта" },
-        { en: "Project understanding is ready", ru: "Устройство проекта изучено" },
+        { en: "Mapping related code and constraints", ru: "Составляю карту связанного кода" },
+        { en: "Project map is ready", ru: "Карта проекта готова" },
         () => discoverRepositoryFromContext(client, spec, requestContext),
       )
     : await discoverRepository(
@@ -37,28 +37,27 @@ export async function createApprovedDiscovery(
         root,
         createRepositoryContextSelector(root, { inputUsdPerMillion: loadInputPrice() }),
       );
-  success({ en: "Repository discovery is ready", ru: "Исследование репозитория готово" });
+  success({ en: "Project map is ready", ru: "Карта проекта готова" });
   while (true) {
-    const rendered = Bun.YAML.stringify(discovery, null, 2).trimEnd();
     if (
       (await reviewDocument(
-        { en: "Is this project understanding correct?", ru: "Верно ли понято устройство проекта?" },
-        { en: "Project understanding", ru: "Понимание проекта" },
+        { en: "Is this project map correct?", ru: "Карта проекта составлена верно?" },
+        { en: "Project map", ru: "Карта проекта" },
         discoverySummary(discovery),
-        rendered,
+        projectMapDocument(discovery),
       )) === "accept"
     ) {
       const path = await writeRepositoryDiscovery(spec.feature, discovery);
-      success({ en: `Discovery saved to ${path}`, ru: `Исследование сохранено: ${path}` });
+      success({ en: `Project map saved to ${path}`, ru: `Карта проекта сохранена: ${path}` });
       return discovery;
     }
     const feedback = await required({
-      en: "What should be changed in discovery?",
-      ru: "Что нужно изменить в исследовании?",
+      en: "What should be changed in the project map?",
+      ru: "Что нужно изменить в карте проекта?",
     });
     discovery = await withSpinner(
-      { en: "Revising repository discovery", ru: "Исправляю исследование репозитория" },
-      { en: "Discovery revised", ru: "Исследование исправлено" },
+      { en: "Revising the project map", ru: "Исправляю карту проекта" },
+      { en: "Project map revised", ru: "Карта проекта исправлена" },
       () => reviseRepositoryDiscovery(client, spec, discovery, feedback, root),
     );
   }

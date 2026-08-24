@@ -1,5 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
-import { planSummary } from "../cli/presentation";
+import { planDocument, planSummary } from "../cli/presentation";
 import { document, required, reviewDocument, withSpinner } from "../cli/ui";
 import { buildImplementationPlan, preparePlanningContext } from "../planning/pipeline";
 import type { ImplementationPlan } from "../planning/schemas";
@@ -18,8 +18,8 @@ export async function createApprovedPlan(
   const repository = await preparePlanningContext(root, discovery);
   while (true) {
     const plan = await withSpinner(
-      { en: "Building implementation plan", ru: "Составляю план реализации" },
-      { en: "Implementation plan analyzed", ru: "План реализации проанализирован" },
+      { en: "Preparing the work plan", ru: "Готовлю план работ" },
+      { en: "Work plan is ready for review", ru: "План работ готов к проверке" },
       () => buildImplementationPlan(client, spec, discovery, userInput, repository, policy),
     );
     if (plan.status === "needs_clarification") {
@@ -37,10 +37,10 @@ export async function createApprovedPlan(
     const rendered = Bun.YAML.stringify(plan, null, 2).trimEnd();
     if (
       (await reviewDocument(
-        { en: "Accept this plan?", ru: "Принять этот план?" },
-        { en: "Implementation plan", ru: "План реализации" },
+        { en: "Accept this work plan?", ru: "Принять этот план работ?" },
+        { en: "Work plan", ru: "План работ" },
         planSummary(plan),
-        rendered,
+        planDocument(plan),
       )) === "accept"
     ) {
       return plan;

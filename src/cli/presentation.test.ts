@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { specSchema } from "../spec/schemas";
-import { specSummary } from "./presentation";
+import { specDocument, specSummary } from "./presentation";
 import { setUiLanguage } from "./ui";
 
 afterEach(() => setUiLanguage("English"));
@@ -27,4 +27,8 @@ test("specification summary stays compact and follows the UI language", () => {
   expect(summary).toContain("R6  Requirement 6");
   expect(summary).not.toContain("R7  Requirement 7");
   expect(summary).toContain("Остальное в полном документе");
+  const document = specDocument(spec);
+  expect(document).toContain("Требования");
+  expect(document).toContain("Как будет проверен результат");
+  expect(document).not.toContain("requirements:");
 });

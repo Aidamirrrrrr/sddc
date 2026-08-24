@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { autocompleteMultiselect, cancel, isCancel, note, select, text } from "@clack/prompts";
-import { phrase } from "../cli/ui";
+import { accent, phrase } from "../cli/ui";
 import type { ContextSelector, RepositoryContext } from "./pipeline";
 import { listContextProfiles, writeContextProfile } from "./profiles";
 import { MAX_FILE_BYTES, MAX_SNAPSHOT_BYTES } from "./scan";
@@ -37,34 +37,47 @@ export function createRepositoryContextSelector(
                 ru: `Проверьте новые файлы контекста: ${added}`,
               })
             : phrase({
-                en: "Allow the model to read this repository context",
-                ru: "Разрешить модели прочитать этот контекст",
+                en: "Review what the model may read",
+                ru: "Проверьте, какие файлы сможет прочитать модель",
               }),
           options: [
             {
+              value: "confirm",
+              label: accent(
+                phrase({ en: "Continue with these files", ru: "Продолжить с этими файлами" }),
+              ),
+              hint: phrase({
+                en: "send the selected files to the model",
+                ru: "передать выбранные файлы модели",
+              }),
+            },
+            {
               value: "edit",
-              label: phrase({ en: "Select files", ru: "Выбрать файлы" }),
-              hint: phrase({ en: "search and toggle", ru: "поиск и переключение" }),
+              label: phrase({ en: "Review file selection", ru: "Проверить список файлов" }),
+              hint: phrase({ en: "search, add, or remove", ru: "найти, добавить или убрать" }),
             },
             {
               value: "preview",
-              label: phrase({ en: "Preview a selected file", ru: "Посмотреть выбранный файл" }),
+              label: phrase({ en: "Open a selected file", ru: "Открыть выбранный файл" }),
             },
             {
               value: "context",
-              label: phrase({ en: "Edit project context", ru: "Добавить контекст проекта" }),
+              label: phrase({
+                en: "Add a note for the model",
+                ru: "Добавить пояснение для модели",
+              }),
+              hint: phrase({
+                en: "facts that are not in the code",
+                ru: "факты, которых нет в коде",
+              }),
             },
             {
-              value: "load",
-              label: phrase({ en: "Load context profile", ru: "Загрузить профиль контекста" }),
-            },
-            {
-              value: "save",
-              label: phrase({ en: "Save context profile", ru: "Сохранить профиль контекста" }),
-            },
-            {
-              value: "confirm",
-              label: phrase({ en: "Confirm and continue", ru: "Подтвердить и продолжить" }),
+              value: "profiles",
+              label: phrase({ en: "Context profiles", ru: "Профили контекста" }),
+              hint: phrase({
+                en: "load or save this selection",
+                ru: "загрузить или сохранить набор",
+              }),
             },
           ],
         }),
@@ -73,8 +86,7 @@ export function createRepositoryContextSelector(
       if (action === "edit") context.files = await editFiles(index, context.files, reasons, sizes);
       if (action === "preview") await previewFile(root, context.files);
       if (action === "context") context.userContext = await editUserContext(context.userContext);
-      if (action === "load") context = await loadProfile(root, context, sizes);
-      if (action === "save") await saveProfile(root, context);
+      if (action === "profiles") context = await manageProfiles(root, context, sizes);
       if (action === "confirm") {
         const error = validateSelection(sizes)(context.files);
         if (error) note(error, phrase({ en: "Cannot continue", ru: "Нельзя продолжить" }));
@@ -82,6 +94,29 @@ export function createRepositoryContextSelector(
       }
     }
   };
+}
+
+async function manageProfiles(
+  root: string,
+  context: RepositoryContext,
+  sizes: Map<string, number>,
+): Promise<RepositoryContext> {
+  const action = unwrap(
+    await select({
+      message: phrase({ en: "Context profiles", ru: "Профили контекста" }),
+      options: [
+        { value: "load" as const, label: phrase({ en: "Load profile", ru: "Загрузить профиль" }) },
+        {
+          value: "save" as const,
+          label: phrase({ en: "Save current selection", ru: "Сохранить текущий набор" }),
+        },
+        { value: "back" as const, label: phrase({ en: "Back", ru: "Назад" }) },
+      ],
+    }),
+  );
+  if (action === "load") return loadProfile(root, context, sizes);
+  if (action === "save") await saveProfile(root, context);
+  return context;
 }
 
 async function editFiles(
@@ -228,6 +263,11 @@ function showEstimate(
     [
       `${files.length} files · ${formatSize(bytes)} · ~${estimate.tokens.toLocaleString()} tokens · ${price}`,
       details.join(" · "),
+      "",
+      ...files.slice(0, 6).map((path) => `  ${path}`),
+      ...(files.length > 6
+        ? [phrase({ en: `  … and ${files.length - 6} more`, ru: `  … и ещё ${files.length - 6}` })]
+        : []),
     ]
       .filter(Boolean)
       .join("\n"),

@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
+import { specificationLanguage } from "../spec/language";
 import type { Spec } from "../spec/schemas";
 import { repositoryPrompts } from "./prompts";
 import { type FileSnapshot, indexRepository, readSnapshots } from "./scan";
@@ -93,7 +94,7 @@ export async function reviseRepositoryDiscovery(
       repositoryPrompts.revise,
       pretty({
         specification: spec,
-        outputLanguage: "the language used by the specification",
+        outputLanguage: specificationLanguage(spec),
         userFeedback: feedback,
         snapshots,
         candidate: discovery,
@@ -143,7 +144,7 @@ async function buildDiscovery(
 ): Promise<RepositoryDiscovery> {
   const evidenceContext = {
     specification: spec,
-    outputLanguage: "the language used by the specification",
+    outputLanguage: specificationLanguage(spec),
     userContext: userContext || undefined,
     snapshots,
   };

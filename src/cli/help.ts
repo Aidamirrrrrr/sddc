@@ -12,6 +12,7 @@ Options:
   -v, --version         Show version
   --init                Create the user configuration file
   --thinking on|off     Enable or disable model reasoning
+  --lang en|ru          Choose the interface language
   --stage <name>        Run one diagnostic model stage
   -n, --dry-run         Stop after the accepted implementation plan
   --no-input            Never prompt; write a draft when approval is required
