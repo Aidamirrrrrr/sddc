@@ -25,7 +25,7 @@ export async function applyProposal(root: string, proposal: ChangeProposal): Pro
     for (const change of proposal.changes) {
       const path = join(root, change.path);
       await mkdir(dirname(path), { recursive: true });
-      const temporary = `${path}.codekeeper-${crypto.randomUUID()}.tmp`;
+      const temporary = `${path}.sddc-${crypto.randomUUID()}.tmp`;
       await Bun.write(temporary, change.content);
       await rename(temporary, path);
     }

@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 test("answers from approved repository evidence without creating a specification", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-inquiry-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-inquiry-"));
   await Bun.write(join(root, "auth.ts"), "export function register() { return 'created'; }");
   await Bun.write(join(root, "unrelated.ts"), "export const secretBehavior = true;");
   const prompts: string[] = [];

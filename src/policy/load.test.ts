@@ -11,9 +11,9 @@ afterEach(async () => {
 });
 
 test("policy loader uses defaults and merges project overrides", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-policy-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-policy-"));
   expect(await loadPolicy(root)).toEqual(defaultPolicy);
-  const directory = join(root, ".codekeeper");
+  const directory = join(root, ".sddc");
   await mkdir(directory);
   await Bun.write(join(directory, "policy.yaml"), "changes:\n  max_files_per_task: 2\n");
 
@@ -24,8 +24,8 @@ test("policy loader uses defaults and merges project overrides", async () => {
 });
 
 test("policy loader reports malformed project policy", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-policy-invalid-"));
-  const directory = join(root, ".codekeeper");
+  root = await mkdtemp(join(tmpdir(), "sddc-policy-invalid-"));
+  const directory = join(root, ".sddc");
   await mkdir(directory);
   const path = join(directory, "policy.yaml");
   await Bun.write(path, "commands:\n  allowed_programs: []\n");

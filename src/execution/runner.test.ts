@@ -4,16 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { z } from "zod";
 import { readyPlan, readySpec } from "../planning/test-fixtures";
+import { readyTasks } from "../tasks/test-fixtures";
 import { sha256 } from "./context";
 import { executePlan } from "./runner";
 import { writeExecutionJournal } from "./storage";
 
 test("failed verification rolls source changes back", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-execution-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-execution-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
-  plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
-  const task = plan.tasks[0];
+  const tasks = readyTasks();
+  tasks.tasks = tasks.tasks.slice(0, 1);
+  const task = tasks.tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   task.verification = [
     { command: { program: "bun", args: ["-e", "process.exit(7)"] }, purpose: "Fail" },
@@ -40,7 +42,7 @@ test("failed verification rolls source changes back", async () => {
     passedReview(),
   ]);
 
-  const journal = await executePlan(client, root, readySpec(), plan, {
+  const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
     async review() {
       return { accepted: true };
     },
@@ -55,11 +57,12 @@ test("failed verification rolls source changes back", async () => {
 });
 
 test("verified changes are kept and recorded as completed", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-completed-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-completed-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
-  plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
-  const task = plan.tasks[0];
+  const tasks = readyTasks();
+  tasks.tasks = tasks.tasks.slice(0, 1);
+  const task = tasks.tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   task.verification = [
     { command: { program: "bun", args: ["-e", "process.exit(0)"] }, purpose: "Pass" },
@@ -86,7 +89,7 @@ test("verified changes are kept and recorded as completed", async () => {
     passedReview(),
   ]);
 
-  const journal = await executePlan(client, root, readySpec(), plan, {
+  const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
     async review() {
       return { accepted: true };
     },
@@ -101,11 +104,12 @@ test("verified changes are kept and recorded as completed", async () => {
 });
 
 test("blocked proposals stop without touching source files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-blocked-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-blocked-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
-  plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
-  const task = plan.tasks[0];
+  const tasks = readyTasks();
+  tasks.tasks = tasks.tasks.slice(0, 1);
+  const task = tasks.tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   const client = stub([
     {
@@ -122,7 +126,7 @@ test("blocked proposals stop without touching source files", async () => {
     },
   ]);
 
-  const journal = await executePlan(client, root, readySpec(), plan, {
+  const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
     async review() {
       return { accepted: true };
     },
@@ -136,9 +140,10 @@ test("blocked proposals stop without touching source files", async () => {
 });
 
 test("resume skips completed tasks after validating output hashes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-resume-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-resume-"));
   await Bun.write(join(root, "src/auth.ts"), "implemented\n");
   const plan = readyPlan();
+  const tasks = readyTasks();
   await writeExecutionJournal(root, {
     feature: plan.feature,
     status: "in_progress",
@@ -176,13 +181,13 @@ test("resume skips completed tasks after validating output hashes", async () => 
     },
     passedReview(),
   ]);
-  const secondTask = plan.tasks[1];
+  const secondTask = tasks.tasks[1];
   if (!secondTask) throw new Error("Fixture must contain a second task");
   secondTask.verification = [
     { command: { program: "bun", args: ["-e", "process.exit(0)"] }, purpose: "Pass" },
   ];
 
-  const journal = await executePlan(client, root, readySpec(), plan, {
+  const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
     async review() {
       return { accepted: true };
     },
@@ -199,13 +204,14 @@ test("resume skips completed tasks after validating output hashes", async () => 
 });
 
 test("final review rolls a task back and requests a revised proposal", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-final-review-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-final-review-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
-  const plan = singleTaskPlan();
+  const plan = readyPlan();
+  const tasks = singleTaskList();
   const client = stub([proposal("new\n"), passedReview(), proposal("revised\n"), passedReview()]);
   let reviews = 0;
 
-  const journal = await executePlan(client, root, readySpec(), plan, {
+  const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
     async review() {
       return { accepted: true };
     },
@@ -225,29 +231,37 @@ test("final review rolls a task back and requests a revised proposal", async () 
 });
 
 test("disabled checkpoint restores the verified task", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-checkpoint-policy-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-checkpoint-policy-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
 
   await expect(
-    executePlan(stub([proposal("new\n"), passedReview()]), root, readySpec(), singleTaskPlan(), {
-      async review() {
-        return { accepted: true };
+    executePlan(
+      stub([proposal("new\n"), passedReview()]),
+      root,
+      readySpec(),
+      readyPlan(),
+      singleTaskList().tasks,
+      {
+        async review() {
+          return { accepted: true };
+        },
+        async retryAfterFailure() {
+          return false;
+        },
+        async afterTask() {
+          return "checkpoint";
+        },
       },
-      async retryAfterFailure() {
-        return false;
-      },
-      async afterTask() {
-        return "checkpoint";
-      },
-    }),
+    ),
   ).rejects.toThrow("Git checkpoints are disabled");
   expect(await Bun.file(join(root, "src/auth.ts")).text()).toBe("old\n");
 });
 
 test("resume rejects manually changed completed files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-resume-conflict-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-resume-conflict-"));
   await Bun.write(join(root, "src/auth.ts"), "manual change\n");
-  const plan = singleTaskPlan();
+  const plan = readyPlan();
+  const tasks = singleTaskList();
   await writeExecutionJournal(root, {
     feature: plan.feature,
     status: "in_progress",
@@ -266,7 +280,7 @@ test("resume rejects manually changed completed files", async () => {
   });
 
   await expect(
-    executePlan(stub([]), root, readySpec(), plan, {
+    executePlan(stub([]), root, readySpec(), plan, tasks.tasks, {
       async review() {
         return { accepted: true };
       },
@@ -280,15 +294,15 @@ test("resume rejects manually changed completed files", async () => {
   ).rejects.toThrow("Cannot resume: completed file changed");
 });
 
-function singleTaskPlan() {
-  const plan = readyPlan();
-  plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
-  const task = plan.tasks[0];
+function singleTaskList() {
+  const list = readyTasks();
+  list.tasks = list.tasks.slice(0, 1);
+  const task = list.tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   task.verification = [
     { command: { program: "bun", args: ["-e", "process.exit(0)"] }, purpose: "Pass" },
   ];
-  return plan;
+  return list;
 }
 
 function proposal(content: string) {

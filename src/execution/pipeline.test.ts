@@ -4,15 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { z } from "zod";
 import { readyPlan, readySpec } from "../planning/test-fixtures";
+import { readyTasks } from "../tasks/test-fixtures";
 import { sha256 } from "./context";
-import { buildTaskProposal, orderTasks } from "./pipeline";
+import { buildTaskProposal } from "./pipeline";
 import type { ExecutionReview } from "./schemas";
 
 test("invalid model proposal gets one constrained correction", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-proposal-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-proposal-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
-  const task = plan.tasks[0];
+  const task = readyTasks().tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   const valid = {
     task_id: task.id,
@@ -45,17 +46,11 @@ test("invalid model proposal gets one constrained correction", async () => {
   expect(client.prompts[1]).toContain("may not modify outside.ts");
 });
 
-test("tasks are ordered by dependencies", () => {
-  const plan = readyPlan();
-  plan.tasks.reverse();
-  expect(orderTasks(plan).map((task) => task.id)).toEqual(["T1", "T2"]);
-});
-
 test("review rejection gets one implementation revision", async () => {
-  const root = await mkdtemp(join(tmpdir(), "codekeeper-review-repair-"));
+  const root = await mkdtemp(join(tmpdir(), "sddc-review-repair-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
-  const task = plan.tasks[0];
+  const task = readyTasks().tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   const proposal = {
     task_id: task.id,

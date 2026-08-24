@@ -13,7 +13,7 @@ try {
       ? JSON.stringify({ type: "error", message, ...(hint ? { hint } : {}) })
       : `Error: ${message}${hint ? `\nNext: ${hint}` : ""}`,
   );
-  if ((Bun.env.CODEKEEPER_DEBUG === "1" || Bun.argv.includes("--debug")) && error instanceof Error)
+  if ((Bun.env.SDDC_DEBUG === "1" || Bun.argv.includes("--debug")) && error instanceof Error)
     console.error(error.stack);
   process.exitCode = 1;
 }

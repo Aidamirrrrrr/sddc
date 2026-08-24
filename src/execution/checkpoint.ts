@@ -13,7 +13,7 @@ export async function createGitCheckpoint(
     "commit",
     "--no-verify",
     "-m",
-    `codekeeper: complete ${taskId}`,
+    `sddc: complete ${taskId}`,
   ]);
   if (committed.exitCode !== 0) {
     await command(root, ["git", "restore", "--staged", "--", ...paths]);

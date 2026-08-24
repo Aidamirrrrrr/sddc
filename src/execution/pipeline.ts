@@ -3,6 +3,7 @@ import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
+import type { Task } from "../tasks/schemas";
 import { readTaskFiles } from "./context";
 import { executionPrompts } from "./prompts";
 import { reviewProposal } from "./review";
@@ -16,7 +17,7 @@ export async function buildTaskProposal(
   root: string,
   spec: Spec,
   plan: ImplementationPlan,
-  task: ImplementationPlan["tasks"][number],
+  task: Task,
   feedback = "",
   policy: Policy = defaultPolicy,
 ): Promise<ChangeProposal> {
@@ -54,22 +55,6 @@ export async function buildTaskProposal(
     await reviewProposal(client, spec, task, files, proposal);
   }
   return proposal;
-}
-
-export function orderTasks(plan: ImplementationPlan): ImplementationPlan["tasks"] {
-  const remaining = new Map(plan.tasks.map((task) => [task.id, task]));
-  const completed = new Set<string>();
-  const ordered: ImplementationPlan["tasks"] = [];
-  while (remaining.size > 0) {
-    const next = plan.tasks.find(
-      (task) => remaining.has(task.id) && task.depends_on.every((id) => completed.has(id)),
-    );
-    if (!next) throw new Error("Implementation plan has no executable task order");
-    ordered.push(next);
-    remaining.delete(next.id);
-    completed.add(next.id);
-  }
-  return ordered;
 }
 
 export async function runExecutionStage(

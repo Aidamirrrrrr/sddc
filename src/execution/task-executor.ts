@@ -2,6 +2,7 @@ import type { ModelClient } from "../ai/model-client";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
+import type { Task } from "../tasks/schemas";
 import { readTaskFiles, sha256 } from "./context";
 import { applyProposal, type FileBackup, restoreFiles } from "./files";
 import { buildTaskProposal } from "./pipeline";
@@ -21,7 +22,7 @@ export async function executeTask(
   root: string,
   spec: Spec,
   plan: ImplementationPlan,
-  task: ImplementationPlan["tasks"][number],
+  task: Task,
   hooks: ExecutionHooks,
   policy: Policy,
   mode: ExecutionJournal["mode"],
@@ -81,10 +82,7 @@ export async function executeTask(
   return { kind: "completed", result, backup };
 }
 
-function blockedByUser(
-  task: ImplementationPlan["tasks"][number],
-  proposal: ChangeProposal,
-): ChangeProposal {
+function blockedByUser(task: Task, proposal: ChangeProposal): ChangeProposal {
   return {
     ...proposal,
     status: "blocked",

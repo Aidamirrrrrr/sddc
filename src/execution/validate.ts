@@ -1,12 +1,12 @@
-import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
+import type { Task } from "../tasks/schemas";
 import type { ExecutionFile } from "./context";
 import type { ChangeProposal } from "./schemas";
 
 export function validateProposal(
   proposal: ChangeProposal,
-  task: ImplementationPlan["tasks"][number],
+  task: Task,
   files: ExecutionFile[],
   policy: Policy = defaultPolicy,
 ): void {

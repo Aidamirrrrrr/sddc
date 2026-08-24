@@ -1,17 +1,18 @@
-import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
+import type { Task } from "../tasks/schemas";
 import type { ChangeProposal, ExecutionJournal } from "./schemas";
 
-export function contractSummary(plan: ImplementationPlan, policy: Policy): string {
-  const modified = new Set(plan.tasks.flatMap((task) => task.files.modify));
-  const created = new Set(plan.tasks.flatMap((task) => task.files.create));
-  const permissions = new Set(plan.tasks.flatMap((task) => task.permissions));
-  const commands = plan.tasks.flatMap((task) =>
+export function contractSummary(feature: string, tasks: Task[], policy: Policy): string {
+  const modified = new Set(tasks.flatMap((task) => task.files.modify));
+  const created = new Set(tasks.flatMap((task) => task.files.create));
+  const permissions = new Set(tasks.flatMap((task) => task.permissions));
+  const commands = tasks.flatMap((task) =>
     task.verification.map((item) => `${item.command.program} ${item.command.args.join(" ")}`),
   );
+  const waves = new Set(tasks.map((task) => task.wave));
   return [
-    `Feature: ${plan.feature}`,
-    `Tasks: ${plan.tasks.length}`,
+    `Feature: ${feature}`,
+    `Tasks: ${tasks.length} in ${waves.size} dependency waves`,
     `Files: ${modified.size} modified, ${created.size} created`,
     `Permissions: ${[...permissions].join(", ") || "none"}`,
     `Commands: ${commands.join("; ")}`,

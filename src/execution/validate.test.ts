@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { readyPlan } from "../planning/test-fixtures";
+import { readyTasks } from "../tasks/test-fixtures";
 import { sha256 } from "./context";
 import { validateProposal } from "./validate";
 
 test("proposal accepts only approved task writes with current hashes", () => {
-  const task = readyPlan().tasks[0];
+  const task = readyTasks().tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   const content = "export const value = 1;\n";
   const files = [{ path: "src/auth.ts", content, sha256: sha256(content) }];
@@ -56,7 +56,7 @@ test("proposal accepts only approved task writes with current hashes", () => {
 });
 
 test("proposal must implement every planned file within the size limit", () => {
-  const task = readyPlan().tasks[0];
+  const task = readyTasks().tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
   task.files.create.push("src/registration.ts");
   const content = "old\n";

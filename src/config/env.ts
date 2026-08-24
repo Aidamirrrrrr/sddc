@@ -18,7 +18,7 @@ export function loadModelConfig(): ModelConfig {
 
 export function userConfigPath(): string {
   const base = Bun.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
-  return join(base, "codekeeper", ".env");
+  return join(base, "sddc", ".env");
 }
 
 export async function loadUserEnvironment(): Promise<void> {
@@ -55,9 +55,7 @@ export function loadInputPrice(): number | undefined {
 function requiredEnv(name: string): string {
   const value = Bun.env[name]?.trim();
   if (!value) {
-    throw new Error(
-      `${name} is not configured. Run 'codekeeper --init' and edit ${userConfigPath()}`,
-    );
+    throw new Error(`${name} is not configured. Run 'sddc --init' and edit ${userConfigPath()}`);
   }
   return value;
 }

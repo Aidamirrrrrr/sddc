@@ -1,6 +1,7 @@
 import type { ImplementationPlan } from "../planning/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
+import type { TaskList } from "../tasks/schemas";
 import { accent, muted, phrase } from "./ui";
 
 export function specSummary(spec: Spec): string {
@@ -91,18 +92,17 @@ export function projectMapDocument(discovery: RepositoryDiscovery): string {
 }
 
 export function planSummary(plan: ImplementationPlan): string {
-  const files = new Set(plan.tasks.flatMap((task) => [...task.files.modify, ...task.files.create]));
-  const commands = plan.tasks.reduce((sum, task) => sum + task.verification.length, 0);
+  const touched = new Set(plan.approach.flatMap((step) => step.touches));
   return [
     plan.summary,
     "",
     muted(
       phrase({
-        en: `${plan.tasks.length} tasks · ${files.size} writable files · ${commands} verification commands`,
-        ru: `${plan.tasks.length} задач · файлов для изменения: ${files.size} · команд проверки: ${commands}`,
+        en: `${plan.approach.length} approach steps · ${plan.contracts.length} contracts · ${touched.size} files in scope`,
+        ru: `${plan.approach.length} шагов подхода · контрактов: ${plan.contracts.length} · файлов в области: ${touched.size}`,
       }),
     ),
-    ...plan.tasks.map((task) => `  ${accent(task.id)}  ${task.title}`),
+    ...plan.approach.map((step) => `  ${accent(step.id)}  ${step.statement}`),
   ].join("\n");
 }
 
@@ -110,31 +110,87 @@ export function planDocument(plan: ImplementationPlan): string {
   return sections([
     [phrase({ en: "Summary", ru: "Кратко" }), [plan.summary]],
     [
-      phrase({ en: "Work sequence", ru: "Порядок работ" }),
-      plan.tasks.map((task) => {
-        const writes = [...task.files.modify, ...task.files.create];
-        const commands = task.verification.map(
-          (item) => `$ ${item.command.program} ${item.command.args.join(" ")}`,
-        );
-        return [
-          `${task.id}. ${task.title}`,
-          `  ${task.goal}`,
-          writes.length ? `  ${phrase({ en: "Files", ru: "Файлы" })}: ${writes.join(", ")}` : "",
-          commands.length
-            ? `  ${phrase({ en: "Checks", ru: "Проверки" })}: ${commands.join("; ")}`
+      phrase({ en: "Technical approach", ru: "Технический подход" }),
+      plan.approach.map((step) =>
+        [
+          `${step.id}. ${step.statement}`,
+          step.requirements.length
+            ? `  ${phrase({ en: "Serves", ru: "Покрывает" })}: ${step.requirements.join(", ")}`
             : "",
-          task.risks.length
-            ? `  ${phrase({ en: "Risks", ru: "Риски" })}: ${task.risks.join("; ")}`
+          step.touches.length
+            ? `  ${phrase({ en: "Files", ru: "Файлы" })}: ${step.touches.join(", ")}`
             : "",
         ]
           .filter(Boolean)
-          .join("\n");
-      }),
+          .join("\n"),
+      ),
+    ],
+    [
+      phrase({ en: "Contracts", ru: "Контракты" }),
+      plan.contracts.map((item) => `${item.kind} ${item.name} (${item.change})\n  ${item.surface}`),
+    ],
+    [
+      phrase({ en: "Data model", ru: "Модель данных" }),
+      plan.data_model.map((item) => `${item.entity} (${item.change})\n  ${item.fields.join(", ")}`),
     ],
     [
       phrase({ en: "Implementation decisions", ru: "Решения реализации" }),
       plan.decisions.map((item) => evidenceLine(item.statement, item.evidence)),
     ],
+  ]);
+}
+
+export function taskSummary(list: TaskList): string {
+  const files = new Set(list.tasks.flatMap((task) => [...task.files.modify, ...task.files.create]));
+  const commands = list.tasks.reduce((sum, task) => sum + task.verification.length, 0);
+  const waves = new Set(list.tasks.map((task) => task.wave));
+  return [
+    list.summary,
+    "",
+    muted(
+      phrase({
+        en: `${list.tasks.length} tasks in ${waves.size} waves · ${files.size} writable files · ${commands} verification commands`,
+        ru: `${list.tasks.length} задач в ${waves.size} волнах · файлов для изменения: ${files.size} · команд проверки: ${commands}`,
+      }),
+    ),
+    ...list.tasks.map(
+      (task) => `  ${accent(task.id)}${task.parallel ? " [P]" : "    "}  ${task.title}`,
+    ),
+  ].join("\n");
+}
+
+export function taskDocument(list: TaskList): string {
+  const waves = [...new Set(list.tasks.map((task) => task.wave))].sort((a, b) => a - b);
+  return sections([
+    [phrase({ en: "Summary", ru: "Кратко" }), [list.summary]],
+    ...waves.map((wave): [string, string[]] => [
+      phrase({ en: `Wave ${wave}`, ru: `Волна ${wave}` }),
+      list.tasks
+        .filter((task) => task.wave === wave)
+        .map((task) => {
+          const writes = [...task.files.modify, ...task.files.create];
+          const commands = task.verification.map(
+            (item) => `$ ${item.command.program} ${item.command.args.join(" ")}`,
+          );
+          return [
+            `${task.id}${task.parallel ? " [P]" : ""}. ${task.title}`,
+            `  ${task.goal}`,
+            `  ${phrase({ en: "Covers", ru: "Покрывает" })}: ${[...task.requirements, ...task.acceptance].join(", ")}`,
+            task.depends_on.length
+              ? `  ${phrase({ en: "After", ru: "После" })}: ${task.depends_on.join(", ")}`
+              : "",
+            writes.length ? `  ${phrase({ en: "Files", ru: "Файлы" })}: ${writes.join(", ")}` : "",
+            commands.length
+              ? `  ${phrase({ en: "Checks", ru: "Проверки" })}: ${commands.join("; ")}`
+              : "",
+            task.risks.length
+              ? `  ${phrase({ en: "Risks", ru: "Риски" })}: ${task.risks.join("; ")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+        }),
+    ]),
   ]);
 }
 

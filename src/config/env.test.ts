@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("user configuration", () => {
   test("initializes a private configuration file", async () => {
-    Bun.env.XDG_CONFIG_HOME = await mkdtemp(join(tmpdir(), "codekeeper-config-"));
+    Bun.env.XDG_CONFIG_HOME = await mkdtemp(join(tmpdir(), "sddc-config-"));
 
     const result = await initializeUserConfig();
 
@@ -31,7 +31,7 @@ describe("user configuration", () => {
   });
 
   test("loads user values without overriding process environment", async () => {
-    Bun.env.XDG_CONFIG_HOME = await mkdtemp(join(tmpdir(), "codekeeper-config-"));
+    Bun.env.XDG_CONFIG_HOME = await mkdtemp(join(tmpdir(), "sddc-config-"));
     const { path } = await initializeUserConfig();
     await writeFile(
       path,

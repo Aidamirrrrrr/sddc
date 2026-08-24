@@ -16,15 +16,20 @@ import {
 import { initializeUserConfig, loadModelConfig, loadUserEnvironment } from "../config/env";
 import { PRODUCT_NAME, VERSION } from "../config/product";
 import { classifyRequest } from "../intake/classify";
+import { preparePlanningContext } from "../planning/pipeline";
 import { writeImplementationPlan } from "../planning/storage";
+import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
+import { writeTaskList } from "../tasks/storage";
 import { createApprovedDiscovery } from "../workflows/discovery";
 import { runApprovedExecution } from "../workflows/execution";
 import { persistGovernance } from "../workflows/governance";
 import { runRepositoryInquiry } from "../workflows/inquiry";
 import { createApprovedPlan } from "../workflows/planning";
+import { runRecompile } from "../workflows/recompile";
 import { createRequestContext } from "../workflows/request-context";
 import { createApprovedSpecification } from "../workflows/specification";
+import { createApprovedTaskList } from "../workflows/tasks";
 import { runDiagnosticStage } from "./stages";
 
 export async function runCli(arguments_: string[]): Promise<void> {
@@ -54,6 +59,16 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
 
+  if (cli.recompile) {
+    return runRecompile(
+      client,
+      process.cwd(),
+      cli.recompile,
+      cli.input.join(" ").trim(),
+      cli.dryRun,
+    );
+  }
+
   let request = await readInput(cli.input, "Task or question / Задача или вопрос", {
     noInput: cli.noInput,
   });
@@ -81,21 +96,36 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
   const root = process.cwd();
-  step(1, 4, { en: "Choose source access", ru: "Выбор доступа к коду" });
+  step(1, 5, { en: "Choose source access", ru: "Выбор доступа к коду" });
   const requestContext = interactive
     ? await createRequestContext(client, request, root)
     : undefined;
-  step(2, 4, { en: "Agree on requirements", ru: "Согласование требований" });
+  step(2, 5, { en: "Agree on requirements", ru: "Согласование требований" });
   const spec = await createApprovedSpecification(client, request, requestContext, interactive);
   if (spec?.status !== "ready") return;
 
-  step(3, 4, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
+  step(3, 5, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
   const discovery = await createApprovedDiscovery(client, spec, root, requestContext);
   const policy = await loadPolicy(root);
-  const plan = await createApprovedPlan(client, spec, discovery, policy, root);
+  const constitution = await loadConstitution(root);
+  const repository = await preparePlanningContext(root, discovery);
+  const plan = await createApprovedPlan(client, spec, discovery, policy, repository, constitution);
   const planPath = await writeImplementationPlan(plan);
-  success({ en: `Implementation plan saved to ${planPath}`, ru: `План сохранён: ${planPath}` });
-  await persistGovernance(root, spec, discovery, plan, policy);
+  success({ en: `Technical plan saved to ${planPath}`, ru: `План сохранён: ${planPath}` });
+
+  step(4, 5, { en: "Derive the task graph", ru: "Граф задач" });
+  const tasks = await createApprovedTaskList(
+    client,
+    spec,
+    plan,
+    discovery,
+    policy,
+    repository,
+    constitution,
+  );
+  const tasksPath = await writeTaskList(tasks, root);
+  success({ en: `Task graph saved to ${tasksPath}`, ru: `Граф задач сохранён: ${tasksPath}` });
+  await persistGovernance(root, spec, discovery, plan, tasks, policy);
   if (cli.dryRun) {
     finish({
       en: "Dry run complete; no source files were changed",
@@ -103,6 +133,6 @@ export async function runCli(arguments_: string[]): Promise<void> {
     });
     return;
   }
-  step(4, 4, { en: "Controlled implementation", ru: "Контролируемая реализация" });
-  await runApprovedExecution(client, root, spec, plan, policy);
+  step(5, 5, { en: "Controlled implementation", ru: "Контролируемая реализация" });
+  await runApprovedExecution(client, root, spec, plan, tasks, policy);
 }

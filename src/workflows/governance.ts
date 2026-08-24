@@ -5,18 +5,20 @@ import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
+import type { TaskList } from "../tasks/schemas";
 
 export async function persistGovernance(
   root: string,
   spec: Spec,
   discovery: RepositoryDiscovery,
   plan: ImplementationPlan,
+  tasks: TaskList,
   policy: Policy,
 ): Promise<void> {
   const governance = await writeGovernanceArtifacts(
     root,
     spec.feature,
-    buildDecisionRegistry(spec, discovery, plan),
+    buildDecisionRegistry(spec, discovery, plan, tasks),
     policy,
   );
   success({

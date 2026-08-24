@@ -1,14 +1,14 @@
 {
-  "name": "codekeeper",
-  "version": "0.4.0",
+  "name": "sddc",
+  "version": "0.5.0",
   "type": "module",
   "private": true,
   "bin": {
-    "codekeeper": "./src/main.ts"
+    "sddc": "./src/main.ts"
   },
   "scripts": {
     "start": "bun run src/main.ts",
-    "build": "bun build src/main.ts --compile --minify --outfile=dist/codekeeper",
+    "build": "bun build src/main.ts --compile --minify --outfile=dist/sddc",
     "install:local": "bun run scripts/install-local.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",

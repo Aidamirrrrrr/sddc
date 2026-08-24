@@ -1,12 +1,9 @@
 import { join } from "node:path";
-import type { ImplementationPlan } from "../planning/schemas";
+import type { Task } from "../tasks/schemas";
 
 export type ExecutionFile = { path: string; sha256: string; content: string };
 
-export async function readTaskFiles(
-  root: string,
-  task: ImplementationPlan["tasks"][number],
-): Promise<ExecutionFile[]> {
+export async function readTaskFiles(root: string, task: Task): Promise<ExecutionFile[]> {
   const paths = [...new Set([...task.files.read, ...task.files.modify])];
   return Promise.all(
     paths.map(async (path) => {

@@ -1,12 +1,14 @@
 import type { ImplementationPlan } from "../planning/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
+import type { TaskList } from "../tasks/schemas";
 import { type DecisionRegistry, decisionRegistrySchema } from "./schemas";
 
 export function buildDecisionRegistry(
   spec: Spec,
   discovery: RepositoryDiscovery,
   plan: ImplementationPlan,
+  tasks: TaskList,
 ): DecisionRegistry {
   const entries: DecisionRegistry["decisions"] = [];
 
@@ -43,14 +45,14 @@ export function buildDecisionRegistry(
       status: "accepted",
     });
   }
-  for (const task of plan.tasks) {
+  for (const task of tasks.tasks) {
     for (const permission of task.permissions) {
       entries.push({
         id: "",
         kind: "permission",
         owner: "user",
         statement: `${task.id}: ${permission}`,
-        source: `plan.${task.id}.permissions`,
+        source: `tasks.${task.id}.permissions`,
         evidence: [],
         status: "accepted",
       });

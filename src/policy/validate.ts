@@ -1,4 +1,4 @@
-import type { ImplementationPlan } from "../planning/schemas";
+import type { Task } from "../tasks/schemas";
 import type { Policy } from "./schemas";
 
 const DEPENDENCY_FILES = new Set([
@@ -17,8 +17,8 @@ const DEPENDENCY_FILES = new Set([
   "yarn.lock",
 ]);
 
-export function validatePlanPolicy(plan: ImplementationPlan, policy: Policy): void {
-  for (const task of plan.tasks) {
+export function validateTaskPolicy(tasks: Task[], policy: Policy): void {
+  for (const task of tasks) {
     const changed = [...new Set([...task.files.modify, ...task.files.create])];
     if (changed.length > policy.changes.max_files_per_task) {
       throw new Error(
@@ -50,7 +50,7 @@ export function validatePlanPolicy(plan: ImplementationPlan, policy: Policy): vo
       throw new Error(`${task.id} requests external network forbidden by policy`);
     }
   }
-  validateWriteOrdering(plan);
+  validateWriteOrdering(tasks);
 }
 
 function usesExternalNetwork(program: string, args: string[]): boolean {
@@ -65,11 +65,7 @@ function usesExternalNetwork(program: string, args: string[]): boolean {
   return false;
 }
 
-function validateChangedPath(
-  task: ImplementationPlan["tasks"][number],
-  path: string,
-  policy: Policy,
-): void {
+function validateChangedPath(task: Task, path: string, policy: Policy): void {
   if (policy.changes.forbid_paths.some((forbidden) => matchesPath(path, forbidden))) {
     throw new Error(`${task.id} changes path forbidden by policy: ${path}`);
   }
@@ -97,16 +93,16 @@ function validateChangedPath(
   }
 }
 
-function validateWriteOrdering(plan: ImplementationPlan): void {
-  for (let index = 0; index < plan.tasks.length; index += 1) {
-    const task = plan.tasks[index];
+function validateWriteOrdering(tasks: Task[]): void {
+  for (let index = 0; index < tasks.length; index += 1) {
+    const task = tasks[index];
     if (!task) continue;
     const writes = new Set([...task.files.modify, ...task.files.create]);
-    for (const later of plan.tasks.slice(index + 1)) {
+    for (const later of tasks.slice(index + 1)) {
       const overlap = [...later.files.modify, ...later.files.create].find((path) =>
         writes.has(path),
       );
-      if (overlap && !dependsTransitively(later.id, task.id, plan)) {
+      if (overlap && !dependsTransitively(later.id, task.id, tasks)) {
         throw new Error(`${task.id} and ${later.id} both change ${overlap} without ordering`);
       }
     }
@@ -116,15 +112,15 @@ function validateWriteOrdering(plan: ImplementationPlan): void {
 function dependsTransitively(
   taskId: string,
   dependencyId: string,
-  plan: ImplementationPlan,
+  tasks: Task[],
   visited = new Set<string>(),
 ): boolean {
   if (visited.has(taskId)) return false;
   visited.add(taskId);
-  const task = plan.tasks.find((item) => item.id === taskId);
+  const task = tasks.find((item) => item.id === taskId);
   if (!task) return false;
   return task.depends_on.some(
-    (id) => id === dependencyId || dependsTransitively(id, dependencyId, plan, visited),
+    (id) => id === dependencyId || dependsTransitively(id, dependencyId, tasks, visited),
   );
 }
 

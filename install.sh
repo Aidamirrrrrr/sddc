@@ -1,13 +1,13 @@
 #!/bin/sh
 set -eu
 
-REPOSITORY="Aidamirrrrrr/codekeeper"
-INSTALL_DIR="${CODEKEEPER_INSTALL_DIR:-$HOME/.local/bin}"
+REPOSITORY="Aidamirrrrrr/sddc"
+INSTALL_DIR="${SDDC_INSTALL_DIR:-$HOME/.local/bin}"
 
 case "$(uname -s)" in
   Darwin) platform="macos" ;;
   Linux) platform="linux" ;;
-  *) echo "Codekeeper supports macOS and Linux through this installer." >&2; exit 1 ;;
+  *) echo "sddc supports macOS and Linux through this installer." >&2; exit 1 ;;
 esac
 
 case "$(uname -m)" in
@@ -16,7 +16,7 @@ case "$(uname -m)" in
   *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-asset="codekeeper-${platform}-${architecture}"
+asset="sddc-${platform}-${architecture}"
 base_url="https://github.com/${REPOSITORY}/releases/latest/download"
 temporary="$(mktemp -d)"
 trap 'rm -rf "$temporary"' EXIT INT TERM
@@ -41,11 +41,11 @@ if [ "$actual" != "$expected" ]; then
 fi
 
 mkdir -p "$INSTALL_DIR"
-install -m 755 "${temporary}/${asset}" "${INSTALL_DIR}/codekeeper"
-"${INSTALL_DIR}/codekeeper" --init
+install -m 755 "${temporary}/${asset}" "${INSTALL_DIR}/sddc"
+"${INSTALL_DIR}/sddc" --init
 
-echo "Installed Codekeeper to ${INSTALL_DIR}/codekeeper"
+echo "Installed sddc to ${INSTALL_DIR}/sddc"
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) ;;
-  *) echo "Add ${INSTALL_DIR} to PATH, then run: codekeeper --help" ;;
+  *) echo "Add ${INSTALL_DIR} to PATH, then run: sddc --help" ;;
 esac

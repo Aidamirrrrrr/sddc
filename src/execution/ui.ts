@@ -8,8 +8,8 @@ import {
   text,
 } from "@clack/prompts";
 import { phrase } from "../cli/ui";
-import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
+import type { Task } from "../tasks/schemas";
 import {
   contractSummary,
   finalSummary,
@@ -22,11 +22,12 @@ import type { ExecutionJournal } from "./schemas";
 
 export async function configureExecution(
   root: string,
-  plan: ImplementationPlan,
+  feature: string,
+  tasks: Task[],
   policy: Policy,
 ): Promise<{ mode: ExecutionJournal["mode"]; hooks: ExecutionHooks } | null> {
   note(
-    contractSummary(plan, policy),
+    contractSummary(feature, tasks, policy),
     phrase({ en: "Implementation contract", ru: "Контракт реализации" }),
   );
   if (

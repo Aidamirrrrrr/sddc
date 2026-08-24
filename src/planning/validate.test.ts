@@ -1,71 +1,45 @@
 import { expect, test } from "bun:test";
-import type { ImplementationPlan } from "./schemas";
 import { discovery, readyPlan, readySpec } from "./test-fixtures";
 import { normalizePlan, validatePlan } from "./validate";
 
-test("plan normalization renumbers tasks and their dependencies", () => {
+test("plan normalization renumbers approach steps", () => {
   const plan = readyPlan();
-  const [first, second] = requireTwoTasks(plan);
-  first.id = "setup";
-  second.id = "finish";
-  second.depends_on = ["setup", "setup"];
+  plan.approach = [
+    { id: "first", statement: "Add the operation", requirements: ["R1", "R1"], touches: [] },
+    { id: "second", statement: "Cover it with tests", requirements: ["R1"], touches: [] },
+  ];
 
   const normalized = normalizePlan(plan, "registration");
 
-  expect(normalized.tasks.map((task) => task.id)).toEqual(["T1", "T2"]);
-  expect(normalized.tasks[1]?.depends_on).toEqual(["T1"]);
+  expect(normalized.approach.map((step) => step.id)).toEqual(["S1", "S2"]);
+  expect(normalized.approach[0]?.requirements).toEqual(["R1"]);
 });
 
-test("plan validation rejects dependency cycles", () => {
+test("plan validation rejects evidence outside the approved context", () => {
   const plan = readyPlan();
-  const [first, second] = requireTwoTasks(plan);
-  first.depends_on = ["T2"];
-  second.depends_on = ["T1"];
+  plan.decisions = [
+    { statement: "Reuse the store", rationale: "Exists", evidence: ["src/unknown.ts"] },
+  ];
 
   expect(() => validatePlan(plan, readySpec(), discovery())).toThrow(
-    "Task dependency cycle includes T1",
+    "Plan decision references unapproved evidence: src/unknown.ts",
   );
 });
 
-test("plan validation rejects unapproved and unsafe paths", () => {
-  const unapproved = readyPlan();
-  const [unapprovedTask] = requireTwoTasks(unapproved);
-  unapprovedTask.files.modify = ["src/unknown.ts"];
-  expect(() => validatePlan(unapproved, readySpec(), discovery())).toThrow(
-    "T1 references unapproved file: src/unknown.ts",
-  );
+test("plan validation rejects an approach that leaves a requirement uncovered", () => {
+  const plan = readyPlan();
+  plan.approach = [{ id: "S1", statement: "Do something else", requirements: [], touches: [] }];
 
-  const unsafe = readyPlan();
-  const [unsafeTask] = requireTwoTasks(unsafe);
-  unsafeTask.files.create = ["../secret.ts"];
-  expect(() => validatePlan(unsafe, readySpec(), discovery())).toThrow(
-    "T1 contains unsafe path: ../secret.ts",
-  );
-
-  const disguisedExisting = readyPlan();
-  const [, createTask] = requireTwoTasks(disguisedExisting);
-  createTask.files.create = ["src/existing.ts"];
-  expect(() =>
-    validatePlan(disguisedExisting, readySpec(), discovery(), ["src/auth.ts", "src/existing.ts"]),
-  ).toThrow("T2 lists existing file as create: src/existing.ts");
-
-  const missingVerificationFile = readyPlan();
-  const [verificationTask] = requireTwoTasks(missingVerificationFile);
-  verificationTask.verification = [
-    {
-      command: { program: "bun", args: ["test", "src/missing.test.ts"] },
-      purpose: "Run a missing test",
-    },
-  ];
-  expect(() => validatePlan(missingVerificationFile, readySpec(), discovery())).toThrow(
-    "T1 verification references unavailable file: src/missing.test.ts",
+  expect(() => validatePlan(plan, readySpec(), discovery())).toThrow(
+    "Plan approach does not cover requirements: R1",
   );
 });
 
-function requireTwoTasks(
-  plan: ImplementationPlan,
-): [ImplementationPlan["tasks"][number], ImplementationPlan["tasks"][number]] {
-  const [first, second] = plan.tasks;
-  if (!first || !second) throw new Error("Test fixture must contain two tasks");
-  return [first, second];
-}
+test("plan validation rejects unknown requirement references", () => {
+  const plan = readyPlan();
+  plan.approach = [{ id: "S1", statement: "Do the work", requirements: ["R9"], touches: [] }];
+
+  expect(() => validatePlan(plan, readySpec(), discovery())).toThrow(
+    "S1 references unknown requirement: R9",
+  );
+});

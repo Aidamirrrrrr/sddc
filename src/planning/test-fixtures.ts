@@ -6,36 +6,18 @@ export function readyPlan(): ImplementationPlan {
   return {
     status: "ready",
     feature: "registration",
-    summary: "Implement registration in two focused tasks.",
+    summary: "Implement registration in two focused steps.",
     decisions: [],
-    tasks: [
+    approach: [
       {
-        id: "T1",
-        title: "Implement registration",
-        goal: "Add the registration operation.",
+        id: "S1",
+        statement: "Add the registration operation to the auth module.",
         requirements: ["R1"],
-        acceptance: ["A1"],
-        depends_on: [],
-        permissions: [],
-        files: { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] },
-        verification: [{ command: { program: "bun", args: ["test"] }, purpose: "Run tests" }],
-        done_when: ["Registration succeeds"],
-        risks: [],
-      },
-      {
-        id: "T2",
-        title: "Verify registration",
-        goal: "Cover the registration behavior.",
-        requirements: ["R1"],
-        acceptance: ["A1"],
-        depends_on: ["T1"],
-        permissions: [],
-        files: { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] },
-        verification: [{ command: { program: "bun", args: ["test"] }, purpose: "Run tests" }],
-        done_when: ["Acceptance behavior is covered"],
-        risks: [],
+        touches: ["src/auth.ts"],
       },
     ],
+    contracts: [],
+    data_model: [],
     questions: [],
   };
 }

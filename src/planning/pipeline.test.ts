@@ -6,18 +6,14 @@ import { discovery, readyPlan, readySpec } from "./test-fixtures";
 
 test("planning pipeline builds and validates a reviewed plan", async () => {
   const plan = readyPlan();
-  const [first, second] = plan.tasks;
-  if (!first || !second) throw new Error("Test fixture must contain two tasks");
-  first.id = "implementation";
-  second.id = "tests";
-  second.depends_on = ["implementation"];
-  const responses = [plan, audit(), { plan, checks: passedChecks() }];
-  const client = stub(responses);
+  plan.approach = [
+    { id: "raw", statement: "Add the registration operation", requirements: ["R1"], touches: [] },
+  ];
+  const client = stub([plan, audit(), { plan, checks: passedChecks() }]);
 
   const result = await buildImplementationPlan(client, readySpec(), discovery());
 
-  expect(result.tasks.map((task) => task.id)).toEqual(["T1", "T2"]);
-  expect(result.tasks[1]?.depends_on).toEqual(["T1"]);
+  expect(result.approach.map((step) => step.id)).toEqual(["S1"]);
   expect(client.calls).toBe(3);
 });
 
@@ -27,12 +23,14 @@ test("planning pipeline returns blocking questions without inventing a plan", as
     feature: "registration",
     summary: "A storage decision is missing.",
     decisions: [],
-    tasks: [],
+    approach: [{ id: "S1", statement: "Blocked", requirements: ["R1"], touches: [] }],
+    contracts: [],
+    data_model: [],
     questions: [
       { id: "question", question: "Which store is used?", reason: "Not specified", blocking: true },
     ],
   };
-  const responses = [
+  const client = stub([
     plan,
     {
       ...audit(),
@@ -52,8 +50,7 @@ test("planning pipeline returns blocking questions without inventing a plan", as
         },
       ],
     },
-  ];
-  const client = stub(responses);
+  ]);
 
   const result = await buildImplementationPlan(client, readySpec(), discovery());
 
@@ -70,7 +67,7 @@ test("planning pipeline removes questions answered by repository context", async
       { id: "Q1", question: "Does the test file exist?", reason: "Uncertain", blocking: true },
     ],
   };
-  const responses = [
+  const client = stub([
     plan,
     audit(),
     { plan, checks: passedChecks() },
@@ -86,29 +83,25 @@ test("planning pipeline removes questions answered by repository context", async
         },
       ],
     },
-  ];
+  ]);
 
-  const result = await buildImplementationPlan(stub(responses), readySpec(), discovery());
+  const result = await buildImplementationPlan(client, readySpec(), discovery());
 
   expect(result.status).toBe("ready");
   expect(result.questions).toEqual([]);
 });
 
-test("planning pipeline repairs a plan rejected by project policy", async () => {
+test("planning pipeline repairs a plan rejected by validation", async () => {
   const rejected = readyPlan();
-  const first = rejected.tasks[0];
-  if (!first) throw new Error("Test fixture must contain a task");
-  first.files.create = ["package.json"];
-
-  const repaired = structuredClone(rejected);
-  const repairedFirst = repaired.tasks[0];
-  if (!repairedFirst) throw new Error("Test fixture must contain a task");
-  repairedFirst.permissions = ["dependencies"];
+  rejected.decisions = [
+    { statement: "Reuse the store", rationale: "Exists", evidence: ["src/unknown.ts"] },
+  ];
+  const repaired = readyPlan();
 
   const client = stub([rejected, audit(), { plan: rejected, checks: passedChecks() }, repaired]);
   const result = await buildImplementationPlan(client, readySpec(), discovery());
 
-  expect(result.tasks[0]?.permissions).toEqual(["dependencies"]);
+  expect(result.decisions).toEqual([]);
   expect(client.calls).toBe(4);
 });
 
@@ -125,15 +118,14 @@ function stub(responses: unknown[]) {
 function audit() {
   return {
     decision: "ready",
-    requirement_coverage: [{ requirement: "R1", task_ids: ["T1"] }],
-    acceptance_coverage: [{ acceptance: "A1", task_ids: ["T2"] }],
+    requirement_coverage: [{ requirement: "R1", approach_ids: ["S1"] }],
     findings: [],
     questions: [],
   };
 }
 
 function passedChecks() {
-  return Array.from({ length: 10 }, (_, index) => ({
+  return Array.from({ length: 6 }, (_, index) => ({
     id: `C${index + 1}`,
     passed: true,
     finding: "Passed",

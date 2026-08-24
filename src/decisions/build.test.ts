@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { discovery, readyPlan, readySpec } from "../planning/test-fixtures";
+import { readyTasks } from "../tasks/test-fixtures";
 import { buildDecisionRegistry } from "./build";
 
 test("decision registry records provenance and accepted permissions", () => {
@@ -10,9 +11,10 @@ test("decision registry records provenance and accepted permissions", () => {
   plan.decisions = [
     { statement: "Reuse AuthService", rationale: "Existing service", evidence: ["src/auth.ts"] },
   ];
-  plan.tasks[0]?.permissions.push("configuration");
+  const tasks = readyTasks();
+  tasks.tasks[0]?.permissions.push("configuration");
 
-  const registry = buildDecisionRegistry(spec, repository, plan);
+  const registry = buildDecisionRegistry(spec, repository, plan, tasks);
 
   expect(registry.decisions.map((decision) => decision.id)).toEqual(["D1", "D2", "D3", "D4"]);
   expect(registry.decisions[0]).toMatchObject({ owner: "user", source: "spec.R1" });

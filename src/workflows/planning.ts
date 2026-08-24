@@ -1,7 +1,8 @@
 import type { ModelClient } from "../ai/model-client";
 import { planDocument, planSummary } from "../cli/presentation";
 import { document, required, reviewDocument, withSpinner } from "../cli/ui";
-import { buildImplementationPlan, preparePlanningContext } from "../planning/pipeline";
+import type { PlanningRepositoryContext } from "../planning/pipeline";
+import { buildImplementationPlan } from "../planning/pipeline";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
@@ -12,15 +13,24 @@ export async function createApprovedPlan(
   spec: Spec,
   discovery: RepositoryDiscovery,
   policy: Policy,
-  root: string,
+  repository: PlanningRepositoryContext,
+  constitution = "",
 ): Promise<ImplementationPlan> {
   let userInput = "";
-  const repository = await preparePlanningContext(root, discovery);
   while (true) {
     const plan = await withSpinner(
-      { en: "Preparing the work plan", ru: "Готовлю план работ" },
-      { en: "Work plan is ready for review", ru: "План работ готов к проверке" },
-      () => buildImplementationPlan(client, spec, discovery, userInput, repository, policy),
+      { en: "Preparing the technical plan", ru: "Готовлю технический план" },
+      { en: "Technical plan is ready for review", ru: "Технический план готов к проверке" },
+      () =>
+        buildImplementationPlan(
+          client,
+          spec,
+          discovery,
+          userInput,
+          repository,
+          policy,
+          constitution,
+        ),
     );
     if (plan.status === "needs_clarification") {
       userInput += "\n\nUser planning clarifications:\n";
@@ -37,8 +47,8 @@ export async function createApprovedPlan(
     const rendered = Bun.YAML.stringify(plan, null, 2).trimEnd();
     if (
       (await reviewDocument(
-        { en: "Accept this work plan?", ru: "Принять этот план работ?" },
-        { en: "Work plan", ru: "План работ" },
+        { en: "Accept this technical plan?", ru: "Принять этот технический план?" },
+        { en: "Technical plan", ru: "Технический план" },
         planSummary(plan),
         planDocument(plan),
       )) === "accept"

@@ -1,30 +1,5 @@
 import { z } from "zod";
 
-const taskSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  goal: z.string(),
-  requirements: z.array(z.string()).min(1),
-  acceptance: z.array(z.string()).min(1),
-  depends_on: z.array(z.string()),
-  permissions: z.array(z.enum(["dependencies", "configuration", "migration", "external_network"])),
-  files: z.object({
-    read: z.array(z.string()),
-    modify: z.array(z.string()),
-    create: z.array(z.string()),
-  }),
-  verification: z
-    .array(
-      z.object({
-        command: z.object({ program: z.string(), args: z.array(z.string()) }),
-        purpose: z.string(),
-      }),
-    )
-    .min(1),
-  done_when: z.array(z.string()).min(1),
-  risks: z.array(z.string()),
-});
-
 export const implementationPlanSchema = z.object({
   status: z.enum(["ready", "needs_clarification"]),
   feature: z.string(),
@@ -36,7 +11,31 @@ export const implementationPlanSchema = z.object({
       evidence: z.array(z.string()).min(1),
     }),
   ),
-  tasks: z.array(taskSchema),
+  approach: z
+    .array(
+      z.object({
+        id: z.string(),
+        statement: z.string(),
+        requirements: z.array(z.string()),
+        touches: z.array(z.string()),
+      }),
+    )
+    .min(1),
+  contracts: z.array(
+    z.object({
+      name: z.string(),
+      kind: z.enum(["http", "cli", "event", "module", "storage"]),
+      surface: z.string(),
+      change: z.enum(["new", "extended", "unchanged"]),
+    }),
+  ),
+  data_model: z.array(
+    z.object({
+      entity: z.string(),
+      fields: z.array(z.string()),
+      change: z.enum(["new", "extended", "unchanged"]),
+    }),
+  ),
   questions: z
     .array(
       z.object({
@@ -52,9 +51,8 @@ export const implementationPlanSchema = z.object({
 export const planAuditSchema = z.object({
   decision: z.enum(["ready", "needs_clarification"]),
   requirement_coverage: z.array(
-    z.object({ requirement: z.string(), task_ids: z.array(z.string()) }),
+    z.object({ requirement: z.string(), approach_ids: z.array(z.string()) }),
   ),
-  acceptance_coverage: z.array(z.object({ acceptance: z.string(), task_ids: z.array(z.string()) })),
   findings: z.array(z.object({ severity: z.enum(["blocking", "warning"]), statement: z.string() })),
   questions: z.array(z.object({ question: z.string(), reason: z.string() })).max(3),
 });

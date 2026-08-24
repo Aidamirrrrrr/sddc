@@ -48,8 +48,8 @@ function stageLabel(stage: string): string {
 function errorHint(message: string): string | undefined {
   if (message.includes("AI_API_URL") || message.includes("AI_API_TOKEN"))
     return phrase({
-      en: "Run `codekeeper --init`, then fill in ~/.config/codekeeper/.env.",
-      ru: "Запустите `codekeeper --init`, затем заполните ~/.config/codekeeper/.env.",
+      en: "Run `sddc --init`, then fill in ~/.config/sddc/.env.",
+      ru: "Запустите `sddc --init`, затем заполните ~/.config/sddc/.env.",
     });
   if (message.includes("--no-input"))
     return phrase({
@@ -58,8 +58,8 @@ function errorHint(message: string): string | undefined {
     });
   if (message.includes("context approval"))
     return phrase({
-      en: "Start Codekeeper in an interactive terminal.",
-      ru: "Запустите Codekeeper в интерактивном терминале.",
+      en: "Start sddc in an interactive terminal.",
+      ru: "Запустите sddc в интерактивном терминале.",
     });
   if (/fetch|network|timed? out|ECONN/i.test(message))
     return phrase({

@@ -4,27 +4,30 @@ import { executePlan } from "../execution/runner";
 import { configureExecution } from "../execution/ui";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
-import { validatePlanPolicy } from "../policy/validate";
+import { validateTaskPolicy } from "../policy/validate";
 import type { Spec } from "../spec/schemas";
+import type { TaskList } from "../tasks/schemas";
 
 export async function runApprovedExecution(
   client: ModelClient,
   root: string,
   spec: Spec,
   plan: ImplementationPlan,
+  tasks: TaskList,
   policy: Policy,
 ): Promise<void> {
-  const configuration = await configureExecution(root, plan, policy);
+  const configuration = await configureExecution(root, tasks.feature, tasks.tasks, policy);
   if (!configuration) {
     finish({ en: "Implementation was not started", ru: "Реализация не запущена" });
     return;
   }
-  validatePlanPolicy(plan, policy);
+  validateTaskPolicy(tasks.tasks, policy);
   const journal = await executePlan(
     client,
     root,
     spec,
     plan,
+    tasks.tasks,
     configuration.hooks,
     policy,
     configuration.mode,
@@ -34,5 +37,5 @@ export async function runApprovedExecution(
     en: `Execution ${journal.status}; journal saved to ${path}`,
     ru: `Статус выполнения: ${journal.status}; журнал сохранён: ${path}`,
   });
-  finish({ en: "Codekeeper finished", ru: "Codekeeper завершил работу" });
+  finish({ en: "sddc finished", ru: "sddc завершил работу" });
 }

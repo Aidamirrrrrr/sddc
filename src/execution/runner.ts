@@ -3,9 +3,10 @@ import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
+import type { Task } from "../tasks/schemas";
+import { orderTasks } from "../tasks/validate";
 import { createGitCheckpoint } from "./checkpoint";
 import { type FileBackup, restoreFiles } from "./files";
-import { orderTasks } from "./pipeline";
 import { validateResume } from "./resume";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
 import { loadExecutionJournal, writeExecutionJournal } from "./storage";
@@ -16,26 +17,13 @@ type FinalReview = { accepted: true } | { accepted: false; taskId: string; feedb
 type AfterTaskAction = "continue" | "checkpoint" | "rollback";
 
 export type ExecutionHooks = {
-  approveScope?(task: ImplementationPlan["tasks"][number]): Promise<boolean>;
-  review(
-    task: ImplementationPlan["tasks"][number],
-    proposal: ChangeProposal,
-    diff: string,
-  ): Promise<ReviewResult>;
-  proposalBlocked?(task: ImplementationPlan["tasks"][number], proposal: ChangeProposal): void;
-  approveSensitive?(task: ImplementationPlan["tasks"][number]): Promise<boolean>;
-  approveCommand?(
-    task: ImplementationPlan["tasks"][number],
-    verification: ImplementationPlan["tasks"][number]["verification"][number],
-  ): Promise<boolean>;
-  retryAfterFailure(
-    task: ImplementationPlan["tasks"][number],
-    result: ExecutionTaskResult,
-  ): Promise<boolean>;
-  afterTask?(
-    task: ImplementationPlan["tasks"][number],
-    result: ExecutionTaskResult,
-  ): Promise<AfterTaskAction>;
+  approveScope?(task: Task): Promise<boolean>;
+  review(task: Task, proposal: ChangeProposal, diff: string): Promise<ReviewResult>;
+  proposalBlocked?(task: Task, proposal: ChangeProposal): void;
+  approveSensitive?(task: Task): Promise<boolean>;
+  approveCommand?(task: Task, verification: Task["verification"][number]): Promise<boolean>;
+  retryAfterFailure(task: Task, result: ExecutionTaskResult): Promise<boolean>;
+  afterTask?(task: Task, result: ExecutionTaskResult): Promise<AfterTaskAction>;
   finalReview?(journal: ExecutionJournal, revisableTaskIds: string[]): Promise<FinalReview>;
   resumeExisting?(journal: ExecutionJournal): Promise<boolean>;
   taskCompleted?(result: ExecutionTaskResult): void;
@@ -46,12 +34,13 @@ export async function executePlan(
   root: string,
   spec: Spec,
   plan: ImplementationPlan,
+  tasks: Task[],
   hooks: ExecutionHooks,
   policy: Policy = defaultPolicy,
   mode = policy.execution.default_approval_mode,
   resumeJournal?: ExecutionJournal,
 ): Promise<ExecutionJournal> {
-  const ordered = orderTasks(plan);
+  const ordered = orderTasks(tasks);
   const existing = resumeJournal ?? (await loadExecutionJournal(root, plan.feature));
   if (existing?.status === "completed" && !resumeJournal) {
     await validateResume(root, existing);
@@ -177,7 +166,7 @@ export async function executePlan(
     journal.status = "in_progress";
     journal.pending_feedback = { task_id: final.taskId, feedback: final.feedback };
     await writeExecutionJournal(root, journal);
-    return executePlan(client, root, spec, plan, hooks, policy, mode, journal);
+    return executePlan(client, root, spec, plan, tasks, hooks, policy, mode, journal);
   }
 
   journal.status = "completed";

@@ -1,14 +1,14 @@
 $ErrorActionPreference = "Stop"
 
-$repository = "Aidamirrrrrr/codekeeper"
-$installDir = if ($env:CODEKEEPER_INSTALL_DIR) {
-  $env:CODEKEEPER_INSTALL_DIR
+$repository = "Aidamirrrrrr/sddc"
+$installDir = if ($env:SDDC_INSTALL_DIR) {
+  $env:SDDC_INSTALL_DIR
 } else {
-  Join-Path $env:LOCALAPPDATA "Codekeeper\bin"
+  Join-Path $env:LOCALAPPDATA "sddc\bin"
 }
-$asset = "codekeeper-windows-x64.exe"
+$asset = "sddc-windows-x64.exe"
 $baseUrl = "https://github.com/$repository/releases/latest/download"
-$temporary = Join-Path ([System.IO.Path]::GetTempPath()) "codekeeper-$([guid]::NewGuid())"
+$temporary = Join-Path ([System.IO.Path]::GetTempPath()) "sddc-$([guid]::NewGuid())"
 
 New-Item -ItemType Directory -Force -Path $temporary, $installDir | Out-Null
 try {
@@ -24,12 +24,12 @@ try {
   $actual = (Get-FileHash "$temporary\$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $expected.ToLowerInvariant()) { throw "Checksum verification failed." }
 
-  $destination = Join-Path $installDir "codekeeper.exe"
+  $destination = Join-Path $installDir "sddc.exe"
   Copy-Item "$temporary\$asset" $destination -Force
   & $destination --init
-  Write-Host "Installed Codekeeper to $destination"
+  Write-Host "Installed sddc to $destination"
   if (($env:PATH -split ";") -notcontains $installDir) {
-    Write-Host "Add $installDir to PATH, then run: codekeeper --help"
+    Write-Host "Add $installDir to PATH, then run: sddc --help"
   }
 } finally {
   Remove-Item $temporary -Recurse -Force -ErrorAction SilentlyContinue

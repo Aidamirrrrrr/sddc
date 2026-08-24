@@ -30,3 +30,13 @@ describe("CLI arguments", () => {
     expect(() => parseCli(["--lang", "de"])).toThrow("--lang must be 'en' or 'ru'");
   });
 });
+
+test("recompile only accepts known phases", () => {
+  expect(parseCli(["--recompile", "tasks", "registration"])).toMatchObject({
+    recompile: "tasks",
+    input: ["registration"],
+  });
+  expect(() => parseCli(["--recompile", "everything"])).toThrow(
+    "--recompile must be 'plan', 'tasks', or 'execute'",
+  );
+});

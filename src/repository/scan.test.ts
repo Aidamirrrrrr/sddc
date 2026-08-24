@@ -12,7 +12,7 @@ afterEach(async () => {
 
 describe("repository scanner", () => {
   test("excludes secrets and generated directories", async () => {
-    root = await mkdtemp(join(tmpdir(), "codekeeper-scan-"));
+    root = await mkdtemp(join(tmpdir(), "sddc-scan-"));
     await mkdir(join(root, "src"));
     await mkdir(join(root, "node_modules"));
     await Bun.write(join(root, "src/main.ts"), "export const main = true;");
@@ -26,7 +26,7 @@ describe("repository scanner", () => {
   });
 
   test("reads only paths present in the safe index", async () => {
-    root = await mkdtemp(join(tmpdir(), "codekeeper-snapshot-"));
+    root = await mkdtemp(join(tmpdir(), "sddc-snapshot-"));
     await Bun.write(join(root, "package.json"), '{"name":"example"}');
     await Bun.write(join(root, ".env"), "SECRET=value");
     const index = await indexRepository(root);

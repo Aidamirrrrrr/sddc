@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 test("collects approved code context before specification", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-request-context-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-request-context-"));
   await Bun.write(join(root, "auth.service.ts"), "setRefreshCookie(token: string): void {}");
   await Bun.write(join(root, "auth.test.ts"), "test('sets refresh cookie', () => {});");
   const responses = [
@@ -47,7 +47,7 @@ test("collects approved code context before specification", async () => {
 });
 
 test("limits automatically proposed context before user review", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-request-context-limit-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-request-context-limit-"));
   const paths = Array.from({ length: 20 }, (_, index) => `file-${index}.ts`);
   await Promise.all(paths.map((path) => Bun.write(join(root, path), `export const value = 1;`)));
   const responses = [
@@ -76,7 +76,7 @@ test("limits automatically proposed context before user review", async () => {
 });
 
 test("does not ask for context approval twice when expansion adds nothing", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-request-context-no-expansion-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-request-context-no-expansion-"));
   await Bun.write(join(root, "auth.ts"), "export class AuthService {}");
   const responses = [
     { files: [{ path: "auth.ts", reason: "Direct match" }], rationale: "Definition" },

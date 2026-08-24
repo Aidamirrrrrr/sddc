@@ -2,7 +2,6 @@ import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
-import { validatePlanPolicy } from "../policy/validate";
 import { type FileSnapshot, indexRepository, readSnapshots } from "../repository/scan";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import { specificationLanguage } from "../spec/language";
@@ -41,10 +40,12 @@ export async function buildImplementationPlan(
     snapshots: [],
   },
   policy: Policy = defaultPolicy,
+  constitution = "",
 ): Promise<ImplementationPlan> {
   const context = {
     outputLanguage: specificationLanguage(spec),
     specification: spec,
+    constitution: constitution || undefined,
     discovery,
     repositoryIndex: repository.paths,
     approvedSnapshots: repository.snapshots,
@@ -70,8 +71,7 @@ export async function buildImplementationPlan(
   }
   try {
     if (plan.status === "ready") validatePlanReview(review);
-    validatePlan(plan, spec, discovery, repository.paths);
-    validatePlanPolicy(plan, policy);
+    validatePlan(plan, spec, discovery);
     return plan;
   } catch (error) {
     plan = normalizePlan(
@@ -87,8 +87,7 @@ export async function buildImplementationPlan(
     if (plan.status === "needs_clarification") {
       plan = await filterPlanQuestions(client, plan, context, spec);
     }
-    validatePlan(plan, spec, discovery, repository.paths);
-    validatePlanPolicy(plan, policy);
+    validatePlan(plan, spec, discovery);
     return plan;
   }
 }

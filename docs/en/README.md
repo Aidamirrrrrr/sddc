@@ -1,6 +1,6 @@
-# Codekeeper Documentation
+# sddc Documentation
 
-Codekeeper builds a specification from the original request and the user's
+sddc builds a specification from the original request and the user's
 answers. It acts as a requirements quality gate: it detects missing decisions,
 contradictions, and oversized requests without inventing answers.
 
@@ -8,9 +8,10 @@ contradictions, and oversized requests without inventing answers.
 
 - **Requirements** describe the expected change and acceptance criteria.
 - **Project map** records related existing code, tests, and constraints.
-- **Work plan** lists concrete file changes and verification commands.
+- **Technical plan** fixes the approach, the changed contracts, and the data model.
+- **Task graph** lists concrete file changes, dependency waves, and verification commands.
 
-These are not three versions of the same document. Each stage adds only the
+These are not four versions of the same document. Each stage adds only the
 detail unavailable to the previous one. The terminal renders human-readable
 text; YAML remains in `.specs` for resuming and deterministic validation.
 
@@ -19,7 +20,7 @@ repository questions. Ambiguous requests are returned to the user for clarificat
 
 ## Repository Questions
 
-For an explanation, inspection, or review request, Codekeeper does not create a
+For an explanation, inspection, or review request, sddc does not create a
 specification. It proposes relevant files, lets the user control the context,
 reads only the approved snapshots, and produces a reviewed answer with file
 evidence and explicit unknowns. This path cannot plan or execute source changes.
@@ -94,14 +95,34 @@ be selected and specified first.
 
 ## Implementation Planning
 
-After discovery is accepted, planning runs as narrow stages:
+After discovery is accepted, planning decides *how* the change is built — and
+nothing else. It runs as narrow stages:
 
-1. Draft a focused task dependency graph from `spec.yaml` and `discovery.yaml`.
-2. Audit requirement and acceptance-criterion coverage without rewriting it.
-3. Produce a strictly reviewed plan using ten quality checks.
+1. Draft the technical approach, changed contracts, and data model from
+   `spec.yaml` and `discovery.yaml`.
+2. Audit requirement coverage of the approach without rewriting it.
+3. Produce a strictly reviewed plan using six quality checks.
 4. Independently filter questions already answered by repository context or
    concerning reversible local details.
 5. Repair once only when deterministic validation rejects the reviewed result.
+
+The plan contains no tasks. Every approach step cites the requirement IDs it
+serves, and the host verifies that the approach leaves no requirement uncovered
+and that every decision cites approved evidence. An accepted plan is written to
+`.specs/<feature>/plan.yaml`.
+
+## Task Graph
+
+A separate phase derives the executable task graph from the accepted plan. It
+mirrors the planning stages — draft, audit, review against ten checks, question
+filter, one repair — and never revisits the plan's decisions.
+
+Independent tasks are grouped into **dependency waves**. The wave is computed
+from the graph by the host, never claimed by the model: tasks in the same wave
+share no dependency and, because the policy forbids unordered writes to one
+file, no write conflict either. Tasks in a shared wave are marked `[P]` in the
+terminal, and the model is instructed not to invent dependencies that would
+serialize independent work.
 
 Every task declares requirement and acceptance IDs, dependencies, files to read,
 modify, or create, verification commands, completion conditions, and risks.
@@ -112,10 +133,23 @@ evidence instead of being hidden or turned into unnecessary user questions.
 The host validates complete coverage, known IDs, an acyclic graph, safe paths,
 and that existing files belong to approved discovery context.
 
-Missing product or architecture decisions become questions. Ready plans are
-shown for repeated acceptance or revision and saved as
-`.specs/<feature>/plan.yaml` only after explicit approval. Planning never writes
+Missing product or architecture decisions become questions. A ready task graph
+is shown for repeated acceptance or revision and saved as
+`.specs/<feature>/tasks.yaml` only after explicit approval. Neither phase writes
 implementation code.
+
+## Recompiling A Feature
+
+Stored artifacts are inputs, not history. Edit `spec.yaml` and rebuild
+everything below it instead of hand-patching the plan:
+
+```bash
+sddc --recompile plan -- registration     # rebuild plan, tasks, then implement
+sddc --recompile tasks -- registration    # keep the plan, rebuild the tasks
+sddc --recompile execute -- registration  # implement the stored task graph
+```
+
+The feature name may be omitted when `.specs` holds exactly one feature.
 
 ## Policy And Decisions
 
@@ -126,7 +160,13 @@ external network access. Dependency files, configuration, and migrations require
 the corresponding explicit task permission. Two tasks may write the same file
 only when their dependency order is unambiguous.
 
-A project may override these limits in `.codekeeper/policy.yaml`:
+Principles the policy cannot express — architectural rules, testing doctrine,
+house style — belong in `.sddc/constitution.md`. It is passed to the planning
+and task phases as prose and is never parsed: the policy blocks, the
+constitution only informs. A conflict between a principle and the specification
+must be recorded as a disclosed decision rather than silently resolved.
+
+A project may override these limits in `.sddc/policy.yaml`:
 
 ```yaml
 version: 1
@@ -203,19 +243,19 @@ must inspect both the plan and diff before accepting them.
 ## Usage
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/codekeeper/master/install.sh | sh
-codekeeper --init
-codekeeper "Describe the task"
+curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/sddc/master/install.sh | sh
+sddc --init
+sddc "Describe the task"
 ```
 
-Use `codekeeper --dry-run "Describe the task"` to stop after the accepted plan
+Use `sddc --dry-run "Describe the task"` to stop after the accepted plan
 without changing source files. `--plain` and `--json` provide stable output,
 `--no-input` prevents prompts, and `--debug` includes stack traces in errors.
 
 For multiline input:
 
 ```bash
-codekeeper < task.txt
+sddc < task.txt
 ```
 
 The accepted specification is written to `.specs/<feature>/spec.yaml` in the
@@ -223,7 +263,7 @@ current working project.
 
 ## Configuration
 
-`codekeeper --init` creates `~/.config/codekeeper/.env` with private file
+`sddc --init` creates `~/.config/sddc/.env` with private file
 permissions. Fill in these values before the first model run:
 
 ```env
@@ -258,8 +298,10 @@ bun start --stage analyze --thinking on -- context.json
 Available stages are `extract`, `analyze`, `analysis-review`, `analysis-repair`,
 `write`, `review`, `repository-select`, `repository-expand`,
 `repository-discover`, `repository-review`, `repository-revise`,
-`planning-draft`, `planning-audit`, `planning-review`, `planning-questions`, and
-`planning-repair`, plus `execution-implement` and `execution-review`.
+`planning-draft`, `planning-audit`, `planning-review`, `planning-questions`,
+`planning-repair`, `tasks-draft`, `tasks-audit`, `tasks-review`,
+`tasks-questions`, and `tasks-repair`, plus `execution-implement` and
+`execution-review`.
 
 Except for `extract`, stages expect the JSON context produced for that pipeline
 step. This lets one model call be tested without rerunning the entire pipeline.

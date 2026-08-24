@@ -1,5 +1,6 @@
 export type Cli = {
   stage?: string;
+  recompile?: "plan" | "tasks" | "execute";
   language?: "en" | "ru";
   thinking: boolean;
   help: boolean;
@@ -46,6 +47,12 @@ export function parseCli(args: string[]): Cli {
       cli.noInput = true;
     } else if (value === "--debug") {
       cli.debug = true;
+    } else if (value === "--recompile") {
+      const phase = requireArgument(args, ++index, "--recompile");
+      if (phase !== "plan" && phase !== "tasks" && phase !== "execute") {
+        throw new Error("--recompile must be 'plan', 'tasks', or 'execute'");
+      }
+      cli.recompile = phase;
     } else if (value === "--stage") {
       cli.stage = requireArgument(args, ++index, "--stage");
     } else if (value === "--lang") {
@@ -62,7 +69,7 @@ export function parseCli(args: string[]): Cli {
       cli.input.push(...args.slice(index + 1));
       break;
     } else if (value.startsWith("-")) {
-      throw new Error(`Unknown option: ${value}. Run codekeeper --help.`);
+      throw new Error(`Unknown option: ${value}. Run sddc --help.`);
     } else {
       cli.input.push(value);
     }

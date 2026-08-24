@@ -40,7 +40,7 @@ export const defaultPolicy: Policy = {
 };
 
 export async function loadPolicy(root: string): Promise<Policy> {
-  const path = join(root, ".codekeeper", "policy.yaml");
+  const path = join(root, ".sddc", "policy.yaml");
   const file = Bun.file(path);
   if (!(await file.exists())) return defaultPolicy;
   try {

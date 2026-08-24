@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 test("context profiles persist project file selections", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-profile-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-profile-"));
   const profile = {
     name: "Backend auth",
     files: ["src/auth.ts", "src/auth.test.ts"],
@@ -25,7 +25,7 @@ test("context profiles persist project file selections", async () => {
 });
 
 test("context profile names support the user's language", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-profile-language-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-profile-language-"));
 
   const path = await writeContextProfile(root, {
     name: "Авторизация API",
@@ -37,7 +37,7 @@ test("context profile names support the user's language", async () => {
 });
 
 test("context profiles report malformed files", async () => {
-  root = await mkdtemp(join(tmpdir(), "codekeeper-profile-invalid-"));
+  root = await mkdtemp(join(tmpdir(), "sddc-profile-invalid-"));
   const directory = join(root, ".specs", "context-profiles");
   await mkdir(directory, { recursive: true });
   await Bun.write(join(directory, "broken.yaml"), "name: broken\nfiles: invalid");

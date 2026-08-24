@@ -1,18 +1,16 @@
-import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
+import type { Task } from "../tasks/schemas";
 import type { ExecutionTaskResult } from "./schemas";
 
 type VerificationOptions = {
   policy?: Policy;
-  approve?: (
-    verification: ImplementationPlan["tasks"][number]["verification"][number],
-  ) => Promise<boolean>;
+  approve?: (verification: Task["verification"][number]) => Promise<boolean>;
 };
 
 export async function runVerification(
   root: string,
-  task: ImplementationPlan["tasks"][number],
+  task: Task,
   options: VerificationOptions = {},
 ): Promise<ExecutionTaskResult["verification"]> {
   const policy = options.policy ?? defaultPolicy;

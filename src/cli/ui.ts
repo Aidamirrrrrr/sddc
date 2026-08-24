@@ -50,14 +50,14 @@ export function muted(value: string): string {
 
 export function begin(): void {
   if (outputMode === "json") {
-    emit("start", { name: "Codekeeper" });
+    emit("start", { name: "sddc" });
     return;
   }
   if (outputMode === "plain") {
-    console.log("Codekeeper");
+    console.log("sddc");
     return;
   }
-  intro(accent("Codekeeper"));
+  intro(accent("sddc"));
 }
 
 export function finish(copy: Copy): void {

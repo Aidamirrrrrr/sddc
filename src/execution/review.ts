@@ -1,6 +1,6 @@
 import type { ModelClient } from "../ai/model-client";
-import type { ImplementationPlan } from "../planning/schemas";
 import type { Spec } from "../spec/schemas";
+import type { Task } from "../tasks/schemas";
 import type { ExecutionFile } from "./context";
 import { executionPrompts } from "./prompts";
 import { type ChangeProposal, type ExecutionReview, executionReviewSchema } from "./schemas";
@@ -8,7 +8,7 @@ import { type ChangeProposal, type ExecutionReview, executionReviewSchema } from
 export async function reviewProposal(
   client: Pick<ModelClient, "generateObject">,
   spec: Spec,
-  task: ImplementationPlan["tasks"][number],
+  task: Task,
   files: ExecutionFile[],
   proposal: ChangeProposal,
 ): Promise<ExecutionReview> {
