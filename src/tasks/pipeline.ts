@@ -56,7 +56,7 @@ export async function buildTaskList(
   );
   let list = normalizeTaskList(review.tasks, spec.feature);
   if (list.status === "needs_clarification") {
-    list = await filterTaskQuestions(client, list, context, spec);
+    list = await filterTaskQuestions(client, list, context, spec, discovery, repository.paths);
   }
   try {
     if (list.status === "ready") validateTaskListReview(review);
@@ -75,7 +75,7 @@ export async function buildTaskList(
       spec.feature,
     );
     if (list.status === "needs_clarification") {
-      list = await filterTaskQuestions(client, list, context, spec);
+      list = await filterTaskQuestions(client, list, context, spec, discovery, repository.paths);
     }
     validateTaskList(list, spec, discovery, repository.paths);
     validateTaskPolicy(list.tasks, policy);
@@ -105,6 +105,8 @@ async function filterTaskQuestions(
   list: TaskList,
   context: Record<string, unknown>,
   spec: Spec,
+  discovery: RepositoryDiscovery,
+  repositoryPaths: string[],
 ): Promise<TaskList> {
   const review = await stage("tasks-questions", () =>
     client.generateObject(
@@ -132,10 +134,18 @@ async function filterTaskQuestions(
       reason: question.reason,
       blocking: true,
     }));
-  return normalizeTaskList(
-    { ...list, status: questions.length > 0 ? "needs_clarification" : "ready", questions },
-    spec.feature,
-  );
+  if (questions.length > 0) {
+    return normalizeTaskList({ ...list, status: "needs_clarification", questions }, spec.feature);
+  }
+  const ready = normalizeTaskList({ ...list, status: "ready", questions: [] }, spec.feature);
+  try {
+    validateTaskList(ready, spec, discovery, repositoryPaths);
+    return ready;
+  } catch {
+    // Every question was implementation-owned, yet the graph is not executable without an answer.
+    // Asking the user beats claiming a ready list that carries no work.
+    return list;
+  }
 }
 
 function pretty(value: unknown): string {

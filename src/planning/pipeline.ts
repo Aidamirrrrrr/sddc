@@ -67,7 +67,7 @@ export async function buildImplementationPlan(
   );
   let plan = normalizePlan(review.plan, spec.feature);
   if (plan.status === "needs_clarification") {
-    plan = await filterPlanQuestions(client, plan, context, spec);
+    plan = await filterPlanQuestions(client, plan, context, spec, discovery);
   }
   try {
     if (plan.status === "ready") validatePlanReview(review);
@@ -85,7 +85,7 @@ export async function buildImplementationPlan(
       spec.feature,
     );
     if (plan.status === "needs_clarification") {
-      plan = await filterPlanQuestions(client, plan, context, spec);
+      plan = await filterPlanQuestions(client, plan, context, spec, discovery);
     }
     validatePlan(plan, spec, discovery);
     return plan;
@@ -114,6 +114,7 @@ async function filterPlanQuestions(
   plan: ImplementationPlan,
   context: Record<string, unknown>,
   spec: Spec,
+  discovery: RepositoryDiscovery,
 ): Promise<ImplementationPlan> {
   const review = await stage("planning-questions", () =>
     client.generateObject(
@@ -141,10 +142,18 @@ async function filterPlanQuestions(
       reason: question.reason,
       blocking: true,
     }));
-  return normalizePlan(
-    { ...plan, status: questions.length > 0 ? "needs_clarification" : "ready", questions },
-    spec.feature,
-  );
+  if (questions.length > 0) {
+    return normalizePlan({ ...plan, status: "needs_clarification", questions }, spec.feature);
+  }
+  const ready = normalizePlan({ ...plan, status: "ready", questions: [] }, spec.feature);
+  try {
+    validatePlan(ready, spec, discovery);
+    return ready;
+  } catch {
+    // The filtered questions were implementation-owned, but the plan still does not stand on its
+    // own. Return the original questions so the user is asked instead of failing the run.
+    return plan;
+  }
 }
 
 function pretty(value: unknown): string {

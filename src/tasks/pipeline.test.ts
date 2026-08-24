@@ -61,6 +61,46 @@ test("task pipeline returns blocking questions without inventing tasks", async (
   expect(client.calls).toBe(4);
 });
 
+test("an empty clarification never becomes a ready graph with no work", async () => {
+  const tasks: TaskListDraft = {
+    status: "needs_clarification",
+    feature: "registration",
+    summary: "The reviewer could not derive tasks.",
+    tasks: [],
+    questions: [
+      {
+        id: "question",
+        question: "Where does the service live?",
+        reason: "Unclear",
+        blocking: true,
+      },
+    ],
+  };
+  const client = stub([
+    tasks,
+    { ...audit(), decision: "needs_clarification" },
+    { tasks, checks: [] },
+    {
+      questions: [
+        {
+          question: "Where does the service live?",
+          reason: "Answerable from the module conventions",
+          owner: "implementation",
+          answerable_from_context: true,
+          affects: [],
+          user_visible_impact: false,
+        },
+      ],
+    },
+  ]);
+
+  const result = await buildTaskList(client, readySpec(), readyPlan(), discovery());
+
+  expect(result.status).toBe("needs_clarification");
+  expect(result.questions).toHaveLength(1);
+  expect(result.tasks).toEqual([]);
+});
+
 test("task pipeline repairs a graph rejected by project policy", async () => {
   const rejected = draft();
   const first = rejected.tasks[0];
