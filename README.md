@@ -1,6 +1,6 @@
 # rust-coding-agent
 
-A minimal CLI coding agent, written from scratch in Rust — a Claude Code-style REPL that can read, write, and edit files, list directories, and run shell commands on your behalf, with conversation memory and a tool-calling loop against an OpenAI-compatible chat completions API.
+A minimal CLI coding agent, written from scratch in Rust — a Claude Code-style REPL that can inspect and modify a project and run shell commands on your behalf, with conversation memory and a tool-calling loop against an OpenAI-compatible chat completions API.
 
 Built as a learning project to go from zero Rust syntax to a working, self-refactoring agent.
 
@@ -8,14 +8,11 @@ Built as a learning project to go from zero Rust syntax to a working, self-refac
 
 - **REPL** with persistent conversation history across turns
 - **Tool calling loop** — the model can chain multiple tool calls before answering
-- **Six tools**:
-  - `read_file` — read a file's contents
-  - `write_file` — create or overwrite a file
-  - `edit_file` — replace one exact string occurrence in a file (requires a unique match, or `replace_all: true`)
-  - `multi_edit_file` — apply several string replacements to one file atomically
-  - `list_dir` — list files/directories
-  - `run_command` — run a shell command and capture stdout/stderr
-- **Confirmation prompts** before any destructive action (`write_file`, `edit_file`, `multi_edit_file`, `run_command`)
+- **Three tools**:
+  - `inspect` — read files (including line ranges), list directories, and search text recursively
+  - `modify` — write, replace, patch, or delete files
+  - `execute` — run shell commands with an optional working directory and capture the exit code, stdout, and stderr
+- **Confirmation prompts** before any modifying action or command execution
 - **Runaway-loop guard** — caps tool-calling rounds per user turn (`MAX_TOOL_ROUNDS`)
 - **System prompt** describing the agent's role and working directory
 
@@ -45,7 +42,7 @@ cargo run
 
 ```
 > прочитай Cargo.toml и скажи какие там зависимости
-[выполняю: read_file {"path":"Cargo.toml"}]
+[выполняю: inspect {"operation":"read","path":"Cargo.toml"}]
 ...
 
 > exit
@@ -53,6 +50,6 @@ cargo run
 
 ## Safety notes
 
-- `write_file`, `edit_file`, `multi_edit_file`, and `run_command` all require typing `y` to confirm before anything touches disk or spawns a process.
-- `run_command` executes via `sh -c`, so it can run anything the current user can — treat it accordingly.
+- Every `modify` operation and `execute` call requires typing `y` to confirm before anything touches disk or spawns a process.
+- `execute` runs commands via `sh -c`, so it can run anything the current user can — treat it accordingly.
 - There is no sandboxing; this is a learning project, not a hardened tool.
