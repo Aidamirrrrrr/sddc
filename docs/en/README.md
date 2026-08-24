@@ -27,8 +27,13 @@ round. Answers are appended to the original request and the complete pipeline
 runs again. The loop ends only with `ready` or `needs_decomposition`. Empty
 answers are rejected; use `Ctrl+C` to stop.
 
-Piped input cannot continue a conversation, so the agent writes a specification
-containing its unresolved questions.
+A ready specification or decomposition is printed in full and requires an
+explicit `accept` or `revise` decision. On revision, the rejected YAML and the
+user's requested changes are appended to the context before rebuilding. Only
+an accepted version is written as `spec.yaml`.
+
+Piped input cannot continue a conversation or provide approval, so the agent
+prints the result and writes it as `spec.draft.yaml`.
 
 ## Statuses
 
@@ -50,8 +55,8 @@ For multiline input:
 bun start < task.txt
 ```
 
-The specification is written to `.specs/<feature>/spec.yaml` in the current
-working project.
+The accepted specification is written to `.specs/<feature>/spec.yaml` in the
+current working project.
 
 ## Configuration
 

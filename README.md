@@ -9,7 +9,8 @@ specification. The model cannot access the repository, write code, or make
 missing product decisions on the user's behalf.
 
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
-which the agent is run.
+which the agent is run after interactive approval. Non-interactive input writes
+`spec.draft.yaml` instead.
 
 ### Quick Start
 
@@ -45,7 +46,8 @@ CLI-приложение на Bun и TypeScript, которое превраща
 не пишет код и не принимает отсутствующие продуктовые решения за пользователя.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
-запущен агент.
+запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск
+сохраняет `spec.draft.yaml`.
 
 ### Быстрый старт
 

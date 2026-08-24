@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { ModelClient } from "./ai/model-client";
+import { formatSpec, parseReviewDecision, type ReviewDecision } from "./cli/approval";
 import { parseCli } from "./cli/args";
 import { ask, readInput } from "./cli/input";
 import { loadModelConfig } from "./config/env";
@@ -24,19 +25,39 @@ async function main(): Promise<void> {
   while (true) {
     console.log("Building specification...");
     spec = await buildSpec(client, request);
-    if (spec.status !== "needs_clarification" || !process.stdin.isTTY) {
-      break;
+    if (!process.stdin.isTTY) {
+      console.log(`\n${formatSpec(spec)}\n`);
+      console.log(`Draft specification written to ${await writeSpec(spec, false)}`);
+      return;
+    }
+    if (spec.status === "needs_clarification") {
+      request += "\n\nUser clarifications:\n";
+      for (const question of spec.questions) {
+        console.log(`- ${question.question}`);
+        console.log(`  ${question.reason}`);
+        request += `${question.id}: ${await askRequired("> ")}\n`;
+      }
+      continue;
     }
 
-    request += "\n\nUser clarifications:\n";
-    for (const question of spec.questions) {
-      console.log(`- ${question.question}`);
-      console.log(`  ${question.reason}`);
-      request += `${question.id}: ${await askRequired("> ")}\n`;
+    const rendered = formatSpec(spec);
+    console.log(`\n${rendered}\n`);
+    if ((await askReviewDecision()) === "accept") {
+      break;
     }
+    const feedback = await askRequired("What should be changed? ");
+    request += `\n\nRejected specification:\n${rendered}\n\nUser review feedback:\n${feedback}\n`;
   }
 
   console.log(`Specification written to ${await writeSpec(spec)}`);
+}
+
+async function askReviewDecision(): Promise<ReviewDecision> {
+  while (true) {
+    const decision = parseReviewDecision(await ask("Accept specification? [a]ccept/[r]evise: "));
+    if (decision !== null) return decision;
+    console.log("Enter 'a' to accept or 'r' to revise.");
+  }
 }
 
 async function askRequired(label: string): Promise<string> {
