@@ -1,2 +1,2 @@
 export const PRODUCT_NAME = "Codekeeper";
-export const VERSION = "0.2.0";
+export const VERSION = "0.2.1";

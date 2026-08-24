@@ -2,13 +2,16 @@ import { ModelClient } from "../ai/model-client";
 import { parseCli } from "../cli/args";
 import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
+import { askRequired } from "../cli/review";
 import { initializeUserConfig, loadModelConfig, loadUserEnvironment } from "../config/env";
 import { PRODUCT_NAME, VERSION } from "../config/product";
+import { classifyRequest } from "../intake/classify";
 import { writeImplementationPlan } from "../planning/storage";
 import { loadPolicy } from "../policy/load";
 import { createApprovedDiscovery } from "../workflows/discovery";
 import { runApprovedExecution } from "../workflows/execution";
 import { persistGovernance } from "../workflows/governance";
+import { runRepositoryInquiry } from "../workflows/inquiry";
 import { createApprovedPlan } from "../workflows/planning";
 import { createApprovedSpecification } from "../workflows/specification";
 import { runDiagnosticStage } from "./stages";
@@ -33,7 +36,18 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
 
-  const request = await readInput(cli.input, "Describe the task: ");
+  let request = await readInput(cli.input, "Describe the task: ");
+  let intent = await classifyRequest(client, request);
+  while (intent.intent === "unclear") {
+    console.log(intent.question);
+    if (!process.stdin.isTTY) return;
+    request += `\n\nUser clarification:\n${await askRequired("> ")}`;
+    intent = await classifyRequest(client, request);
+  }
+  if (intent.intent === "inquiry") {
+    await runRepositoryInquiry(client, request, intent.language, process.cwd());
+    return;
+  }
   const spec = await createApprovedSpecification(client, request);
   if (spec?.status !== "ready") return;
 

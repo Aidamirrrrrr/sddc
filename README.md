@@ -24,6 +24,10 @@ task diff, verification runs without a shell, and a failed task is rolled back.
 Strict, normal, and trusted approval modes control interaction density; sensitive
 permissions always require confirmation. Interrupted runs can be resumed safely.
 
+Read-only questions about an existing project use a separate inquiry flow. The
+user approves repository context, and Codekeeper answers with file evidence
+without creating a specification, plan, or source changes.
+
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
 which the agent is run after interactive approval. Non-interactive input writes
 `spec.draft.yaml` instead.
@@ -83,6 +87,10 @@ CLI-приложение на Bun и TypeScript, которое превраща
 Режимы strict, normal и trusted регулируют количество подтверждений, но
 чувствительные permissions подтверждаются всегда. Прерванный запуск можно
 безопасно продолжить.
+
+Вопросы о существующем проекте обрабатываются отдельным read-only режимом.
+Пользователь подтверждает контекст репозитория, после чего Codekeeper отвечает
+с файловыми evidence без создания спеки, плана или изменений кода.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
 запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск

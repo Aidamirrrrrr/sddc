@@ -4,6 +4,16 @@ Codekeeper builds a specification from the original request and the user's
 answers. It acts as a requirements quality gate: it detects missing decisions,
 contradictions, and oversized requests without inventing answers.
 
+Before specification, an intent gate separates change requests from read-only
+repository questions. Ambiguous requests are returned to the user for clarification.
+
+## Repository Questions
+
+For an explanation, inspection, or review request, Codekeeper does not create a
+specification. It proposes relevant files, lets the user control the context,
+reads only the approved snapshots, and produces a reviewed answer with file
+evidence and explicit unknowns. This path cannot plan or execute source changes.
+
 ## Pipeline
 
 1. Extract only explicit facts and detect the request language.
