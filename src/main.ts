@@ -5,6 +5,8 @@ import { formatSpec, parseReviewDecision, type ReviewDecision } from "./cli/appr
 import { parseCli } from "./cli/args";
 import { ask, readInput } from "./cli/input";
 import { loadInputPrice, loadModelConfig } from "./config/env";
+import { buildDecisionRegistry } from "./decisions/build";
+import { writeGovernanceArtifacts } from "./decisions/storage";
 import {
   buildImplementationPlan,
   preparePlanningContext,
@@ -12,6 +14,8 @@ import {
 } from "./planning/pipeline";
 import type { ImplementationPlan } from "./planning/schemas";
 import { writeImplementationPlan } from "./planning/storage";
+import { loadPolicy } from "./policy/load";
+import type { Policy } from "./policy/schemas";
 import { createRepositoryContextSelector } from "./repository/context-selector";
 import {
   discoverRepository,
@@ -89,8 +93,17 @@ async function main(): Promise<void> {
     console.log(
       `Repository discovery written to ${await writeRepositoryDiscovery(spec.feature, discovery)}`,
     );
-    const plan = await createApprovedPlan(client, spec, discovery);
+    const policy = await loadPolicy(process.cwd());
+    const plan = await createApprovedPlan(client, spec, discovery, policy);
     console.log(`Implementation plan written to ${await writeImplementationPlan(plan)}`);
+    const governance = await writeGovernanceArtifacts(
+      process.cwd(),
+      spec.feature,
+      buildDecisionRegistry(spec, discovery, plan),
+      policy,
+    );
+    console.log(`Decision registry written to ${governance.decisions}`);
+    console.log(`Effective policy written to ${governance.policy}`);
   }
 }
 
@@ -98,12 +111,20 @@ async function createApprovedPlan(
   client: ModelClient,
   spec: Spec,
   discovery: Parameters<typeof buildImplementationPlan>[2],
+  policy: Policy,
 ): Promise<ImplementationPlan> {
   let userInput = "";
   const repository = await preparePlanningContext(process.cwd(), discovery);
   while (true) {
     console.log("Building implementation plan...");
-    const plan = await buildImplementationPlan(client, spec, discovery, userInput, repository);
+    const plan = await buildImplementationPlan(
+      client,
+      spec,
+      discovery,
+      userInput,
+      repository,
+      policy,
+    );
     if (plan.status === "needs_clarification") {
       userInput += "\n\nUser planning clarifications:\n";
       for (const question of plan.questions) {

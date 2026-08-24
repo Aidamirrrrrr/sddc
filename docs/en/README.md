@@ -90,6 +90,38 @@ shown for repeated acceptance or revision and saved as
 `.specs/<feature>/plan.yaml` only after explicit approval. Planning never writes
 implementation code.
 
+## Policy And Decisions
+
+Planning is constrained by a deterministic policy, not by model judgment alone.
+The built-in policy limits each task to six changed files and three new files,
+forbids sensitive paths, permits only a small command allowlist, and disables
+external network access. Dependency files, configuration, and migrations require
+the corresponding explicit task permission. Two tasks may write the same file
+only when their dependency order is unambiguous.
+
+A project may override these limits in `.spec-agent/policy.yaml`:
+
+```yaml
+version: 1
+changes:
+  max_files_per_task: 4
+  require_dependency_permission: true
+commands:
+  allowed_programs: [bun, node]
+  allow_external_network: false
+```
+
+The override is validated and merged with defaults. A malformed policy stops the
+run. Once the user accepts a plan, its declared permissions are considered
+accepted for that plan only. The effective policy is saved to
+`.specs/<feature>/policy.yaml` so the result remains reproducible.
+
+The agent also writes `.specs/<feature>/decisions.yaml`. It records product
+requirements, user-supplied repository context, reversible implementation
+decisions, and granted permissions with their owner and source. This makes it
+possible to distinguish a user decision from repository evidence or an agent
+inference. No source files or commands are executed at this stage.
+
 ## Statuses
 
 - `ready` — requirements and acceptance criteria are complete;

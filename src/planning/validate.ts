@@ -11,6 +11,7 @@ export function normalizePlan(plan: ImplementationPlan, feature: string): Implem
       ...task,
       id: `T${index + 1}`,
       depends_on: unique(task.depends_on.map((id) => ids.get(id) ?? id)),
+      permissions: unique(task.permissions),
       requirements: unique(task.requirements),
       acceptance: unique(task.acceptance),
       files: {
@@ -135,7 +136,7 @@ function assertCoverage(expected: Set<string>, actual: Set<string>, label: strin
   if (missing.length > 0) throw new Error(`Plan does not cover ${label}: ${missing.join(", ")}`);
 }
 
-function unique(values: string[]): string[] {
+function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 

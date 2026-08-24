@@ -94,6 +94,24 @@ test("planning pipeline removes questions answered by repository context", async
   expect(result.questions).toEqual([]);
 });
 
+test("planning pipeline repairs a plan rejected by project policy", async () => {
+  const rejected = readyPlan();
+  const first = rejected.tasks[0];
+  if (!first) throw new Error("Test fixture must contain a task");
+  first.files.create = ["package.json"];
+
+  const repaired = structuredClone(rejected);
+  const repairedFirst = repaired.tasks[0];
+  if (!repairedFirst) throw new Error("Test fixture must contain a task");
+  repairedFirst.permissions = ["dependencies"];
+
+  const client = stub([rejected, audit(), { plan: rejected, checks: passedChecks() }, repaired]);
+  const result = await buildImplementationPlan(client, readySpec(), discovery());
+
+  expect(result.tasks[0]?.permissions).toEqual(["dependencies"]);
+  expect(client.calls).toBe(4);
+});
+
 function stub(responses: unknown[]) {
   return {
     calls: 0,

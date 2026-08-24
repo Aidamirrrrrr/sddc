@@ -6,6 +6,8 @@ paths, dependencies, verification commands, completion conditions, and concrete 
 and modify paths must come from discovery.context.files. New paths may appear only in create. Use only
 commands supported by repository evidence. Represent commands as a program and argument array, never
 as a shell string. Every file argument must already exist or be created by that task or a dependency.
+Follow the supplied policy. Declare permissions only when a task genuinely needs them; a permission is
+visible to the user and is not a way to bypass a forbidden policy.
 Make small, reversible implementation decisions when they
 follow supplied snapshots and record them in decisions with file evidence. Do not ask the user about
 details answerable from snapshots or local conventions. Ask at most three neutral questions only for

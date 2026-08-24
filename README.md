@@ -15,7 +15,9 @@ add project context before anything is sent to the model.
 
 An accepted discovery is converted into a validated implementation task graph.
 The agent asks about missing decisions and writes `plan.yaml` only after the
-user explicitly accepts it. It still does not modify source code.
+user explicitly accepts it. A deterministic project policy limits file changes,
+commands, network access, and sensitive operations. Accepted decisions and their
+provenance are recorded separately. The agent still does not modify source code.
 
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
 which the agent is run after interactive approval. Non-interactive input writes
@@ -62,7 +64,9 @@ CLI-приложение на Bun и TypeScript, которое превраща
 
 На основе принятого discovery агент составляет проверяемый граф задач реализации,
 задаёт вопросы о недостающих решениях и сохраняет `plan.yaml` только после явного
-подтверждения. Исходный код на этом этапе по-прежнему не изменяется.
+подтверждения. Детерминированная политика проекта ограничивает изменения файлов,
+команды, доступ к сети и чувствительные операции. Принятые решения и их источники
+фиксируются отдельно. Исходный код на этом этапе по-прежнему не изменяется.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
 запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск

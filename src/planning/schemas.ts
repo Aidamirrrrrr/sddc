@@ -7,6 +7,7 @@ const taskSchema = z.object({
   requirements: z.array(z.string()).min(1),
   acceptance: z.array(z.string()).min(1),
   depends_on: z.array(z.string()),
+  permissions: z.array(z.enum(["dependencies", "configuration", "migration", "external_network"])),
   files: z.object({
     read: z.array(z.string()),
     modify: z.array(z.string()),
