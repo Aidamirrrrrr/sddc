@@ -4,13 +4,12 @@ import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import { createGitCheckpoint } from "./checkpoint";
-import { readTaskFiles, sha256 } from "./context";
-import { applyProposal, type FileBackup, restoreFiles } from "./files";
-import { buildTaskProposal, orderTasks } from "./pipeline";
-import { renderProposal } from "./render";
+import { type FileBackup, restoreFiles } from "./files";
+import { orderTasks } from "./pipeline";
+import { validateResume } from "./resume";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
 import { loadExecutionJournal, writeExecutionJournal } from "./storage";
-import { runVerification } from "./verify";
+import { executeTask } from "./task-executor";
 
 type ReviewResult = { accepted: true } | { accepted: false; feedback: string };
 type FinalReview = { accepted: true } | { accepted: false; taskId: string; feedback: string };
@@ -184,110 +183,4 @@ export async function executePlan(
   journal.status = "completed";
   await writeExecutionJournal(root, journal);
   return journal;
-}
-
-type TaskOutcome =
-  | { kind: "completed"; result: ExecutionTaskResult; backup: FileBackup }
-  | { kind: "retry"; feedback: string }
-  | { kind: "failed"; result: ExecutionTaskResult }
-  | { kind: "blocked"; proposal: ChangeProposal };
-
-async function executeTask(
-  client: Pick<ModelClient, "generateObject">,
-  root: string,
-  spec: Spec,
-  plan: ImplementationPlan,
-  task: ImplementationPlan["tasks"][number],
-  hooks: ExecutionHooks,
-  policy: Policy,
-  mode: ExecutionJournal["mode"],
-  feedback: string,
-): Promise<TaskOutcome> {
-  const files = await readTaskFiles(root, task);
-  const proposal = await buildTaskProposal(client, root, spec, plan, task, feedback, policy);
-  if (proposal.status === "blocked") return { kind: "blocked", proposal };
-  if (
-    task.permissions.length > 0 &&
-    hooks.approveSensitive &&
-    !(await hooks.approveSensitive(task))
-  ) {
-    return { kind: "blocked", proposal: blockedByUser(task, proposal) };
-  }
-  if (mode !== "trusted") {
-    const review = await hooks.review(task, proposal, renderProposal(proposal, files));
-    if (!review.accepted)
-      return { kind: "retry", feedback: `User rejected proposal: ${review.feedback}` };
-  }
-
-  const backup = await applyProposal(root, proposal);
-  let verification: ExecutionTaskResult["verification"];
-  try {
-    verification = await runVerification(root, task, {
-      policy,
-      approve:
-        (mode === "strict" || task.permissions.includes("external_network")) && hooks.approveCommand
-          ? (item) => hooks.approveCommand?.(task, item) ?? Promise.resolve(false)
-          : undefined,
-    });
-  } catch (error) {
-    await restoreFiles(root, backup);
-    throw new Error(`Failed to run verification for ${task.id}`, { cause: error });
-  }
-  const result: ExecutionTaskResult = {
-    task_id: task.id,
-    status: verification.every((item) => item.exit_code === 0) ? "completed" : "failed",
-    changed_files: proposal.changes.map((change) => change.path),
-    verification,
-    output_hashes: proposal.changes.map((change) => ({
-      path: change.path,
-      sha256: sha256(change.content),
-    })),
-    checkpoint: null,
-  };
-  if (result.status === "failed") {
-    await restoreFiles(root, backup);
-    if (await hooks.retryAfterFailure(task, result)) {
-      return {
-        kind: "retry",
-        feedback: `Verification failed and all changes were rolled back:\n${formatFailure(result)}`,
-      };
-    }
-    return { kind: "failed", result };
-  }
-  return { kind: "completed", result, backup };
-}
-
-function blockedByUser(
-  task: ImplementationPlan["tasks"][number],
-  proposal: ChangeProposal,
-): ChangeProposal {
-  return {
-    ...proposal,
-    status: "blocked",
-    summary: "Sensitive permission was not confirmed",
-    blocker: {
-      reason: `User did not confirm: ${task.permissions.join(", ")}`,
-      required_files: [...task.files.modify, ...task.files.create],
-      required_decision: "Revise the plan or explicitly approve the sensitive operation",
-    },
-    changes: [],
-  };
-}
-
-async function validateResume(root: string, journal: ExecutionJournal): Promise<void> {
-  for (const task of journal.tasks.filter((item) => item.status === "completed")) {
-    for (const output of task.output_hashes) {
-      const file = Bun.file(`${root}/${output.path}`);
-      if (!(await file.exists()) || sha256(await file.text()) !== output.sha256) {
-        throw new Error(`Cannot resume: completed file changed: ${output.path}`);
-      }
-    }
-  }
-}
-
-function formatFailure(result: ExecutionTaskResult): string {
-  return result.verification
-    .filter((item) => item.exit_code !== 0)
-    .map((item) => `$ ${item.program} ${item.args.join(" ")}\n${item.output}`)
-    .join("\n");
 }

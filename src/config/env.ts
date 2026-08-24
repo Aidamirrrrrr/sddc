@@ -1,3 +1,7 @@
+import { chmod, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
 export type ModelConfig = {
   apiUrl: string;
   apiToken: string;
@@ -10,6 +14,32 @@ export function loadModelConfig(): ModelConfig {
     apiToken: requiredEnv("AI_API_TOKEN"),
     model: requiredEnv("AI_MODEL"),
   };
+}
+
+export function userConfigPath(): string {
+  const base = Bun.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
+  return join(base, "codekeeper", ".env");
+}
+
+export async function loadUserEnvironment(): Promise<void> {
+  const file = Bun.file(userConfigPath());
+  if (!(await file.exists())) return;
+  for (const [name, value] of parseEnvironment(await file.text())) {
+    if (!Bun.env[name]) Bun.env[name] = value;
+  }
+}
+
+export async function initializeUserConfig(): Promise<{ path: string; created: boolean }> {
+  const path = userConfigPath();
+  const file = Bun.file(path);
+  if (await file.exists()) return { path, created: false };
+  await mkdir(dirname(path), { recursive: true });
+  await Bun.write(
+    path,
+    ["AI_API_TOKEN=", "AI_API_URL=", "AI_MODEL=", "AI_INPUT_USD_PER_MILLION=", ""].join("\n"),
+  );
+  await chmod(path, 0o600);
+  return { path, created: true };
 }
 
 export function loadInputPrice(): number | undefined {
@@ -25,7 +55,24 @@ export function loadInputPrice(): number | undefined {
 function requiredEnv(name: string): string {
   const value = Bun.env[name]?.trim();
   if (!value) {
-    throw new Error(`${name} must be set`);
+    throw new Error(
+      `${name} is not configured. Run 'codekeeper --init' and edit ${userConfigPath()}`,
+    );
   }
   return value;
+}
+
+function parseEnvironment(source: string): Array<[string, string]> {
+  const entries: Array<[string, string]> = [];
+  for (const line of source.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator < 1) continue;
+    const name = trimmed.slice(0, separator).trim();
+    const raw = trimmed.slice(separator + 1).trim();
+    const value = raw.replace(/^(['"])(.*)\1$/, "$2");
+    entries.push([name, value]);
+  }
+  return entries;
 }

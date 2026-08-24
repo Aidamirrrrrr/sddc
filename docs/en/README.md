@@ -176,14 +176,15 @@ must inspect both the plan and diff before accepting them.
 ## Usage
 
 ```bash
-bun install
-bun start -- "Describe the task"
+curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/codekeeper/master/install.sh | sh
+codekeeper --init
+codekeeper "Describe the task"
 ```
 
 For multiline input:
 
 ```bash
-bun start < task.txt
+codekeeper < task.txt
 ```
 
 The accepted specification is written to `.specs/<feature>/spec.yaml` in the
@@ -191,12 +192,19 @@ current working project.
 
 ## Configuration
 
+`codekeeper --init` creates `~/.config/codekeeper/.env` with private file
+permissions. Fill in these values before the first model run:
+
 ```env
 AI_API_TOKEN=your-token
 AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
 ```
+
+Process environment variables take precedence over the user configuration.
+To install a development build from this repository, run
+`bun install && bun run install:local`.
 
 Token counts are estimates because tokenization depends on the model. Cost is
 shown only when `AI_INPUT_USD_PER_MILLION` is configured.

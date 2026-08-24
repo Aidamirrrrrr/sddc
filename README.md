@@ -31,17 +31,21 @@ which the agent is run after interactive approval. Non-interactive input writes
 ### Quick Start
 
 ```bash
-bun install
-bun start -- "Add user registration"
+curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/codekeeper/master/install.sh | sh
+codekeeper --init
 ```
 
-Run all project checks:
+Edit `~/.config/codekeeper/.env`, then run Codekeeper inside the project it
+should work on:
 
 ```bash
-bun run check
+codekeeper "Add user registration"
 ```
 
-Configuration is loaded from `.env` and process environment variables:
+Process environment variables take precedence over the user configuration.
+For development from source, run `bun install && bun run install:local`.
+
+Configuration:
 
 ```env
 AI_API_TOKEN=your-token
@@ -87,17 +91,21 @@ CLI-приложение на Bun и TypeScript, которое превраща
 ### Быстрый старт
 
 ```bash
-bun install
-bun start -- "Добавить регистрацию пользователей"
+curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/codekeeper/master/install.sh | sh
+codekeeper --init
 ```
 
-Запуск всех проверок проекта:
+Заполните `~/.config/codekeeper/.env`, затем запустите Codekeeper из проекта,
+над которым он должен работать:
 
 ```bash
-bun run check
+codekeeper "Добавить регистрацию пользователей"
 ```
 
-Конфигурация загружается из `.env` и переменных окружения:
+Переменные окружения имеют приоритет над пользовательским конфигом. Для
+локальной установки из исходников выполните `bun install && bun run install:local`.
+
+Конфигурация:
 
 ```env
 AI_API_TOKEN=your-token

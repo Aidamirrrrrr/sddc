@@ -180,14 +180,15 @@ commands:
 ## Запуск
 
 ```bash
-bun install
-bun start -- "Описание задачи"
+curl -fsSL https://raw.githubusercontent.com/Aidamirrrrrr/codekeeper/master/install.sh | sh
+codekeeper --init
+codekeeper "Описание задачи"
 ```
 
 Для многострочного запроса:
 
 ```bash
-bun start < task.txt
+codekeeper < task.txt
 ```
 
 Принятая спека записывается в `.specs/<feature>/spec.yaml` текущего рабочего
@@ -195,12 +196,18 @@ bun start < task.txt
 
 ## Конфигурация
 
+Команда `codekeeper --init` создаёт файл `~/.config/codekeeper/.env` с закрытыми
+правами доступа. Перед первым обращением к модели заполните в нём значения:
+
 ```env
 AI_API_TOKEN=your-token
 AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
 ```
+
+Переменные окружения имеют приоритет над пользовательским конфигом. Для установки
+версии из текущих исходников выполните `bun install && bun run install:local`.
 
 Количество токенов приблизительное, поскольку токенизация зависит от модели.
 Стоимость показывается только при заданном `AI_INPUT_USD_PER_MILLION`.

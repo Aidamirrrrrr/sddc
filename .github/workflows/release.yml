@@ -15,11 +15,15 @@ jobs:
       matrix:
         include:
           - target: bun-linux-x64
-            asset_name: spec-agent-linux-x64
+            asset_name: codekeeper-linux-x64
+          - target: bun-linux-arm64
+            asset_name: codekeeper-linux-arm64
           - target: bun-darwin-arm64
-            asset_name: spec-agent-macos-arm64
+            asset_name: codekeeper-macos-arm64
+          - target: bun-darwin-x64
+            asset_name: codekeeper-macos-x64
           - target: bun-windows-x64
-            asset_name: spec-agent-windows-x64.exe
+            asset_name: codekeeper-windows-x64.exe
 
     steps:
       - uses: actions/checkout@v6
@@ -42,11 +46,19 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
+      - name: Generate checksums
+        run: cd artifacts && sha256sum codekeeper-* > checksums.txt
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          files: |
+            artifacts/*
+            install.sh
+            install.ps1

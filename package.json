@@ -1,6 +1,6 @@
 {
   "name": "codekeeper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "bin": {
@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "bun run src/main.ts",
+    "build": "bun build src/main.ts --compile --minify --outfile=dist/codekeeper",
+    "install:local": "bun run scripts/install-local.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
