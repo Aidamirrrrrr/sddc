@@ -2,6 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, type LanguageModel, Output } from "ai";
 import type { z } from "zod";
 import type { ModelConfig } from "../config/env";
+import { withOneRepair } from "./repair";
 
 export class ModelClient {
   private readonly model: LanguageModel;
@@ -19,24 +20,26 @@ export class ModelClient {
   }
 
   async generateObject<T>(system: string, prompt: string, schema: z.ZodType<T>): Promise<T> {
-    const result = await generateText({
-      model: this.model,
-      system,
-      prompt,
-      temperature: 0.1,
-      maxOutputTokens: this.thinking ? 4096 : 2048,
-      maxRetries: 0,
-      output: Output.object({
-        name: "stage_output",
-        schema,
-      }),
-      providerOptions: {
-        modelApi: {
-          strictJsonSchema: true,
-          ...(this.thinking ? { reasoningEffort: "high" } : {}),
+    return withOneRepair(prompt, async (currentPrompt) => {
+      const result = await generateText({
+        model: this.model,
+        system,
+        prompt: currentPrompt,
+        temperature: 0,
+        maxOutputTokens: this.thinking ? 4096 : 2048,
+        maxRetries: 0,
+        output: Output.object({
+          name: "stage_output",
+          schema,
+        }),
+        providerOptions: {
+          modelApi: {
+            strictJsonSchema: true,
+            ...(this.thinking ? { reasoningEffort: "high" } : {}),
+          },
         },
-      },
+      });
+      return result.output;
     });
-    return result.output;
   }
 }

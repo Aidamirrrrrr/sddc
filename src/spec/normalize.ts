@@ -18,9 +18,11 @@ export function normalizeSpec(spec: Spec): Spec {
     id: `Q${index + 1}`,
     blocking: true,
   }));
+  const subfeatureIds = new Map(spec.subfeatures.map((item, index) => [item.id, `F${index + 1}`]));
   const subfeatures = spec.subfeatures.map((item, index) => ({
     ...item,
     id: `F${index + 1}`,
+    depends_on: unique(item.depends_on.flatMap((id) => mappedId(subfeatureIds, id))),
   }));
   const status =
     subfeatures.length > 1

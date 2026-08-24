@@ -40,11 +40,12 @@ describe("normalizeSpec", () => {
   test("recognizes decomposition", () => {
     const input = readySpec();
     input.subfeatures = [
-      { id: "one", feature: "one", goal: "One", depends_on: [] },
-      { id: "two", feature: "two", goal: "Two", depends_on: ["one"] },
+      { id: "one", feature: "one", goal: "One", fact_ids: ["F1"], depends_on: [] },
+      { id: "two", feature: "two", goal: "Two", fact_ids: ["F2"], depends_on: ["one"] },
     ];
     const spec = normalizeSpec(input);
     expect(spec.status).toBe("needs_decomposition");
     expect(spec.subfeatures).toHaveLength(2);
+    expect(spec.subfeatures[1]?.depends_on).toEqual(["F1"]);
   });
 });

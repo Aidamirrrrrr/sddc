@@ -7,10 +7,20 @@ contradictions, and oversized requests without inventing answers.
 ## Pipeline
 
 1. Extract only explicit facts and detect the request language.
-2. Check whether the facts can support objective acceptance criteria.
-3. Analyze ambiguity and remove implementation-oriented questions.
-4. Decide whether the request is one coherent flow or needs decomposition.
-5. Write the specification and run the final quality checklist.
+2. A unified analysis decides whether the request is ready, needs questions, or
+   needs decomposition.
+3. A separate reviewer checks that analysis against the source facts. The
+   pipeline ends after this third call for clarification and decomposition.
+4. A ready request is turned into a specification.
+5. The specification passes a final checklist review.
+
+An incomplete or oversized request therefore uses three regular LLM calls; a
+ready specification uses five. Invalid analysis gets one additional repair
+call.
+
+If a stage returns empty or schema-invalid structured output, the client sends
+the original context and validation error back to the model for one retry. It
+never retries indefinitely.
 
 In an interactive terminal, `needs_clarification` starts another question
 round. Answers are appended to the original request and the complete pipeline
@@ -63,11 +73,11 @@ AI_MODEL=your-local-model
 
 ```bash
 bun start --stage extract --thinking off -- "Describe the task"
-bun start --stage clarification --thinking on -- context.json
+bun start --stage analyze --thinking on -- context.json
 ```
 
-Available stages are `extract`, `clarification`, `ambiguity`, `question-review`,
-`scope`, `scope-review`, `write`, and `review`.
+Available stages are `extract`, `analyze`, `analysis-review`, `analysis-repair`,
+`write`, and `review`.
 
 Except for `extract`, stages expect the JSON context produced for that pipeline
 step. This lets one model call be tested without rerunning the entire pipeline.

@@ -3,63 +3,66 @@ import type { ModelClient } from "../ai/model-client";
 import { normalizeSpec } from "./normalize";
 import { prompts } from "./prompts";
 import {
-  type Ambiguity,
-  type AmbiguityFilter,
-  ambiguityFilterSchema,
-  ambiguitySchema,
-  clarificationSchema,
+  analysisSchema,
+  type Extraction,
   extractionSchema,
   reviewSchema,
   type Spec,
-  scopeSchema,
   specSchema,
 } from "./schemas";
-import { validateReview, validateSpec } from "./validate";
+import { normalizeClarificationQuestions, validateReview, validateSpec } from "./validate";
 
 type ObjectGenerator = Pick<ModelClient, "generateObject">;
+type Analysis = z.infer<typeof analysisSchema>;
 
 export async function buildSpec(client: ObjectGenerator, request: string): Promise<Spec> {
   const extraction = await client.generateObject(prompts.extract, request, extractionSchema);
   const context = { request, outputLanguage: extraction.language, extraction };
-  const completeness = await client.generateObject(
-    prompts.clarification,
+  const proposedAnalysis = await client.generateObject(
+    prompts.analyze,
     pretty(context),
-    clarificationSchema,
+    analysisSchema,
   );
-  if (extraction.facts.length <= 1 || completeness.decision === "needs_clarification") {
-    if (completeness.questions.length === 0) {
-      throw new Error("Completeness gate requested clarification without questions");
-    }
-    return buildClarificationSpec(extraction, completeness);
+  const reviewedAnalysis = await client.generateObject(
+    prompts.analysisReview,
+    pretty({ ...context, proposedAnalysis }),
+    analysisSchema,
+  );
+  let analysis = conservativeAnalysis(proposedAnalysis, reviewedAnalysis);
+  let error = analysisError(extraction, analysis);
+  if (error !== null) {
+    analysis = await client.generateObject(
+      prompts.analysisRepair,
+      pretty({ ...context, rejectedAnalysis: analysis, validationError: error }),
+      analysisSchema,
+    );
+    error = analysisError(extraction, analysis);
+    if (error !== null) throw new Error(`Invalid product analysis after repair: ${error}`);
   }
-  const proposedAmbiguity = await client.generateObject(
-    prompts.ambiguity,
-    pretty(context),
-    ambiguitySchema,
-  );
-  const filter = await client.generateObject(
-    prompts.questionReview,
-    pretty({ ...context, proposedAnalysis: proposedAmbiguity }),
-    ambiguityFilterSchema,
-  );
-  const ambiguity = filterAmbiguity(proposedAmbiguity, filter);
-  const proposedScope = await client.generateObject(prompts.scope, pretty(context), scopeSchema);
-  const scope = await client.generateObject(
-    prompts.scopeReview,
-    pretty({ ...context, proposedScope }),
-    scopeSchema,
-  );
-  const candidate = await client.generateObject(
-    prompts.writer,
-    pretty({ ...context, ambiguityAnalysis: ambiguity, scopeAnalysis: scope }),
-    specSchema,
-  );
+
+  if (analysis.decision === "needs_decomposition") {
+    return buildDecompositionSpec(extraction, analysis);
+  }
+  if (analysis.decision === "needs_clarification") {
+    const questions = normalizeClarificationQuestions(analysis.questions);
+    return buildClarificationSpec(extraction, { ...analysis, questions });
+  }
+
+  const candidate = await client.generateObject(prompts.writer, pretty(context), specSchema);
   const review = await client.generateObject(
     prompts.reviewer,
     pretty({ ...context, candidate }),
     reviewSchema,
   );
-  const spec = normalizeSpec(review.spec);
+  const spec = normalizeSpec({
+    ...review.spec,
+    feature: extraction.feature,
+    goal: extraction.goal,
+    status: "ready",
+    issues: [],
+    questions: [],
+    subfeatures: [],
+  });
   validateReview(review.checks);
   validateSpec(spec);
   return spec;
@@ -72,11 +75,9 @@ export async function runStage(
 ): Promise<unknown> {
   const definitions = {
     extract: [prompts.extract, extractionSchema],
-    clarification: [prompts.clarification, clarificationSchema],
-    ambiguity: [prompts.ambiguity, ambiguitySchema],
-    "question-review": [prompts.questionReview, ambiguityFilterSchema],
-    scope: [prompts.scope, scopeSchema],
-    "scope-review": [prompts.scopeReview, scopeSchema],
+    analyze: [prompts.analyze, analysisSchema],
+    "analysis-review": [prompts.analysisReview, analysisSchema],
+    "analysis-repair": [prompts.analysisRepair, analysisSchema],
     write: [prompts.writer, specSchema],
     review: [prompts.reviewer, reviewSchema],
   } as const;
@@ -85,10 +86,22 @@ export async function runStage(
   return client.generateObject(definition[0], input, definition[1] as z.ZodType<unknown>);
 }
 
-function buildClarificationSpec(
-  extraction: z.infer<typeof extractionSchema>,
-  clarification: z.infer<typeof clarificationSchema>,
-): Spec {
+function buildDecompositionSpec(extraction: Extraction, analysis: Analysis): Spec {
+  const spec = normalizeSpec({
+    status: "needs_decomposition",
+    feature: extraction.feature,
+    goal: extraction.goal,
+    requirements: extraction.facts.map((fact) => ({ id: fact.id, statement: fact.statement })),
+    acceptance: [],
+    issues: [],
+    questions: [],
+    subfeatures: analysis.subfeatures,
+  });
+  validateSpec(spec);
+  return spec;
+}
+
+function buildClarificationSpec(extraction: Extraction, analysis: Analysis): Spec {
   return {
     status: "needs_clarification",
     feature: extraction.feature,
@@ -99,7 +112,7 @@ function buildClarificationSpec(
     })),
     acceptance: [],
     issues: [],
-    questions: clarification.questions.map((item, index) => ({
+    questions: analysis.questions.map((item, index) => ({
       id: `Q${index + 1}`,
       question: item.question,
       reason: item.reason,
@@ -109,13 +122,46 @@ function buildClarificationSpec(
   };
 }
 
-function filterAmbiguity(ambiguity: Ambiguity, filter: AmbiguityFilter): Ambiguity {
-  const issues = new Set(filter.kept_issue_ids);
-  const questions = new Set(filter.kept_question_ids.slice(0, 3));
-  return {
-    issues: ambiguity.issues.filter((item) => issues.has(item.id)),
-    questions: ambiguity.questions.filter((item) => questions.has(item.id)).slice(0, 3),
-  };
+function analysisError(extraction: Extraction, analysis: Analysis): string | null {
+  if (analysis.decision === "ready") {
+    if (analysis.questions.length > 0 || analysis.subfeatures.length > 0) {
+      return "Ready analysis must not contain questions or subfeatures.";
+    }
+    return null;
+  }
+  if (analysis.decision === "needs_clarification") {
+    if (analysis.questions.length === 0) return "Clarification requires at least one question.";
+    if (analysis.subfeatures.length > 0) return "Clarification must not contain subfeatures.";
+    return null;
+  }
+  if (analysis.questions.length > 0) return "Decomposition must not contain questions.";
+  if (analysis.subfeatures.length < 2) return "Decomposition requires at least two subfeatures.";
+
+  const roots = analysis.subfeatures.filter((item) => item.depends_on.length === 0);
+  if (roots.length < 2) return "Decomposition requires at least two independently useful roots.";
+
+  const factIds = new Set(extraction.facts.map((fact) => fact.id));
+  const featureNames = new Set<string>();
+  const citedFacts = new Set<string>();
+  for (const subfeature of analysis.subfeatures) {
+    const feature = subfeature.feature.trim().toLocaleLowerCase();
+    if (!feature || featureNames.has(feature))
+      return "Subfeature names must be unique and non-empty.";
+    featureNames.add(feature);
+    for (const factId of subfeature.fact_ids) {
+      if (!factIds.has(factId)) return `Unknown supporting fact ID: ${factId}.`;
+      if (citedFacts.has(factId)) return `Supporting fact ${factId} is reused.`;
+      citedFacts.add(factId);
+    }
+  }
+  return null;
+}
+
+function conservativeAnalysis(proposed: Analysis, reviewed: Analysis): Analysis {
+  if (proposed.decision === "needs_clarification" && reviewed.decision === "ready") {
+    return proposed;
+  }
+  return reviewed;
 }
 
 function pretty(value: unknown): string {
