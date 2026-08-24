@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 test("repository discovery keeps only snapshot-backed evidence", async () => {
-  root = await mkdtemp(join(tmpdir(), "spec-agent-discovery-"));
+  root = await mkdtemp(join(tmpdir(), "codekeeper-discovery-"));
   await Bun.write(join(root, "package.json"), '{"scripts":{"test":"bun test"}}');
   await Bun.write(join(root, "main.ts"), "export function start() {}");
   const responses = [
@@ -46,7 +46,7 @@ test("repository discovery keeps only snapshot-backed evidence", async () => {
 });
 
 test("repository discovery uses user-approved files and context", async () => {
-  root = await mkdtemp(join(tmpdir(), "spec-agent-context-"));
+  root = await mkdtemp(join(tmpdir(), "codekeeper-context-"));
   await Bun.write(join(root, "model-choice.ts"), "export const ignored = true");
   await Bun.write(join(root, "user-choice.ts"), "export const approved = true");
   const prompts: string[] = [];
@@ -82,7 +82,7 @@ test("repository discovery uses user-approved files and context", async () => {
 });
 
 test("repository discovery adds a model-requested file after approval", async () => {
-  root = await mkdtemp(join(tmpdir(), "spec-agent-expansion-"));
+  root = await mkdtemp(join(tmpdir(), "codekeeper-expansion-"));
   await Bun.write(join(root, "entry.ts"), "export const entry = true");
   await Bun.write(join(root, "related.ts"), "export const related = true");
   const responses = [
@@ -103,7 +103,7 @@ test("repository discovery adds a model-requested file after approval", async ()
 });
 
 test("repository discovery revision stays within approved evidence", async () => {
-  root = await mkdtemp(join(tmpdir(), "spec-agent-revision-"));
+  root = await mkdtemp(join(tmpdir(), "codekeeper-revision-"));
   await Bun.write(join(root, "main.ts"), "export const start = true");
   const client = {
     async generateObject<T>(_system: string, prompt: string, _schema: z.ZodType<T>): Promise<T> {

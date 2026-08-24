@@ -9,7 +9,7 @@ import { buildTaskProposal, orderTasks } from "./pipeline";
 import type { ExecutionReview } from "./schemas";
 
 test("invalid model proposal gets one constrained correction", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-proposal-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-proposal-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
   const task = plan.tasks[0];
@@ -52,7 +52,7 @@ test("tasks are ordered by dependencies", () => {
 });
 
 test("review rejection gets one implementation revision", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-review-repair-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-review-repair-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
   const task = plan.tasks[0];

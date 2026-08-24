@@ -9,7 +9,7 @@ import { executePlan } from "./runner";
 import { writeExecutionJournal } from "./storage";
 
 test("failed verification rolls source changes back", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-execution-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-execution-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
   plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
@@ -55,7 +55,7 @@ test("failed verification rolls source changes back", async () => {
 });
 
 test("verified changes are kept and recorded as completed", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-completed-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-completed-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
   plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
@@ -101,7 +101,7 @@ test("verified changes are kept and recorded as completed", async () => {
 });
 
 test("blocked proposals stop without touching source files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-blocked-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-blocked-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
   plan.tasks = [plan.tasks[0] as NonNullable<(typeof plan.tasks)[number]>];
@@ -136,7 +136,7 @@ test("blocked proposals stop without touching source files", async () => {
 });
 
 test("resume skips completed tasks after validating output hashes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-resume-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-resume-"));
   await Bun.write(join(root, "src/auth.ts"), "implemented\n");
   const plan = readyPlan();
   await writeExecutionJournal(root, {
@@ -199,7 +199,7 @@ test("resume skips completed tasks after validating output hashes", async () => 
 });
 
 test("final review rolls a task back and requests a revised proposal", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-final-review-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-final-review-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = singleTaskPlan();
   const client = stub([proposal("new\n"), passedReview(), proposal("revised\n"), passedReview()]);
@@ -225,7 +225,7 @@ test("final review rolls a task back and requests a revised proposal", async () 
 });
 
 test("disabled checkpoint restores the verified task", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-checkpoint-policy-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-checkpoint-policy-"));
   await Bun.write(join(root, "src/auth.ts"), "old\n");
 
   await expect(
@@ -245,7 +245,7 @@ test("disabled checkpoint restores the verified task", async () => {
 });
 
 test("resume rejects manually changed completed files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-resume-conflict-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-resume-conflict-"));
   await Bun.write(join(root, "src/auth.ts"), "manual change\n");
   const plan = singleTaskPlan();
   await writeExecutionJournal(root, {

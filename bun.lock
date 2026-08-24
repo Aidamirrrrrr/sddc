@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "spec-agent",
+      "name": "codekeeper",
       "dependencies": {
         "@ai-sdk/openai-compatible": "^3.0.35",
         "@clack/prompts": "^1.7.0",

@@ -6,7 +6,7 @@ import { sha256 } from "./context";
 import { applyProposal, restoreFiles } from "./files";
 
 test("applied files can be restored exactly", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-files-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-files-"));
   await Bun.write(join(root, "existing.ts"), "old\n");
   const backup = await applyProposal(root, {
     task_id: "T1",
@@ -31,7 +31,7 @@ test("applied files can be restored exactly", async () => {
 });
 
 test("apply rejects a file changed after proposal generation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-stale-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-stale-"));
   await Bun.write(join(root, "file.ts"), "newer\n");
   await expect(
     applyProposal(root, {
@@ -53,8 +53,8 @@ test("apply rejects a file changed after proposal generation", async () => {
 });
 
 test("apply rejects destinations through symbolic links", async () => {
-  const root = await mkdtemp(join(tmpdir(), "spec-agent-symlink-"));
-  const outside = await mkdtemp(join(tmpdir(), "spec-agent-outside-"));
+  const root = await mkdtemp(join(tmpdir(), "codekeeper-symlink-"));
+  const outside = await mkdtemp(join(tmpdir(), "codekeeper-outside-"));
   await symlink(outside, join(root, "linked"));
 
   await expect(

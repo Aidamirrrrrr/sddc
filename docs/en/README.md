@@ -1,6 +1,6 @@
-# Spec Agent Documentation
+# Codekeeper Documentation
 
-Spec Agent builds a specification from the original request and the user's
+Codekeeper builds a specification from the original request and the user's
 answers. It acts as a requirements quality gate: it detects missing decisions,
 contradictions, and oversized requests without inventing answers.
 
@@ -99,7 +99,7 @@ external network access. Dependency files, configuration, and migrations require
 the corresponding explicit task permission. Two tasks may write the same file
 only when their dependency order is unambiguous.
 
-A project may override these limits in `.spec-agent/policy.yaml`:
+A project may override these limits in `.codekeeper/policy.yaml`:
 
 ```yaml
 version: 1
