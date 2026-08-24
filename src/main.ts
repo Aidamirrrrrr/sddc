@@ -4,8 +4,20 @@ import { ModelClient } from "./ai/model-client";
 import { formatSpec, parseReviewDecision, type ReviewDecision } from "./cli/approval";
 import { parseCli } from "./cli/args";
 import { ask, readInput } from "./cli/input";
-import { loadModelConfig } from "./config/env";
-import { discoverRepository, runRepositoryStage } from "./repository/pipeline";
+import { loadInputPrice, loadModelConfig } from "./config/env";
+import {
+  buildImplementationPlan,
+  preparePlanningContext,
+  runPlanningStage,
+} from "./planning/pipeline";
+import type { ImplementationPlan } from "./planning/schemas";
+import { writeImplementationPlan } from "./planning/storage";
+import { createRepositoryContextSelector } from "./repository/context-selector";
+import {
+  discoverRepository,
+  reviseRepositoryDiscovery,
+  runRepositoryStage,
+} from "./repository/pipeline";
 import { buildSpec, runStage } from "./spec/pipeline";
 import type { Spec } from "./spec/schemas";
 import { writeRepositoryDiscovery, writeSpec } from "./spec/storage";
@@ -18,7 +30,9 @@ async function main(): Promise<void> {
     const input = await readInput(cli.input, "Stage input: ");
     const result = cli.stage.startsWith("repository-")
       ? await runRepositoryStage(client, cli.stage, input)
-      : await runStage(client, cli.stage, input);
+      : cli.stage.startsWith("planning-")
+        ? await runPlanningStage(client, cli.stage, input)
+        : await runStage(client, cli.stage, input);
     if (result === undefined) throw new Error(`Unknown stage "${cli.stage}"`);
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -57,11 +71,74 @@ async function main(): Promise<void> {
   console.log(`Specification written to ${await writeSpec(spec)}`);
   if (spec.status === "ready") {
     console.log("Discovering repository...");
-    const discovery = await discoverRepository(client, spec, process.cwd());
-    console.log(`\n${Bun.YAML.stringify(discovery, null, 2).trimEnd()}\n`);
+    let discovery = await discoverRepository(
+      client,
+      spec,
+      process.cwd(),
+      createRepositoryContextSelector(process.cwd(), {
+        inputUsdPerMillion: loadInputPrice(),
+      }),
+    );
+    while (true) {
+      console.log(`\n${Bun.YAML.stringify(discovery, null, 2).trimEnd()}\n`);
+      if ((await askDiscoveryReviewDecision()) === "accept") break;
+      const feedback = await askRequired("What should be changed in discovery? ");
+      console.log("Revising repository discovery...");
+      discovery = await reviseRepositoryDiscovery(client, spec, discovery, feedback, process.cwd());
+    }
     console.log(
       `Repository discovery written to ${await writeRepositoryDiscovery(spec.feature, discovery)}`,
     );
+    const plan = await createApprovedPlan(client, spec, discovery);
+    console.log(`Implementation plan written to ${await writeImplementationPlan(plan)}`);
+  }
+}
+
+async function createApprovedPlan(
+  client: ModelClient,
+  spec: Spec,
+  discovery: Parameters<typeof buildImplementationPlan>[2],
+): Promise<ImplementationPlan> {
+  let userInput = "";
+  const repository = await preparePlanningContext(process.cwd(), discovery);
+  while (true) {
+    console.log("Building implementation plan...");
+    const plan = await buildImplementationPlan(client, spec, discovery, userInput, repository);
+    if (plan.status === "needs_clarification") {
+      userInput += "\n\nUser planning clarifications:\n";
+      for (const question of plan.questions) {
+        console.log(`- ${question.question}`);
+        console.log(`  ${question.reason}`);
+        userInput += `${question.id}: ${await askRequired("> ")}\n`;
+      }
+      continue;
+    }
+
+    const rendered = Bun.YAML.stringify(plan, null, 2).trimEnd();
+    console.log(`\n${rendered}\n`);
+    if ((await askPlanReviewDecision()) === "accept") return plan;
+    const feedback = await askRequired("What should be changed in the plan? ");
+    userInput += `\n\nRejected implementation plan:\n${rendered}\n\nUser review feedback:\n${feedback}\n`;
+  }
+}
+
+async function askDiscoveryReviewDecision(): Promise<ReviewDecision> {
+  while (true) {
+    const decision = parseReviewDecision(
+      await ask("Accept repository discovery? [a]ccept/[r]evise: "),
+    );
+    if (decision !== null) return decision;
+    console.log("Enter 'a' to accept or 'r' to revise.");
+  }
+}
+
+async function askPlanReviewDecision(): Promise<ReviewDecision> {
+  while (true) {
+    const decision = parseReviewDecision(
+      await ask("Accept implementation plan? [a]ccept/[r]evise: "),
+    );
+    if (decision !== null) return decision;
+    console.log("Enter 'a' to accept or 'r' to revise.");
   }
 }
 

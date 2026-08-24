@@ -12,6 +12,16 @@ export function loadModelConfig(): ModelConfig {
   };
 }
 
+export function loadInputPrice(): number | undefined {
+  const value = Bun.env.AI_INPUT_USD_PER_MILLION?.trim();
+  if (!value) return undefined;
+  const price = Number(value);
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error("AI_INPUT_USD_PER_MILLION must be a non-negative number");
+  }
+  return price;
+}
+
 function requiredEnv(name: string): string {
   const value = Bun.env[name]?.trim();
   if (!value) {

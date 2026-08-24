@@ -10,7 +10,12 @@ repository or make missing product decisions on the user's behalf. The agent
 never writes implementation code.
 
 After approval, a ready specification triggers a read-only, evidence-backed
-repository discovery saved beside the specification.
+repository discovery. The user confirms its searchable file selection and may
+add project context before anything is sent to the model.
+
+An accepted discovery is converted into a validated implementation task graph.
+The agent asks about missing decisions and writes `plan.yaml` only after the
+user explicitly accepts it. It still does not modify source code.
 
 The result is stored in `.specs/<feature>/spec.yaml` inside the project from
 which the agent is run after interactive approval. Non-interactive input writes
@@ -35,6 +40,7 @@ Configuration is loaded from `.env` and process environment variables:
 AI_API_TOKEN=your-token
 AI_API_URL=https://example.com/v1/
 AI_MODEL=model-id
+AI_INPUT_USD_PER_MILLION=optional-input-price
 ```
 
 ### Documentation
@@ -51,7 +57,12 @@ CLI-приложение на Bun и TypeScript, которое превраща
 пользователя. Агент не пишет код реализации.
 
 После подтверждения готовой спеки запускается read-only исследование проекта с
-файловыми evidence, которое сохраняется рядом со спецификацией.
+файловыми evidence. Перед отправкой содержимого модели пользователь подтверждает
+файлы через селектор с поиском и может добавить контекст проекта.
+
+На основе принятого discovery агент составляет проверяемый граф задач реализации,
+задаёт вопросы о недостающих решениях и сохраняет `plan.yaml` только после явного
+подтверждения. Исходный код на этом этапе по-прежнему не изменяется.
 
 Результат сохраняется в `.specs/<feature>/spec.yaml` внутри проекта, из которого
 запущен агент, только после интерактивного подтверждения. Неинтерактивный запуск
@@ -76,6 +87,7 @@ bun run check
 AI_API_TOKEN=your-token
 AI_API_URL=https://example.com/v1/
 AI_MODEL=model-id
+AI_INPUT_USD_PER_MILLION=optional-input-price
 ```
 
 ### Документация

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.35",
+    "@clack/prompts": "^1.7.0",
     "ai": "^7.0.77",
     "zod": "^4.1.5"
   },

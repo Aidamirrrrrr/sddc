@@ -12,8 +12,8 @@ const EXCLUDED_DIRECTORIES = new Set([
   "target",
 ]);
 const MAX_INDEXED_FILES = 5_000;
-const MAX_FILE_BYTES = 64 * 1024;
-const MAX_SNAPSHOT_BYTES = 200 * 1024;
+export const MAX_FILE_BYTES = 64 * 1024;
+export const MAX_SNAPSHOT_BYTES = 200 * 1024;
 
 export type RepositoryFile = { path: string; size: number };
 export type FileSnapshot = RepositoryFile & { content: string };
