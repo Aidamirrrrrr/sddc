@@ -40,6 +40,13 @@ export const policySchema = z.object({
     default_approval_mode: z.enum(["strict", "normal", "trusted"]),
     max_changed_lines_per_task: z.number().int().positive(),
     max_proposal_revisions: z.number().int().nonnegative(),
+    /**
+     * How many times one task may be attempted before the run gives up on it.
+     *
+     * Every other loop in the pipeline is bounded by policy; this one was not, so a task whose
+     * verification kept failing could be retried forever as long as something kept saying yes.
+     */
+    max_task_attempts: z.number().int().positive(),
     command_timeout_seconds: z.number().int().positive(),
     allow_git_checkpoints: z.boolean(),
   }),

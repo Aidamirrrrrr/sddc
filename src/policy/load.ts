@@ -42,6 +42,7 @@ export const defaultPolicy: Policy = {
     default_approval_mode: "normal",
     max_changed_lines_per_task: 400,
     max_proposal_revisions: 1,
+    max_task_attempts: 3,
     command_timeout_seconds: 120,
     allow_git_checkpoints: false,
   },

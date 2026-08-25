@@ -266,8 +266,22 @@ export function TextPrompt({
       setValue((current) => current.slice(0, -1));
       setError("");
     } else if (input && !key.ctrl && !key.meta) {
-      setValue((current) => current + input);
-      setError("");
+      // Pasted text arrives as one chunk, so a newline inside it never raises key.return. Without
+      // this the newline is appended as a character and the field can never be submitted.
+      const [typed = "", ...rest] = input.split(/\r|\n/);
+      const submitted = rest.length > 0;
+      setValue((current) => {
+        const next = current + typed;
+        if (submitted) {
+          if (options.required && !next.trim()) {
+            setError(options.requiredMessage ?? "An answer is required");
+            return next;
+          }
+          onSubmit(next.trim());
+        }
+        return next;
+      });
+      if (!submitted) setError("");
     }
   });
 

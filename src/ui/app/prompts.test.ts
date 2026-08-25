@@ -71,3 +71,20 @@ test("an empty or blank filter keeps the whole list", () => {
 test("a filter matching nothing yields nothing rather than everything", () => {
   expect(filterChoices(choices("a", "b"), "zzz")).toEqual([]);
 });
+
+test("a pasted answer ending in a newline submits instead of swallowing it", () => {
+  // Ink delivers a paste as one chunk, so the newline never raises key.return. Appending it as a
+  // character left the field unsubmittable — the harness typed the same answer over and over.
+  const chunk = "pnpm build in the auth module\r";
+  const [typed = "", ...rest] = chunk.split(/\r|\n/);
+
+  expect(typed).toBe("pnpm build in the auth module");
+  expect(rest.length > 0).toBe(true);
+});
+
+test("a paste without a newline is just text", () => {
+  const [typed = "", ...rest] = "half an answer".split(/\r|\n/);
+
+  expect(typed).toBe("half an answer");
+  expect(rest.length > 0).toBe(false);
+});

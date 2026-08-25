@@ -76,6 +76,26 @@ function createPrefetcher(
   };
 }
 
+/** Records a task the run gave up on, so the journal names it rather than ending silently. */
+function exhausted(task: Task, used: number, feedback: string): ExecutionTaskResult {
+  return {
+    task_id: task.id,
+    status: "failed",
+    changed_files: [],
+    verification: [
+      {
+        program: "sddc",
+        args: ["attempts"],
+        exit_code: 1,
+        timed_out: false,
+        output: `Gave up on ${task.id} after ${used} attempts. Last reason:\n${feedback}`,
+      },
+    ],
+    output_hashes: [],
+    checkpoint: null,
+  };
+}
+
 export async function executePlan(
   client: Pick<ModelClient, "generateObject">,
   root: string,
@@ -116,6 +136,7 @@ export async function executePlan(
   );
   const backups = new Map<string, FileBackup>();
   const feedback = new Map<string, string>();
+  const attempts = new Map<string, number>();
   const prefetch = createPrefetcher(client, root, spec, plan, ordered, policy, mode);
   if (journal.pending_feedback) {
     feedback.set(journal.pending_feedback.task_id, journal.pending_feedback.feedback);
@@ -167,6 +188,16 @@ export async function executePlan(
       return journal;
     }
     if (outcome.kind === "retry") {
+      // Every other loop in the pipeline is bounded by policy; without this one a task whose
+      // verification keeps failing is retried for as long as something keeps approving it.
+      const used = (attempts.get(task.id) ?? 1) + 1;
+      if (used > policy.execution.max_task_attempts) {
+        journal.status = "failed";
+        journal.tasks.push(exhausted(task, used - 1, outcome.feedback));
+        await writeExecutionJournal(root, journal);
+        return journal;
+      }
+      attempts.set(task.id, used);
       feedback.set(task.id, outcome.feedback);
       continue;
     }
