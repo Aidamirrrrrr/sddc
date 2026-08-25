@@ -32,17 +32,29 @@ export async function buildTaskList(
   policy: Policy = defaultPolicy,
   constitution = "",
 ): Promise<TaskList> {
-  const context = {
+  // Context is declared per stage rather than shared as one blob. Auditing checks IDs, coverage and
+  // cycles, so file contents buy it nothing — and shipping the largest payload in the pipeline to
+  // the stage that cannot use it is what kept exhausting its output budget.
+  const shared = {
     outputLanguage: specificationLanguage(spec),
     specification: spec,
     constitution: constitution || undefined,
     plan,
-    discovery,
-    repositoryIndex: repository.paths,
-    approvedSnapshots: repository.snapshots,
     policy,
     userInput: userInput || undefined,
   };
+  const authoring = {
+    ...shared,
+    discovery,
+    repositoryIndex: repository.paths,
+    approvedSnapshots: repository.snapshots,
+  };
+  const checking = {
+    ...shared,
+    approvedPaths: discovery.context.files,
+    repositoryIndex: repository.paths,
+  };
+  const context = authoring;
   // The first draw runs the full draft/audit/review chain; a rejection is repaired instead, which is
   // both cheaper and better informed than starting over.
   let previous: TaskList | undefined;
@@ -56,12 +68,12 @@ export async function buildTaskList(
           client.generateObject(taskPrompts.draft, pretty(context), taskListDraftSchema),
         );
         const audit = await stage("tasks-audit", () =>
-          client.generateObject(taskPrompts.audit, pretty({ ...context, draft }), taskAuditSchema),
+          client.generateObject(taskPrompts.audit, pretty({ ...checking, draft }), taskAuditSchema),
         );
         review = await stage("tasks-review", () =>
           client.generateObject(
             taskPrompts.review,
-            pretty({ ...context, draft, audit }),
+            pretty({ ...checking, draft, audit }),
             taskListReviewSchema,
           ),
         );
