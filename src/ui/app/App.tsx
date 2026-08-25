@@ -186,6 +186,26 @@ function HistoryBlock({ block }: { block: Block }) {
       </Panel>
     );
   }
+  if (block.kind === "action") {
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <Box>
+          <Text color={toneColor[block.tone]}>{"  ⏺  "}</Text>
+          <Text color={theme.text} bold>
+            {block.title}
+          </Text>
+        </Box>
+        {block.details.map((detail, index) => (
+          <Box key={detail || index}>
+            <Text color={theme.muted} dimColor>
+              {index === block.details.length - 1 ? "     ⎿  " : "     │  "}
+            </Text>
+            <Text color={theme.muted}>{detail}</Text>
+          </Box>
+        ))}
+      </Box>
+    );
+  }
   if (block.kind === "command") {
     return (
       <Box>

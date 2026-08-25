@@ -25,6 +25,12 @@ export function createStreamDriver(mode: "plain" | "json"): Driver {
     step: (current, total, message) =>
       write("step", { current, total, message }, `[${current}/${total}] ${message}`),
     document: (title, content) => write("document", { title, content }, `\n${title}\n${content}`),
+    action: (summary, details, tone = "success") =>
+      write(
+        "action",
+        { summary, details, tone },
+        [summary, ...details.map((detail) => `  ${detail}`)].join("\n"),
+      ),
     async stage(labels, operation) {
       write("info", { message: labels.progress }, labels.progress);
       const result = await operation();

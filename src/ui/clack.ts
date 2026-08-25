@@ -27,6 +27,9 @@ export function createClackDriver(): Driver {
     step: (current, total, message) =>
       log.step(`${paint(`${current}/${total}`, theme.accent)} ${message}`),
     document: (title, content) => note(content, paint(title, theme.accent)),
+    // No structure to draw with, so the summary leads and its evidence is indented under it.
+    action: (summary, details) =>
+      note(details.map((detail) => `  ${detail}`).join("\n"), paint(summary, theme.accent)),
     async stage(labels, operation) {
       const indicator = spinner();
       indicator.start(labels.progress);

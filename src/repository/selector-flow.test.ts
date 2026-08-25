@@ -25,6 +25,7 @@ function scriptedDriver(
     warn: () => {},
     step: () => {},
     document: (title, body) => recorded.documents.push({ title, body }),
+    action: () => undefined,
     stage: async (_labels, operation) => operation(),
     select: async () => (answers.select?.shift() ?? "confirm") as never,
     multiselect: async () => (answers.multiselect?.shift() ?? []) as never,

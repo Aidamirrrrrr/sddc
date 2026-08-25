@@ -98,6 +98,14 @@ export function document(title: Copy, content: string): void {
   driver().document(phrase(title), content);
 }
 
+export function action(
+  summary: string,
+  details: string[],
+  tone?: "info" | "success" | "warn" | "danger",
+): void {
+  driver().action(summary, details, tone);
+}
+
 export async function withSpinner<T>(
   progress: Copy,
   complete: Copy,

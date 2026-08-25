@@ -23,6 +23,7 @@ function scriptedDriver(answers: string[], decisions: string[]): Driver {
     warn: () => {},
     step: () => {},
     document: () => {},
+    action: () => undefined,
     stage: async (_labels, operation) => operation(),
     select: async () => (decisions.shift() ?? "accept") as never,
     multiselect: async () => [] as never,

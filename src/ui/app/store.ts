@@ -16,7 +16,15 @@ export type Block =
   | { id: number; kind: "panel"; title: string; body: string }
   | { id: number; kind: "answer"; question: string; answer: string }
   /** Something the user typed at the command line, echoed so the transcript reads as a session. */
-  | { id: number; kind: "command"; text: string };
+  | { id: number; kind: "command"; text: string }
+  /**
+   * Work that happened, as a one-line summary with its evidence underneath.
+   *
+   * A task writing three files and running a suite is one event to a reader and four to the log.
+   * Summarising it and hanging the detail off it keeps a long run scannable without hiding what it
+   * actually did.
+   */
+  | { id: number; kind: "action"; tone: Tone; title: string; details: string[] };
 
 /** `Omit` collapses a union into its shared keys, so it has to be distributed by hand. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

@@ -30,6 +30,14 @@ export type Driver = {
   warn(message: string): void;
   step(current: number, total: number, message: string): void;
   document(title: string, content: string): void;
+  /**
+   * Work that happened: a summary line with its evidence hanging off it.
+   *
+   * Separate from `document` because the two are read differently — a document is opened and read,
+   * an action is glanced at while scrolling past. Surfaces without a notion of structure may render
+   * it as the summary followed by its lines.
+   */
+  action(summary: string, details: string[], tone?: "info" | "success" | "warn" | "danger"): void;
   /** Reports a long model call. Implementations may render progress; all must await the operation. */
   stage<T>(labels: StageLabels, operation: () => Promise<T>): Promise<T>;
   select<T extends string>(message: string, choices: Choice<T>[], initial?: T): Promise<T>;

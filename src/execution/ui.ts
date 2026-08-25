@@ -142,12 +142,19 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
       );
     },
     taskProgress(task, turn, verification) {
-      const failed = verification.filter((item) => item.exit_code !== 0).length;
-      driver().info(
+      const failed = verification.filter((item) => item.exit_code !== 0);
+      driver().action(
         phrase({
-          en: `${task.id} · attempt ${turn} · ${failed === 0 ? "all commands green" : `${failed} command(s) failing`}`,
-          ru: `${task.id} · попытка ${turn} · ${failed === 0 ? "все команды зелёные" : `падает команд: ${failed}`}`,
+          en: `${task.id} · attempt ${turn}`,
+          ru: `${task.id} · попытка ${turn}`,
         }),
+        verification.map(
+          (item) =>
+            `${item.exit_code === 0 ? "✓" : "✗"} ${item.program} ${item.args.join(" ")}${
+              item.timed_out ? " (timed out)" : ""
+            }`,
+        ),
+        failed.length === 0 ? "success" : "warn",
       );
     },
     async retryAfterFailure(task, result) {
@@ -236,7 +243,21 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
       );
     },
     taskCompleted(result) {
-      driver().document(`${result.task_id} completed`, formatVerification(result.verification));
+      // One event to a reader, several to the log: the summary carries the outcome and the files
+      // and commands hang off it, so a long run stays scannable without hiding what it did.
+      driver().action(
+        phrase({
+          en: `${result.task_id} completed`,
+          ru: `${result.task_id} выполнена`,
+        }),
+        [
+          ...result.changed_files.map((path) => `wrote ${path}`),
+          ...result.verification.map(
+            (item) => `${item.exit_code === 0 ? "✓" : "✗"} ${item.program} ${item.args.join(" ")}`,
+          ),
+        ],
+        "success",
+      );
     },
   };
 }

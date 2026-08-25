@@ -51,6 +51,8 @@ export function startApp(root = process.cwd()): Driver {
     step: (current, total, label) =>
       store.update((state) => applyStep(state, current, total, label)),
     document: (title, body) => store.push({ kind: "panel", title, body }),
+    action: (summary, details, tone = "success") =>
+      store.push({ kind: "action", tone, title: summary, details }),
     async stage(labels, operation) {
       store.update((state) => ({ ...state, stage: labels.progress, stageStartedAt: Date.now() }));
       try {
