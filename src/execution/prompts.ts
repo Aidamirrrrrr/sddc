@@ -12,6 +12,7 @@ Rules:
 - Satisfy only the listed requirements, acceptance criteria, done_when conditions, and verification expectations.
 - Treat previous verification output as diagnostics, not as permission to expand scope.
 - Trace every task requirement and acceptance criterion to at least one changed file.
+- Verification commands run in the project as it already is. Files a command merely needs to exist — package manifests, lockfiles, tooling config — do not belong in files.modify, and their absence from it is never a reason to block.
 - otherTasks lists the rest of the graph read-only. Code your task does not touch may be missing or incomplete because a sibling task owns it: that is the plan working, not a blocker. Implement your slice and leave theirs alone.
 - Only block when no task in the graph covers what is missing, or when a decision is genuinely absent. A file already in your files.modify or files.create is yours to change — never block asking for it.
 - If the task cannot be completed within its approved files, return status blocked, no changes, and an exact blocker. Never work around missing scope.`,
@@ -25,7 +26,9 @@ E3 public behavior or API changes only when explicitly required;
 E4 no plaintext secrets, credentials, or sensitive data are introduced;
 E5 errors are not silently swallowed;
 E6 tests verify observable behavior rather than implementation details;
-E7 no undeclared product or architecture decision is introduced.
+E7 no undeclared product or architecture decision is introduced. Anything the specification, the plan, or the task
+already asks for is declared by definition — a new export, type, or signature required by a requirement or acceptance
+criterion is the work, not a decision to flag. Reserve E7 for choices nothing upstream asked for.
 
 Reject when any check fails. Findings must be concrete and must not invent missing facts.`,
 };
