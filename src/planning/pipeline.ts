@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { rethrowIfExhausted } from "../ai/budget";
 import type { ModelClient } from "../ai/model-client";
 import { sampleUntilValid } from "../ai/sample";
 import { defaultPolicy } from "../policy/load";
@@ -69,7 +70,10 @@ export async function buildImplementationPlan(
         // run made the phase only as reliable as a step whose output is a hint.
         const audit = await client
           .generateObject(planningPrompts.audit, pretty({ ...context, draft }), planAuditSchema)
-          .catch(() => undefined);
+          .catch((error) => {
+            rethrowIfExhausted(error);
+            return undefined;
+          });
         const review = await stage("planning-review", () =>
           client.generateObject(
             planningPrompts.review,

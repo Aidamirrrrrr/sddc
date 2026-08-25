@@ -15,6 +15,7 @@ Options:
   -v, --version         Show version
   --init                Create the user configuration file
   --thinking on|off     Enable or disable model reasoning
+  --max-calls <n>       Ceiling on model calls for this run
   --lang en|ru          Choose the interface language
   --recompile <phase>   Rebuild a stored feature from plan|tasks|execute
   --analyze             Report drift between spec, plan, and tasks

@@ -3,6 +3,7 @@ import { generateText, type LanguageModel, Output } from "ai";
 import type { z } from "zod";
 import type { ModelConfig } from "../config/env";
 import { withBackoff } from "./backoff";
+import { chargeCall } from "./budget";
 import { withOneRepair } from "./repair";
 import { recordUsage } from "./usage";
 
@@ -47,6 +48,10 @@ export class ModelClient {
 
   /** `instruction` identifies the stage; `context` is the accumulated pipeline state. */
   async generateObject<T>(instruction: string, context: string, schema: z.ZodType<T>): Promise<T> {
+    // Charged once per stage call rather than per HTTP attempt: transport retries are the provider
+    // failing, not the run asking for more work, and charging them would let a flaky link eat a
+    // budget that exists to bound the pipeline's own appetite.
+    chargeCall();
     return withOneRepair(
       composePrompt(instruction, context),
       async (currentPrompt, { degraded }) => {

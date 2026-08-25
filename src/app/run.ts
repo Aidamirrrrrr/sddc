@@ -1,3 +1,4 @@
+import { budgetState, onBudgetWarning, setBudget } from "../ai/budget";
 import { ModelClient } from "../ai/model-client";
 import { formatUsage, sessionUsage } from "../ai/usage";
 import { writeQuickstart } from "../artifacts/storage";
@@ -14,6 +15,7 @@ import {
   setUiLanguage,
   step,
   success,
+  warn,
 } from "../cli/ui";
 import {
   initializeUserConfig,
@@ -74,6 +76,16 @@ export async function runCli(arguments_: string[]): Promise<void> {
   if (interactive && !cli.stage) await chooseUiLanguage(cli.language);
   else setUiLanguage(cli.language ?? (/^ru/i.test(process.env.LANG ?? "") ? "ru" : "en"));
   const client = new ModelClient(loadModelConfig(), cli.thinking);
+  // Set before the first stage runs, so intake is inside the ceiling rather than outside it. The
+  // project's policy is the source; the flag overrides it for one invocation.
+  const runPolicy = await loadPolicy(process.cwd());
+  setBudget(cli.maxCalls ?? runPolicy.budget.max_model_calls);
+  onBudgetWarning((used, limit) =>
+    warn({
+      en: `${used} of ${limit} model calls used in this run`,
+      ru: `Израсходовано вызовов модели: ${used} из ${limit}`,
+    }),
+  );
   if (cli.stage) {
     const input = await readInput(cli.input, "Stage input: ", { noInput: cli.noInput });
     const result = await runDiagnosticStage(client, cli.stage, input);
@@ -134,7 +146,7 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
   const root = process.cwd();
-  const policy = await loadPolicy(root);
+  const policy = runPolicy;
   const session = await loadSession(root, request);
   if (interactive && hasRecordedAnswers(session)) {
     info({
@@ -221,6 +233,9 @@ export async function runCli(arguments_: string[]): Promise<void> {
 function reportUsage(): void {
   const usage = sessionUsage();
   if (usage.calls === 0) return;
-  const summary = formatUsage(usage, loadInputPrice());
+  const budget = budgetState();
+  // Reported every run, not only when it bites: a share the user watches is a share they can size.
+  const share = budget ? ` · ${budget.used} of ${budget.limit} call budget` : "";
+  const summary = `${formatUsage(usage, loadInputPrice())}${share}`;
   info({ en: summary, ru: summary });
 }

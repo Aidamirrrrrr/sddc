@@ -7,6 +7,8 @@ export type Cli = {
   live: boolean;
   language?: "en" | "ru";
   thinking: boolean;
+  /** Overrides the run's model-call ceiling for this invocation only. */
+  maxCalls?: number;
   help: boolean;
   init: boolean;
   version: boolean;
@@ -75,6 +77,13 @@ export function parseCli(args: string[]): Cli {
       const language = requireArgument(args, ++index, "--lang");
       if (language !== "en" && language !== "ru") throw new Error("--lang must be 'en' or 'ru'");
       cli.language = language;
+    } else if (value === "--max-calls") {
+      const raw = requireArgument(args, ++index, "--max-calls");
+      const calls = Number(raw);
+      if (!Number.isInteger(calls) || calls < 1) {
+        throw new Error("--max-calls must be a positive integer");
+      }
+      cli.maxCalls = calls;
     } else if (value === "--thinking") {
       const mode = requireArgument(args, ++index, "--thinking");
       if (mode !== "on" && mode !== "off") {

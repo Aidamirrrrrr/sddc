@@ -33,6 +33,7 @@ export const defaultPolicy: Policy = {
     ],
     allow_external_network: false,
   },
+  budget: { max_model_calls: 400 },
   sampling: { max_attempts: 3 },
   dialogue: {
     max_clarification_rounds: 3,
@@ -64,6 +65,7 @@ export async function loadPolicy(root: string): Promise<Policy> {
       ...override,
       changes: { ...defaultPolicy.changes, ...override.changes },
       commands: { ...defaultPolicy.commands, ...override.commands },
+      budget: { ...defaultPolicy.budget, ...override.budget },
       sampling: { ...defaultPolicy.sampling, ...override.sampling },
       dialogue: { ...defaultPolicy.dialogue, ...override.dialogue },
       execution: { ...defaultPolicy.execution, ...override.execution },

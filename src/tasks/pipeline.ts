@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { rethrowIfExhausted } from "../ai/budget";
 import type { ModelClient } from "../ai/model-client";
 import { sampleUntilValid } from "../ai/sample";
 import type { PlanningRepositoryContext } from "../planning/pipeline";
@@ -188,7 +189,10 @@ function pretty(value: unknown): string {
  * advisory step, which is the wrong thing to be true.
  */
 async function advisoryStage<T>(operation: () => Promise<T>): Promise<T | undefined> {
-  return operation().catch(() => undefined);
+  return operation().catch((error) => {
+    rethrowIfExhausted(error);
+    return undefined;
+  });
 }
 
 async function stage<T>(name: string, operation: () => Promise<T>): Promise<T> {

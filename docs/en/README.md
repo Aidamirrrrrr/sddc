@@ -504,6 +504,13 @@ AI_INPUT_USD_PER_MILLION=optional-input-price
 AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
 ```
 
+`budget.max_model_calls` in `.sddc/policy.yaml` is the whole run's ceiling on model calls
+(default 400), and `--max-calls <n>` overrides it for one invocation. Every other limit in the
+pipeline bounds one loop, and those loops nest — task attempts around loop turns around proposal
+draws around schema repairs — so they multiply rather than add. This is the only place that
+arithmetic is visible. A small feature measures at roughly thirty calls end to end, so the ceiling
+should never fire on work that is going well.
+
 `AI_MAX_OUTPUT_TOKENS` caps a single model **completion** (default 32768,
 minimum 1024). It is not the context window: the window limits the input and is
 never set here, while a model's maximum output is an order of magnitude smaller

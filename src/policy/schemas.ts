@@ -21,6 +21,17 @@ export const policySchema = z.object({
     allowed_programs: z.array(z.string()).min(1),
     allow_external_network: z.boolean(),
   }),
+  budget: z.object({
+    /**
+     * The whole run's ceiling on model calls.
+     *
+     * Sized to bound a runaway rather than to shape a normal run: a small feature measures at
+     * roughly thirty calls end to end, while the nested per-task budgets can multiply into the
+     * hundreds on a graph that keeps refusing itself. It should never fire on work that is going
+     * well, and always fire before an invoice does.
+     */
+    max_model_calls: z.number().int().positive(),
+  }),
   sampling: z.object({
     /**
      * How many candidates a phase may draw before giving up.
