@@ -204,6 +204,21 @@ about to change.
 before any work happens on it, and spending a model call ahead of that approval
 would defeat the mode.
 
+## Language
+
+The interface language is chosen at startup. To stop being asked every run, set
+`SDDC_LANG=ru` or `SDDC_LANG=en` in `~/.config/sddc/.env` and the question is
+skipped. The `--lang` flag overrides both.
+
+**Artifact** language is decided separately, and differently: not by a setting but
+by the document's own content. The model writes prose in the language of the
+request, so each artifact infers its language from its own text. Russian
+requirements never end up under English headings, and one project can hold
+features in different languages without a shared setting.
+
+Headings, field labels and status values are translated; identifiers, paths and
+commands are left alone.
+
 ## Working with an artifact under review
 
 While an artifact waits for a decision, five actions are available:
@@ -234,6 +249,11 @@ is asked to approve, and a YAML diff is a poor place to do that.
 
 The Markdown is one-way: nothing reads it back, so it can never disagree with the
 YAML about what was accepted.
+
+`quickstart.md` is written alongside them: the acceptance trail, listing every
+criterion, the tasks covering it and the commands that prove it. It has no YAML
+twin because nothing parses it — every fact is derived from `spec.yaml` and
+`tasks.yaml`, and asking a model for it would only add a way to disagree with them.
 
 ## Test before implementation
 

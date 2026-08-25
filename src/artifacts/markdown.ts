@@ -1,7 +1,135 @@
 import type { ImplementationPlan } from "../planning/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
+import { detectLanguage, type ProseLanguage, specificationLanguage } from "../spec/language";
 import type { Spec } from "../spec/schemas";
 import type { TaskList } from "../tasks/schemas";
+
+/**
+ * Structure follows content. The model writes an artifact's prose in the language of the request, so
+ * rendering Russian requirements under English headings would make the document read as half
+ * translated. Each renderer infers the language from the artifact it is given.
+ */
+const LABELS = {
+  English: {
+    requirements: "Requirements",
+    requirement: "Requirement",
+    goal: "Goal",
+    acceptance: "Acceptance",
+    criterion: "Acceptance criterion",
+    verifies: "Verifies",
+    issues: "Known issues",
+    kind: "Kind",
+    affects: "Affects",
+    issue: "Issue",
+    decisions: "Open decisions",
+    status: "Status",
+    plan: "Technical plan",
+    approach: "Approach",
+    serves: "Serves",
+    files: "Files",
+    contracts: "Contracts",
+    name: "Name",
+    change: "Change",
+    surface: "Surface",
+    dataModel: "Data model",
+    entity: "Entity",
+    fields: "Fields",
+    implementationDecisions: "Implementation decisions",
+    decision: "Decision",
+    evidence: "Evidence",
+    taskGraph: "Task graph",
+    wave: "Wave",
+    covers: "Covers",
+    after: "After",
+    reads: "Reads",
+    modifies: "Modifies",
+    creates: "Creates",
+    permissions: "Permissions",
+    none: "none",
+    doneWhen: "Done when",
+    risks: "Risks",
+    projectMap: "Project map",
+    relevantFiles: "Relevant files",
+    path: "Path",
+    purpose: "Purpose",
+    symbols: "Symbols",
+    conventions: "Conventions",
+    tests: "Tests",
+    constraints: "Constraints",
+    finding: "Finding",
+    unknown: "Still unknown",
+    quickstart: "Quickstart",
+    walkthrough: "Acceptance walkthrough",
+    coveredBy: "Covered by",
+    nothing: "**nothing**",
+    fullVerification: "Full verification",
+    runInOrder: "Run in dependency order:",
+    ready: "ready",
+    needs_clarification: "needs clarification",
+    needs_decomposition: "needs decomposition",
+  },
+  Russian: {
+    requirements: "Требования",
+    requirement: "Требование",
+    goal: "Цель",
+    acceptance: "Критерии приёмки",
+    criterion: "Критерий приёмки",
+    verifies: "Проверяет",
+    issues: "Известные проблемы",
+    kind: "Тип",
+    affects: "Затрагивает",
+    issue: "Проблема",
+    decisions: "Открытые решения",
+    status: "Статус",
+    plan: "Технический план",
+    approach: "Подход",
+    serves: "Покрывает",
+    files: "Файлы",
+    contracts: "Контракты",
+    name: "Имя",
+    change: "Изменение",
+    surface: "Интерфейс",
+    dataModel: "Модель данных",
+    entity: "Сущность",
+    fields: "Поля",
+    implementationDecisions: "Решения реализации",
+    decision: "Решение",
+    evidence: "Источник",
+    taskGraph: "Граф задач",
+    wave: "Волна",
+    covers: "Покрывает",
+    after: "После",
+    reads: "Читает",
+    modifies: "Изменяет",
+    creates: "Создаёт",
+    permissions: "Разрешения",
+    none: "нет",
+    doneWhen: "Готово, когда",
+    risks: "Риски",
+    projectMap: "Карта проекта",
+    relevantFiles: "Связанные файлы",
+    path: "Путь",
+    purpose: "Назначение",
+    symbols: "Символы",
+    conventions: "Соглашения",
+    tests: "Тесты",
+    constraints: "Ограничения",
+    finding: "Вывод",
+    unknown: "Что пока неизвестно",
+    quickstart: "Быстрая проверка",
+    walkthrough: "Прохождение приёмки",
+    coveredBy: "Покрыто задачами",
+    nothing: "**ничем**",
+    fullVerification: "Полная проверка",
+    runInOrder: "Запускать в порядке зависимостей:",
+    ready: "готово",
+    needs_clarification: "нужны уточнения",
+    needs_decomposition: "нужна декомпозиция",
+  },
+  // No `as const`: the keys must match across languages, but the values are just strings.
+} satisfies Record<ProseLanguage, Record<string, string>>;
+
+type Labels = (typeof LABELS)["English"];
 
 /**
  * The reviewable face of an artifact.
@@ -12,74 +140,77 @@ import type { TaskList } from "../tasks/schemas";
  * the YAML about what was accepted.
  */
 export function specMarkdown(spec: Spec): string {
+  const t = LABELS[specificationLanguage(spec)];
   return document([
-    heading(1, `Requirements · ${spec.feature}`),
-    status(spec.status),
-    heading(2, "Goal"),
+    heading(1, `${t.requirements} · ${spec.feature}`),
+    status(t, spec.status),
+    heading(2, t.goal),
     spec.goal,
     table(
-      ["ID", "Requirement"],
+      ["ID", t.requirement],
       spec.requirements.map((item) => [item.id, item.statement]),
-      "Requirements",
+      t.requirements,
     ),
     table(
-      ["ID", "Verifies", "Acceptance criterion"],
+      ["ID", t.verifies, t.criterion],
       spec.acceptance.map((item) => [item.id, code(item.verifies), item.statement]),
-      "Acceptance",
+      t.acceptance,
     ),
     table(
-      ["ID", "Kind", "Affects", "Issue"],
+      ["ID", t.kind, t.affects, t.issue],
       spec.issues.map((item) => [item.id, item.kind, code(item.affects), item.statement]),
-      "Known issues",
+      t.issues,
     ),
-    questions(spec.questions),
+    questions(t, spec.questions),
   ]);
 }
 
 export function planMarkdown(plan: ImplementationPlan): string {
+  const t = LABELS[detectLanguage(plan.summary, ...plan.approach.map((step) => step.statement))];
   return document([
-    heading(1, `Technical plan · ${plan.feature}`),
-    status(plan.status),
+    heading(1, `${t.plan} · ${plan.feature}`),
+    status(t, plan.status),
     plan.summary,
-    heading(2, "Approach"),
+    heading(2, t.approach),
     list(
       plan.approach.map((step) =>
         [
           `**${step.id}.** ${step.statement}`,
-          step.requirements.length ? `Serves: ${code(step.requirements)}` : "",
-          step.touches.length ? `Files: ${code(step.touches)}` : "",
+          step.requirements.length ? `${t.serves}: ${code(step.requirements)}` : "",
+          step.touches.length ? `${t.files}: ${code(step.touches)}` : "",
         ]
           .filter(Boolean)
           .join("  \n  "),
       ),
     ),
     table(
-      ["Kind", "Name", "Change", "Surface"],
+      [t.kind, t.name, t.change, t.surface],
       plan.contracts.map((item) => [item.kind, item.name, item.change, item.surface]),
-      "Contracts",
+      t.contracts,
     ),
     table(
-      ["Entity", "Change", "Fields"],
+      [t.entity, t.change, t.fields],
       plan.data_model.map((item) => [item.entity, item.change, code(item.fields)]),
-      "Data model",
+      t.dataModel,
     ),
     table(
-      ["Decision", "Evidence"],
+      [t.decision, t.evidence],
       plan.decisions.map((item) => [item.statement, code(item.evidence)]),
-      "Implementation decisions",
+      t.implementationDecisions,
     ),
-    questions(plan.questions),
+    questions(t, plan.questions),
   ]);
 }
 
 export function taskMarkdown(taskList: TaskList): string {
+  const t = LABELS[detectLanguage(taskList.summary, ...taskList.tasks.map((task) => task.title))];
   const waves = [...new Set(taskList.tasks.map((task) => task.wave))].sort((a, b) => a - b);
   return document([
-    heading(1, `Task graph · ${taskList.feature}`),
-    status(taskList.status),
+    heading(1, `${t.taskGraph} · ${taskList.feature}`),
+    status(t, taskList.status),
     taskList.summary,
     ...waves.flatMap((wave) => [
-      heading(2, `Wave ${wave}`),
+      heading(2, `${t.wave} ${wave}`),
       ...taskList.tasks
         .filter((task) => task.wave === wave)
         .map((task) =>
@@ -87,42 +218,83 @@ export function taskMarkdown(taskList: TaskList): string {
             heading(3, `${task.id}${task.parallel ? " `[P]`" : ""} — ${task.title}`),
             task.goal,
             definitions([
-              ["Covers", code([...task.requirements, ...task.acceptance])],
-              ["After", task.depends_on.length ? code(task.depends_on) : "—"],
-              ["Reads", task.files.read.length ? code(task.files.read) : "—"],
-              ["Modifies", task.files.modify.length ? code(task.files.modify) : "—"],
-              ["Creates", task.files.create.length ? code(task.files.create) : "—"],
-              ["Permissions", task.permissions.length ? code(task.permissions) : "none"],
+              [t.covers, code([...task.requirements, ...task.acceptance])],
+              [t.after, task.depends_on.length ? code(task.depends_on) : "—"],
+              [t.reads, task.files.read.length ? code(task.files.read) : "—"],
+              [t.modifies, task.files.modify.length ? code(task.files.modify) : "—"],
+              [t.creates, task.files.create.length ? code(task.files.create) : "—"],
+              [t.permissions, task.permissions.length ? code(task.permissions) : t.none],
             ]),
             fence(
               task.verification
                 .map((item) => `$ ${item.command.program} ${item.command.args.join(" ")}`)
                 .join("\n"),
             ),
-            task.done_when.length ? `**Done when:** ${task.done_when.join("; ")}` : "",
-            task.risks.length ? `**Risks:** ${task.risks.join("; ")}` : "",
+            task.done_when.length ? `**${t.doneWhen}:** ${task.done_when.join("; ")}` : "",
+            task.risks.length ? `**${t.risks}:** ${task.risks.join("; ")}` : "",
           ]),
         ),
     ]),
-    questions(taskList.questions),
+    questions(t, taskList.questions),
+  ]);
+}
+
+/**
+ * The acceptance trail: how someone checks the feature actually works.
+ *
+ * SDD calls this quickstart. It is derived, not generated — every part already exists in the accepted
+ * artifacts, so asking a model for it would only add a way for it to disagree with them.
+ */
+export function quickstartMarkdown(spec: Spec, taskList: TaskList): string {
+  const t = LABELS[specificationLanguage(spec)];
+  const covering = (id: string) => taskList.tasks.filter((task) => task.acceptance.includes(id));
+  const commands = new Set<string>();
+  for (const task of [...taskList.tasks].sort((a, b) => a.wave - b.wave)) {
+    for (const item of task.verification) {
+      commands.add(`${item.command.program} ${item.command.args.join(" ")}`.trim());
+    }
+  }
+
+  return document([
+    heading(1, `${t.quickstart} · ${spec.feature}`),
+    spec.goal,
+    heading(2, t.walkthrough),
+    ...spec.acceptance.map((criterion) => {
+      const tasks = covering(criterion.id);
+      const proofs = tasks.flatMap((task) =>
+        task.verification.map((item) =>
+          `${item.command.program} ${item.command.args.join(" ")}`.trim(),
+        ),
+      );
+      return document([
+        heading(3, `${criterion.id} — ${criterion.statement}`),
+        definitions([
+          [t.verifies, code(criterion.verifies)],
+          [t.coveredBy, tasks.length ? code(tasks.map((task) => task.id)) : t.nothing],
+        ]),
+        proofs.length ? fence([...new Set(proofs)].map((line) => `$ ${line}`).join("\n")) : "",
+      ]);
+    }),
+    heading(2, t.fullVerification),
+    t.runInOrder,
+    fence([...commands].map((line) => `$ ${line}`).join("\n")),
   ]);
 }
 
 export function discoveryMarkdown(discovery: RepositoryDiscovery): string {
+  const t = LABELS[detectLanguage(discovery.summary)];
   return document([
-    heading(1, "Project map"),
+    heading(1, t.projectMap),
     discovery.summary,
     table(
-      ["Path", "Purpose", "Symbols"],
+      [t.path, t.purpose, t.symbols],
       discovery.relevant_files.map((item) => [item.path, item.purpose, code(item.symbols)]),
-      "Relevant files",
+      t.relevantFiles,
     ),
-    evidenceTable("Conventions", discovery.conventions),
-    evidenceTable("Tests", discovery.testing),
-    evidenceTable("Constraints", discovery.constraints),
-    discovery.unknowns.length
-      ? document([heading(2, "Still unknown"), list(discovery.unknowns)])
-      : "",
+    evidenceTable(t, t.conventions, discovery.conventions),
+    evidenceTable(t, t.tests, discovery.testing),
+    evidenceTable(t, t.constraints, discovery.constraints),
+    discovery.unknowns.length ? document([heading(2, t.unknown), list(discovery.unknowns)]) : "",
   ]);
 }
 
@@ -136,8 +308,10 @@ function heading(level: number, text: string): string {
   return `${"#".repeat(level)} ${text}`;
 }
 
-function status(value: string): string {
-  return `*Status: ${value.replace(/_/g, " ")}*`;
+function status(t: Labels, value: string): string {
+  // An untranslated status would leave one English word in an otherwise Russian document.
+  const translated = (t as Record<string, string | undefined>)[value];
+  return `*${t.status}: ${translated ?? value.replace(/_/g, " ")}*`;
 }
 
 function list(items: string[]): string {
@@ -171,20 +345,24 @@ function table(headers: string[], rows: string[][], title: string): string {
 }
 
 function evidenceTable(
+  t: Labels,
   title: string,
   items: Array<{ statement: string; evidence: string[] }>,
 ): string {
   return table(
-    ["Finding", "Evidence"],
+    [t.finding, t.evidence],
     items.map((item) => [item.statement, code(item.evidence)]),
     title,
   );
 }
 
-function questions(items: Array<{ id: string; question: string; reason: string }>): string {
+function questions(
+  t: Labels,
+  items: Array<{ id: string; question: string; reason: string }>,
+): string {
   if (items.length === 0) return "";
   return document([
-    heading(2, "Open decisions"),
+    heading(2, t.decisions),
     list(items.map((item) => `**${item.id}.** ${item.question}  \n  ${item.reason}`)),
   ]);
 }

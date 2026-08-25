@@ -1,5 +1,6 @@
 import { ModelClient } from "../ai/model-client";
 import { formatUsage, sessionUsage } from "../ai/usage";
+import { writeQuickstart } from "../artifacts/storage";
 import { parseCli } from "../cli/args";
 import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
@@ -66,10 +67,12 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
 
+  // Loaded before the language is settled: SDDC_LANG lives in the user config, and reading it after
+  // the prompt would mean asking a question the user has already answered.
+  await loadUserEnvironment();
   if (!cli.stage) begin();
   if (interactive && !cli.stage) await chooseUiLanguage(cli.language);
   else setUiLanguage(cli.language ?? (/^ru/i.test(process.env.LANG ?? "") ? "ru" : "en"));
-  await loadUserEnvironment();
   const client = new ModelClient(loadModelConfig(), cli.thinking);
   if (cli.stage) {
     const input = await readInput(cli.input, "Stage input: ", { noInput: cli.noInput });
@@ -186,6 +189,7 @@ export async function runCli(arguments_: string[]): Promise<void> {
   );
   const tasksPath = await writeTaskList(tasks, root);
   await recordTaskProvenance(root, spec.feature);
+  await writeQuickstart(root, spec, tasks);
   success({ en: `Task graph saved to ${tasksPath}`, ru: `Граф задач сохранён: ${tasksPath}` });
   await persistGovernance(root, spec, discovery, plan, tasks, policy);
   // Every recorded answer now lives in a saved artifact, so the conversation no longer needs replay.

@@ -63,6 +63,7 @@ export async function initializeUserConfig(): Promise<{ path: string; created: b
       "AI_MODEL=",
       "AI_INPUT_USD_PER_MILLION=",
       "AI_MAX_OUTPUT_TOKENS=",
+      "SDDC_LANG=",
       "",
     ].join("\n"),
   );

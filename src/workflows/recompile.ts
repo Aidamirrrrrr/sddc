@@ -1,4 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
+import { writeQuickstart } from "../artifacts/storage";
 import { finish, step, success } from "../cli/ui";
 import { preparePlanningContext } from "../planning/pipeline";
 import { readImplementationPlan, writeImplementationPlan } from "../planning/storage";
@@ -74,6 +75,7 @@ export async function runRecompile(
     );
     const path = await writeTaskList(tasks, root);
     await recordTaskProvenance(root, feature);
+    await writeQuickstart(root, spec, tasks);
     success({ en: `Task graph saved to ${path}`, ru: `Граф задач сохранён: ${path}` });
     await persistGovernance(root, spec, discovery, plan, tasks, policy);
   }

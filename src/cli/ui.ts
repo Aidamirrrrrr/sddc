@@ -40,6 +40,12 @@ export async function chooseUiLanguage(language?: "en" | "ru"): Promise<void> {
     setUiLanguage(language);
     return;
   }
+  // A configured preference is an answer already given; asking again every run is not a choice.
+  const configured = Bun.env.SDDC_LANG?.trim();
+  if (configured) {
+    setUiLanguage(configured);
+    return;
+  }
   setUiLanguage(
     await driver().select(
       "Choose language / Выберите язык",

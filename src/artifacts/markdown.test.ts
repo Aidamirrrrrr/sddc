@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { discovery, readyPlan, readySpec } from "../planning/test-fixtures";
 import { readyTasks } from "../tasks/test-fixtures";
-import { discoveryMarkdown, planMarkdown, specMarkdown, taskMarkdown } from "./markdown";
+import {
+  discoveryMarkdown,
+  planMarkdown,
+  quickstartMarkdown,
+  specMarkdown,
+  taskMarkdown,
+} from "./markdown";
 
 test("a specification renders its requirements and their acceptance together", () => {
   const markdown = specMarkdown(readySpec());
@@ -62,4 +68,49 @@ test("an empty section is omitted rather than left as an empty table", () => {
   expect(markdown).toContain("| src/auth.ts |");
   expect(markdown).not.toContain("## Constraints");
   expect(markdown).not.toContain("## Still unknown");
+});
+
+test("a Russian artifact gets Russian structure, not Russian text under English headings", () => {
+  const spec = readySpec();
+  spec.goal = "Регистрация пользователей";
+  spec.requirements = [{ id: "R1", statement: "Пользователь может зарегистрироваться" }];
+  spec.acceptance = [{ id: "A1", verifies: ["R1"], statement: "Регистрация проходит" }];
+
+  const markdown = specMarkdown(spec);
+
+  expect(markdown).toContain("# Требования · registration");
+  expect(markdown).toContain("*Статус: готово*");
+  expect(markdown).toContain("## Цель");
+  expect(markdown).toContain("| ID | Требование |");
+  expect(markdown).not.toContain("Requirements");
+});
+
+test("an English artifact is unaffected by the Russian catalogue", () => {
+  const markdown = specMarkdown(readySpec());
+
+  expect(markdown).toContain("# Requirements · registration");
+  expect(markdown).toContain("*Status: ready*");
+  expect(markdown).not.toContain("Требования");
+});
+
+test("each artifact picks its own language rather than a global setting", () => {
+  const tasks = readyTasks();
+  tasks.summary = "Реализовать регистрацию в двух задачах.";
+
+  // The task graph is Russian even though the fixture spec beside it is English.
+  expect(taskMarkdown(tasks)).toContain("## Волна 1");
+  expect(specMarkdown(readySpec())).toContain("## Goal");
+});
+
+test("the quickstart follows the specification it is derived from", () => {
+  const spec = readySpec();
+  spec.goal = "Регистрация";
+  spec.requirements = [{ id: "R1", statement: "Регистрация работает" }];
+  spec.acceptance = [{ id: "A1", verifies: ["R1"], statement: "Проверка проходит" }];
+
+  const markdown = quickstartMarkdown(spec, readyTasks());
+
+  expect(markdown).toContain("# Быстрая проверка · registration");
+  expect(markdown).toContain("## Прохождение приёмки");
+  expect(markdown).toContain("**Покрыто задачами:**");
 });
