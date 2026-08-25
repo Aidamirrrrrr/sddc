@@ -4,6 +4,32 @@ import type { Task } from "../tasks/schemas";
 import type { ExecutionFile } from "./context";
 import type { ChangeProposal } from "./schemas";
 
+/**
+ * Checks the model's refusal, not just its work.
+ *
+ * A blocker stops the run and sends the user back to replanning, so a false one is expensive. The
+ * failure seen in practice is a task refusing itself: claiming a file is outside its scope when the
+ * task already lists that file as writable. Nothing upstream can fix that, because there is nothing
+ * to fix — so it is rejected here and goes through the ordinary one-revision repair instead.
+ */
+function validateBlocker(blocker: NonNullable<ChangeProposal["blocker"]>, task: Task): void {
+  const writable = [...task.files.modify, ...task.files.create];
+  const granted = new Set(writable);
+  const alreadyGranted = blocker.required_files.filter((path) => granted.has(path));
+  if (
+    blocker.required_files.length > 0 &&
+    alreadyGranted.length === blocker.required_files.length
+  ) {
+    // This message becomes the repair turn's validation_error, so it states the fact that
+    // contradicts the refusal. Naming the error alone was measured to leave the model blocking.
+    throw new Error(
+      `${task.id} blocked on files it may already write: ${alreadyGranted.join(", ")}. ` +
+        `The task grants write access to ${writable.join(", ")}, so the approved scope is ` +
+        "sufficient and a blocker is wrong. Return the change instead.",
+    );
+  }
+}
+
 export function validateProposal(
   proposal: ChangeProposal,
   task: Task,
@@ -16,6 +42,7 @@ export function validateProposal(
     if (!proposal.blocker) throw new Error(`${task.id} blocked proposal has no blocker`);
     if (proposal.changes.length > 0)
       throw new Error(`${task.id} blocked proposal contains changes`);
+    validateBlocker(proposal.blocker, task);
     return;
   }
   if (proposal.blocker) throw new Error(`${task.id} ready proposal contains a blocker`);

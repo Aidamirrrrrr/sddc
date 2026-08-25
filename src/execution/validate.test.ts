@@ -91,3 +91,63 @@ test("proposal must implement every planned file within the size limit", () => {
     }),
   ).toThrow("generates an oversized file: src/auth.ts");
 });
+
+test("a task that blocks on files it may already write is rejected, not obeyed", () => {
+  const task = readyTasks().tasks[0];
+  if (!task) throw new Error("Fixture must contain a task");
+  const blocked = {
+    task_id: task.id,
+    status: "blocked" as const,
+    summary: "Cannot proceed",
+    blocker: {
+      // Observed in a real run: the model refused a task using a file the task already grants it.
+      reason: "src/auth.ts is listed in files.read but not files.modify",
+      required_files: ["src/auth.ts"],
+      required_decision: "Add src/auth.ts to files.modify",
+    },
+    traceability: [],
+    changes: [],
+  };
+
+  expect(() => validateProposal(blocked, task, [])).toThrow(
+    "blocked on files it may already write: src/auth.ts",
+  );
+});
+
+test("a blocker naming a file outside the approved scope still stops the run", () => {
+  const task = readyTasks().tasks[0];
+  if (!task) throw new Error("Fixture must contain a task");
+  const blocked = {
+    task_id: task.id,
+    status: "blocked" as const,
+    summary: "Needs another file",
+    blocker: {
+      reason: "The change also requires the router",
+      required_files: ["src/router.ts"],
+      required_decision: "Extend the plan to cover routing",
+    },
+    traceability: [],
+    changes: [],
+  };
+
+  expect(() => validateProposal(blocked, task, [])).not.toThrow();
+});
+
+test("a blocker asking for a decision rather than a file is left alone", () => {
+  const task = readyTasks().tasks[0];
+  if (!task) throw new Error("Fixture must contain a task");
+  const blocked = {
+    task_id: task.id,
+    status: "blocked" as const,
+    summary: "Needs a product decision",
+    blocker: {
+      reason: "Whether duplicate emails are allowed is not specified",
+      required_files: [],
+      required_decision: "Decide the duplicate-email behaviour",
+    },
+    traceability: [],
+    changes: [],
+  };
+
+  expect(() => validateProposal(blocked, task, [])).not.toThrow();
+});

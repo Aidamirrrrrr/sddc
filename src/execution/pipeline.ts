@@ -12,6 +12,22 @@ import { validateProposal } from "./validate";
 
 type ObjectGenerator = Pick<ModelClient, "generateObject">;
 
+/**
+ * The default repair instruction warns against expanding scope, which pushes a model that has just
+ * refused a task toward refusing it again. When the refusal itself was what got rejected, the
+ * instruction has to say the opposite.
+ */
+function repairInstruction(rejectedBlocker: boolean): string {
+  return rejectedBlocker
+    ? "Your previous blocker was rejected as factually wrong: the approved scope already covers " +
+        "every file you need. Produce the change instead of a blocker."
+    : "Correct the proposal once without expanding the approved scope.";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function buildTaskProposal(
   client: ObjectGenerator,
   root: string,
@@ -32,9 +48,11 @@ export async function buildTaskProposal(
     revisions += 1;
     proposal = await generate(client, {
       ...context,
-      rejected_proposal: proposal,
-      validation_error: error instanceof Error ? error.message : String(error),
-      instruction: "Correct the proposal once without expanding the approved scope.",
+      // A rejected blocker's stated reason is wrong by definition, and echoing it back was measured
+      // to re-anchor the model on it. Only the fact that it was refused travels forward.
+      rejected_proposal: proposal.status === "blocked" ? { status: "blocked" } : proposal,
+      validation_error: errorMessage(error),
+      instruction: repairInstruction(proposal.status === "blocked"),
     });
     validateProposal(proposal, task, files, policy);
   }
@@ -47,7 +65,7 @@ export async function buildTaskProposal(
     proposal = await generate(client, {
       ...context,
       rejected_proposal: proposal,
-      review_error: error instanceof Error ? error.message : String(error),
+      review_error: errorMessage(error),
       instruction: "Correct the reviewed proposal once without expanding the approved scope.",
     });
     validateProposal(proposal, task, files, policy);
