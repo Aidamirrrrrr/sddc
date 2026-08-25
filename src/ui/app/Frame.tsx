@@ -77,14 +77,26 @@ export function StageIndicator({
   budget?: { used: number; limit: number };
 }) {
   const parts = [clock(elapsedMs), `${calls} calls`];
-  if (budget) parts.push(`${budget.used}/${budget.limit} budget`);
+  if (budget) parts.push(`${budget.used}/${budget.limit}`);
+  parts.push("esc to interrupt");
+  const counters = `(${parts.join(" · ")})`;
   return (
     <Box marginBottom={1}>
-      <Text color={theme.accent}>{`  ${FRAMES[tick % FRAMES.length]}  `}</Text>
-      <Text color={theme.text}>{label}</Text>
-      <Text color={theme.muted} dimColor>
-        {`  (${parts.join(" · ")} · esc to interrupt)`}
-      </Text>
+      <Box marginLeft={2} marginRight={2}>
+        <Text color={theme.accent}>{FRAMES[tick % FRAMES.length]}</Text>
+      </Box>
+      {/* The label yields, not the counters: a stage name that wraps pushes the numbers off the
+          line and leaves the reader with neither half. */}
+      <Box flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text color={theme.text} wrap="truncate-end">
+          {label}
+        </Text>
+      </Box>
+      <Box marginLeft={2} flexShrink={0}>
+        <Text color={theme.muted} dimColor wrap="truncate-end">
+          {counters}
+        </Text>
+      </Box>
     </Box>
   );
 }

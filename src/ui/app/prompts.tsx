@@ -1,7 +1,8 @@
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import { useMemo, useState } from "react";
 import type { Choice, TextOptions } from "../driver";
 import { theme } from "../theme";
+import { useKeys } from "./keys";
 
 /** How many rows a list prompt shows before it starts scrolling. */
 const WINDOW = 12;
@@ -81,7 +82,7 @@ export function SelectPrompt({
         );
   });
 
-  useInput((_input, key) => {
+  useKeys((_input, key) => {
     if (key.upArrow) setCursor((current) => nextEnabled(choices, current, -1));
     else if (key.downArrow) setCursor((current) => nextEnabled(choices, current, 1));
     else if (key.return) {
@@ -137,7 +138,7 @@ export function ConfirmPrompt({
 }) {
   const [value, setValue] = useState(initial);
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     if (key.leftArrow || key.rightArrow || input === "\t") setValue((current) => !current);
     else if (input.toLowerCase() === "y") onSubmit(true);
     else if (input.toLowerCase() === "n") onSubmit(false);
@@ -182,7 +183,7 @@ export function MultiSelectPrompt({
   const visible = useMemo(() => filterChoices(choices, query), [choices, query]);
   const window = windowAround(visible, cursor);
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     if (key.upArrow) setCursor((current) => Math.max(0, current - 1));
     else if (key.downArrow) setCursor((current) => Math.min(visible.length - 1, current + 1));
     else if (input === " ") {
@@ -255,7 +256,7 @@ export function TextPrompt({
   const [value, setValue] = useState(options.initial ?? "");
   const [error, setError] = useState("");
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     if (key.return) {
       if (options.required && !value.trim()) {
         setError(options.requiredMessage ?? "An answer is required");

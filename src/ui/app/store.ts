@@ -14,7 +14,9 @@ export type Tone = "info" | "success" | "warn" | "danger" | "accent";
 export type Block =
   | { id: number; kind: "line"; tone: Tone; text: string }
   | { id: number; kind: "panel"; title: string; body: string }
-  | { id: number; kind: "answer"; question: string; answer: string };
+  | { id: number; kind: "answer"; question: string; answer: string }
+  /** Something the user typed at the command line, echoed so the transcript reads as a session. */
+  | { id: number; kind: "command"; text: string };
 
 /** `Omit` collapses a union into its shared keys, so it has to be distributed by hand. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

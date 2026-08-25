@@ -1,13 +1,16 @@
-import { Box, Static, type SuspendTerminal, Text, useApp, useInput, useStdin } from "ink";
+import { Box, Static, type SuspendTerminal, Text, useApp } from "ink";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { budgetState } from "../../ai/budget";
 import { requestInterrupt } from "../../ai/interrupt";
 import { sessionUsage } from "../../ai/usage";
 import { theme } from "../theme";
+import { CommandLine } from "./CommandLine";
+import { runCommand } from "./commands";
 import { Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
+import { useKeys } from "./keys";
 import { Panel, PanelBody } from "./Panel";
 import { ConfirmPrompt, MultiSelectPrompt, SelectPrompt, TextPrompt } from "./prompts";
-import type { Block, Store, Tone } from "./store";
+import type { AppState, Block, Store, Tone } from "./store";
 
 const toneColor: Record<Tone, string> = {
   info: theme.text,
@@ -41,7 +44,6 @@ export function App({
   // owns, and duplicating them here would give the frame a second version of the truth to drift from.
   const usage = sessionUsage();
   const budget = budgetState();
-  const { isRawModeSupported } = useStdin();
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -55,24 +57,18 @@ export function App({
     return () => clearInterval(timer);
   }, [state.stage]);
 
-  // Keyboard handling needs raw mode. Guarding keeps a non-TTY stdin from throwing out of render
-  // and taking the whole frame down with it.
-  useInput(
-    (input, key) => {
-      if (key.ctrl && input === "c") {
-        exit();
-        process.exit(0);
-      }
-      // Only while work is in flight: outside a stage there is nothing to interrupt, and escape is
-      // the key people press to dismiss things.
-      if (key.escape && state.stage && !state.pending) {
-        requestInterrupt();
-        store.push({ kind: "line", tone: "warn", text: "Interrupting after the current request…" });
-      }
-    },
-    // Ink only honours the guard when it is strictly `false`, so coerce rather than pass through.
-    { isActive: isRawModeSupported === true },
-  );
+  useKeys((input, key) => {
+    if (key.ctrl && input === "c") {
+      exit();
+      process.exit(0);
+    }
+    // Only while work is in flight: outside a stage there is nothing to interrupt, and escape is
+    // the key people press to dismiss things.
+    if (key.escape && state.stage && !state.pending) {
+      requestInterrupt();
+      store.push({ kind: "line", tone: "warn", text: "Interrupting after the current request…" });
+    }
+  });
 
   return (
     <Box flexDirection="column">
@@ -99,7 +95,21 @@ export function App({
               budget={budget}
             />
           ) : null}
-          {state.pending ? <PendingPrompt store={store} /> : null}
+          {state.pending ? (
+            <PendingPrompt store={store} />
+          ) : (
+            <CommandLine
+              busy={Boolean(state.stage)}
+              onCommand={(input) => handleCommand(input, state, store, exit)}
+              onPlainText={() =>
+                store.push({
+                  kind: "line",
+                  tone: "warn",
+                  text: "This run is driven by its phases; type /help for what you can do here.",
+                })
+              }
+            />
+          )}
           {state.pending ? null : (
             <StatusBar
               state={state}
@@ -112,6 +122,21 @@ export function App({
       )}
     </Box>
   );
+}
+
+/** Turns a command's described outcome into what the surface actually does with it. */
+function handleCommand(input: string, state: AppState, store: Store, exit: () => void): void {
+  store.push({ kind: "command", text: input });
+  const outcome = runCommand(input, { state });
+  if (outcome.kind === "quit") {
+    exit();
+    process.exit(0);
+  }
+  if (outcome.kind === "panel") {
+    store.push({ kind: "panel", title: outcome.title, body: outcome.body });
+    return;
+  }
+  store.push({ kind: "line", tone: outcome.tone, text: outcome.text });
 }
 
 function PendingPrompt({ store }: { store: Store }) {
@@ -159,6 +184,16 @@ function HistoryBlock({ block }: { block: Block }) {
       <Panel title={block.title}>
         <PanelBody body={block.body} />
       </Panel>
+    );
+  }
+  if (block.kind === "command") {
+    return (
+      <Box>
+        <Text color={theme.accent} bold>
+          {"  > "}
+        </Text>
+        <Text color={theme.text}>{block.text}</Text>
+      </Box>
     );
   }
   if (block.kind === "answer") {
