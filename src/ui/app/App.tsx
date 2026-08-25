@@ -123,7 +123,7 @@ export function App({
           ) : (
             <CommandLine
               paths={state.paths ?? []}
-              busy={Boolean(state.stage) || !state.awaitingRequest}
+              mode={state.stage ? "working" : state.awaitingRequest ? "ready" : "starting"}
               onCommand={(input) => handleCommand(input, state, store, exit)}
               onPlainText={(input) => {
                 if (state.awaitingRequest) {

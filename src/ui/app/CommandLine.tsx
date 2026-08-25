@@ -27,15 +27,23 @@ const VISIBLE = 6;
  * Deliberately inert for anything that is not a command: this surface drives a pipeline rather than
  * a conversation, and quietly swallowing a sentence someone typed would be worse than saying so.
  */
+/**
+ * What the line is currently able to do.
+ *
+ * Three states, not two. Treating "not ready yet" as "busy" made the very first frame of a session
+ * announce work that had not started — a small lie, but the first thing anyone sees.
+ */
+export type LineMode = "ready" | "working" | "starting";
+
 export function CommandLine({
   onCommand,
   onPlainText,
-  busy,
+  mode,
   paths = [],
 }: {
   onCommand: (input: string) => void;
   onPlainText: (input: string) => void;
-  busy: boolean;
+  mode: LineMode;
   /** Repository paths offered after an `@`; empty until the index has been read. */
   paths?: string[];
 }) {
@@ -140,7 +148,7 @@ export function CommandLine({
       <Box
         flexDirection="column"
         borderStyle="round"
-        borderColor={busy ? theme.accentDim : theme.accent}
+        borderColor={mode === "ready" ? theme.accent : theme.accentDim}
         paddingX={1}
       >
         {value ? (
@@ -158,15 +166,7 @@ export function CommandLine({
           <Box>
             <Text color={theme.accent}>{"> "}</Text>
             <Text color={theme.muted} dimColor>
-              {busy
-                ? t({
-                    en: "working — /status, /stop, /help",
-                    ru: "работаю — /status, /stop, /help",
-                  })
-                : t({
-                    en: "what should I build? · / commands · @ files · \\ newline",
-                    ru: "что построить? · / команды · @ файлы · \\ перенос",
-                  })}
+              {placeholder(mode)}
             </Text>
             <Text color={theme.accent}>▏</Text>
           </Box>
@@ -174,6 +174,17 @@ export function CommandLine({
       </Box>
     </Box>
   );
+}
+
+export function placeholder(mode: LineMode): string {
+  if (mode === "working") {
+    return t({ en: "working — /status, /stop, /help", ru: "работаю — /status, /stop, /help" });
+  }
+  if (mode === "starting") return t({ en: "starting…", ru: "запускаюсь…" });
+  return t({
+    en: "what should I build? · / commands · @ files · \\ newline",
+    ru: "что построить? · / команды · @ файлы · \\ перенос",
+  });
 }
 
 /** A completion offer, whether it came from the command registry or the repository index. */
