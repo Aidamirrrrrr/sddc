@@ -10,11 +10,24 @@ export function normalizeClarificationQuestions(
   }));
 }
 
+/**
+ * Removes a suggested answer from a question, and nothing else.
+ *
+ * A question that carries its own example answers it for the user, which is what the prompts already
+ * forbid; this is the deterministic backstop. It stops at the end of the sentence the example is in:
+ * cutting to the end of the string also deleted every question that followed, turning one
+ * over-helpful clause into lost questions.
+ *
+ * The word boundary is spelled out rather than written `\b`, which is defined over ASCII word
+ * characters and therefore never matches after a Cyrillic word — so on Russian questions, the very
+ * language this runs on most, the rule silently did nothing at all.
+ */
 function stripSuggestedExamples(question: string): string {
   return question
     .replace(/\s*\((?:например|for example|e\.g\.)[^)]*\)/giu, "")
-    .replace(/,\s*(?:например|for example|e\.g\.)\b[^?]*(?=\?|$)/giu, "")
-    .replace(/\s+(?:например|for example|e\.g\.)\b.*$/giu, "")
+    .replace(/[,;]\s*(?:например|for example|e\.g\.)(?!\p{L})[^.?!]*/giu, "")
+    .replace(/\s+(?:например|for example|e\.g\.)(?!\p{L})[^.?!]*/giu, "")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
 

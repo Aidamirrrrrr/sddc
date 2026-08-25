@@ -151,6 +151,235 @@ sddc --recompile execute -- registration  # implement the stored task graph
 
 The feature name may be omitted when `.specs` holds exactly one feature.
 
+## Interface
+
+In an interactive terminal the agent runs as an application: a persistent phase
+rail across the top carrying each phase's state, the live region of the current
+stage below it, and a status line at the bottom. Finished documents, answers and
+events scroll into the terminal's own scrollback, so history stays selectable with
+the mouse and survives the session.
+
+All output goes through a single driver (`src/ui/`), which keeps the modes
+consistent:
+
+- interactive TTY — the Ink application;
+- `--plain` — stable lines;
+- `--json` — one event per line;
+- non-TTY or `--no-input` — line output that never prompts.
+
+No pipeline stage writes to stdout directly, so the interface can change without
+touching a workflow.
+
+## Cost and prefix caching
+
+Within a phase every stage appends its predecessor's output to the same context
+object, so everything before that appendix repeats verbatim. To let a provider use
+that, requests are composed **context first, instruction last**: the system message
+is constant across stages and the stage instruction trails the user message. Had
+the instruction stayed in the system message, the prefix would diverge at token
+zero and nothing would ever be cached.
+
+This pays off on providers with automatic prefix caching (OpenAI, DeepSeek, most
+vLLM deployments). Providers that require explicit cache breakpoints cannot express
+them through an OpenAI-compatible API.
+
+A run ends with a summary: model calls, input and output tokens, and the share of
+input the provider served from cache. The share appears only when the provider
+reports it, and it is what tells you whether caching is actually working.
+
+## Parallel waves
+
+Tasks in a wave are independent by construction, and model latency dominates a run.
+So proposals for the siblings of the current task are generated concurrently while
+it waits for review. Writing, verifying and approving stay strictly ordered — the
+terminal must never host two conversations at once.
+
+Not every task in a wave is prefetched. Policy forbids two tasks writing the same
+file without ordering, but **reading another task's write is not forbidden**. A task
+that reads a file a wave sibling modifies or creates is prepared in the normal
+order, because generating it early would build its proposal from content that is
+about to change.
+
+`strict` mode never prefetches at all. It exists so the user authorizes each task
+before any work happens on it, and spending a model call ahead of that approval
+would defeat the mode.
+
+## Language
+
+The interface language is chosen at startup. To stop being asked every run, set
+`SDDC_LANG=ru` or `SDDC_LANG=en` in `~/.config/sddc/.env` and the question is
+skipped. The `--lang` flag overrides both.
+
+**Artifact** language is decided separately, and differently: not by a setting but
+by the document's own content. The model writes prose in the language of the
+request, so each artifact infers its language from its own text. Russian
+requirements never end up under English headings, and one project can hold
+features in different languages without a shared setting.
+
+Headings, field labels and status values are translated; identifiers, paths and
+commands are left alone.
+
+## Working with an artifact under review
+
+While an artifact waits for a decision, five actions are available:
+
+- **Accept** — continue to the next phase;
+- **View full document** — expand the summary;
+- **Edit directly** — open the YAML in `$EDITOR` and change it by hand;
+- **Ask for a revision** — describe what is wrong and rebuild;
+- **Decisions so far** — show everything already answered in this phase.
+
+Editing directly removes the model from a decision it was never needed for:
+describing in prose a change you could simply write is a lossy round trip. Edited
+YAML is validated against the schema; if it does not parse, the edit is rejected
+and the previous artifact stands. Task waves are re-derived rather than taken from
+the file — they are computed, never authored.
+
+Editing and inspecting decisions do not spend a revision round, because neither
+changes anything upstream.
+
+Going back to an earlier phase happens between runs, with `--recompile`.
+
+## Artifact format
+
+Every artifact is written twice. YAML is the machine format — it is what the
+pipeline parses and validates. The Markdown beside it (`spec.md`, `plan.md`,
+`tasks.md`, `discovery.md`) exists for review: an artifact is the thing a person
+is asked to approve, and a YAML diff is a poor place to do that.
+
+The Markdown is one-way: nothing reads it back, so it can never disagree with the
+YAML about what was accepted.
+
+`quickstart.md` is written alongside them: the acceptance trail, listing every
+criterion, the tasks covering it and the commands that prove it. It has no YAML
+twin because nothing parses it — every fact is derived from `spec.yaml` and
+`tasks.yaml`, and asking a model for it would only add a way to disagree with them.
+
+## Instability and sampling
+
+`temperature: 0` does not make a served model deterministic: the same input yields a
+different task graph from one run to the next. Wording cannot fix that — the spread
+comes from inference, not from the prompt.
+
+So the goal is not a stable graph but a narrow one: constrain the set of acceptable
+graphs until **any** sample that passes is executable. The spread then stops being a
+problem and becomes a resource — the wider it is, the likelier some sample passes.
+
+The task phase draws up to `sampling.max_attempts` candidates (3 by default) and
+takes the first that satisfies the validators. The first draw runs the full
+draft/audit/review chain; later ones repair against the rejection, which is cheaper
+and better informed than starting over.
+
+The verifier here is free and deterministic, so an extra draw costs one model call
+and buys a real chance of a valid artifact. It is also the rejection-sampling
+mechanism a distilled model would need for training.
+
+## Acceptance ownership
+
+An acceptance criterion belongs to **exactly one** task. A requirement may be served
+by several.
+
+The reason is simple: a criterion is a test, and a test has one home. If a criterion
+is split across four tasks then none of them implements it, and the per-task check
+"all claimed criteria are implemented" becomes impossible to satisfy. Splitting also
+destroys credit assignment: a failing criterion no longer names a task.
+
+Coverage becomes a **partition** rather than a cover, which is exactly what makes it
+checkable by code.
+
+A task that serves a requirement without completing a criterion leaves `acceptance`
+empty, which is legitimate. Under test-first the criterion belongs to the task that
+writes the test verifying it, and the implementation serves requirements.
+
+## Test before implementation
+
+SDD Article III — no implementation before its test — is marked non-negotiable.
+Here it is expressed as policy rather than as a request in a prompt:
+
+```yaml
+changes:
+  require_test_before_implementation: true
+```
+
+With the rule on, a task that changes **behavioural** source must depend on a
+separate earlier task that writes the test. Writing the test in the same task does
+not count: "before" would then mean nothing, and the ordering is exactly what the
+article is about.
+
+Configuration, documentation and lockfiles need no test behind them — they carry no
+behaviour to assert, and demanding one would only teach people to switch the rule
+off.
+
+A task that writes **only** tests must leave verification red. A test that passes
+before its implementation exists asserts nothing, so a green result is the failure for
+such a task. The expectation is derived from the task's file list rather than declared
+by the model — it cannot be faked, any more than a wave can.
+
+The rule is checked on the graph, before anything runs, and is **off** by default.
+Turning it on before the eval corpus shows models reliably produce conforming
+graphs would fail every run.
+
+## Evaluating quality
+
+Editing a prompt or trimming context changes what the model produces, and without
+a measurement that is a blind bet. An eval corpus makes the change measurable.
+
+Nothing has to be hand-labelled: a stored feature already holds artifacts a user
+reviewed and approved. Recording a case is a copy.
+
+```bash
+sddc --eval-record -- registration   # record an accepted run as a case
+sddc --eval                          # score the corpus, no model calls
+sddc --eval --live                   # regenerate plan and tasks, then score
+```
+
+Scoring reuses the pipeline's own validators instead of inventing a rubric: they
+already encode what correct means here, they cannot be argued with, and they run
+without a model. Cases are checked for `spec-valid`, `plan-valid`, `tasks-valid`
+and `tasks-policy`; coverage gaps are counted separately — not failures, but the
+number should not grow.
+
+Offline, the corpus replays recorded artifacts, which catches a validator change
+that silently starts rejecting work a user already accepted. With `--live`, plan
+and tasks are rebuilt from the recorded specification, which is what makes a
+prompt or context change verifiable.
+
+The command exits non-zero when a case fails, so it can gate CI or a pre-commit
+hook.
+
+## Consistency analysis
+
+Stored artifacts are meant to be edited, so the agent records which version of its
+input each derived artifact came from (`provenance.yaml`). One command reports the
+drift without changing anything:
+
+```bash
+sddc --analyze -- registration
+```
+
+It reports two kinds of problem. **stale** means an artifact was derived from an
+input version that no longer exists on disk — `spec.yaml` was edited while
+`plan.yaml` still answers the previous requirements. **gap** means a requirement or
+acceptance criterion that no plan step or task claims to serve. The per-phase
+validators cannot see either one, because each of them only ever looks at a single
+phase.
+
+## Dialogue and limits
+
+Answers to clarifying questions are written to `.specs/session.yaml` as soon as they
+are typed. When a stage fails, rerunning the same request continues from the answers
+already given instead of restarting the conversation. A session is keyed by the
+request text, so answers are never replayed into a different request. Once the task
+graph is stored the session is cleared, because every answer now lives in an artifact.
+
+Round counts are bounded by policy so the model cannot loop the dialogue:
+
+```yaml
+dialogue:
+  max_clarification_rounds: 3
+  max_revision_rounds: 5
+```
+
 ## Policy And Decisions
 
 Planning is constrained by a deterministic policy, not by model judgment alone.
@@ -174,6 +403,7 @@ changes:
   max_files_per_task: 4
   max_generated_file_bytes: 131072
   require_dependency_permission: true
+  require_test_before_implementation: false
 execution:
   default_approval_mode: normal
   max_changed_lines_per_task: 400
@@ -271,7 +501,33 @@ AI_API_TOKEN=your-token
 AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
+AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
 ```
+
+`budget.max_model_calls` in `.sddc/policy.yaml` is the whole run's ceiling on model calls
+(default 400), and `--max-calls <n>` overrides it for one invocation. Every other limit in the
+pipeline bounds one loop, and those loops nest — task attempts around loop turns around proposal
+draws around schema repairs — so they multiply rather than add. This is the only place that
+arithmetic is visible. A small feature measures at roughly thirty calls end to end, so the ceiling
+should never fire on work that is going well.
+
+`AI_MAX_OUTPUT_TOKENS` caps a single model **completion** (default 32768,
+minimum 1024). It is not the context window: the window limits the input and is
+never set here, while a model's maximum output is an order of magnitude smaller
+than it. On reasoning models the thinking tokens are billed against this same
+budget, so a value that is too small yields an empty response on heavy stages
+such as `tasks-audit`. When a response does come back empty, the agent retries
+once with reasoning degraded so the whole budget goes to the answer.
+
+`AI_REQUEST_TIMEOUT_SECONDS` bounds how long one request may stay open (default 300, minimum
+10). A connection that opens and then goes quiet is indistinguishable from a slow model, so without
+a bound an unattended run waits on it forever. A timed-out request is retried; one you cancelled is
+not.
+
+Set `AI_MAX_OUTPUT_TOKENS=off` to send no cap at all and leave the model's own
+maximum in force. That is the right setting when the endpoint is a flat-rate or
+self-hosted one; against a per-token endpoint the default is a deliberate bound
+on an otherwise open-ended bill.
 
 Process environment variables take precedence over the user configuration.
 To install a development build from this repository, run

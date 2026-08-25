@@ -1,0 +1,180 @@
+context: 
+  files: 
+    - src/store.ts
+    - src/store.test.ts
+    - evals/archive-note/spec.yaml
+    - evals/archive-note/tasks.yaml
+    - evals/archive-note/discovery.yaml
+    - evals/archive-note/plan.yaml
+    - evals/archive-note/policy.yaml
+    - evals/add-note-tag/spec.yaml
+    - evals/add-tag-to-note/spec.yaml
+    - progress.log
+    - README.md
+    - package.json
+  user_context: ""
+summary: "The repository is a small TypeScript project using Bun as the runtime and test runner. The core is an in-memory note store in src/store.ts with functions to add, list, and get notes. Tests are in src/store.test.ts. The project follows a specification-driven development process with a constitution and policy, and there are existing evaluation artifacts for a similar feature (adding tags). The specification for deleting notes by id is ready, and the implementation should follow the established patterns."
+technologies: 
+  - name: TypeScript
+    purpose: "The source code is written in TypeScript, as seen in src/store.ts and src/store.test.ts."
+    evidence: 
+      - src/store.ts
+      - src/store.test.ts
+  - name: Bun
+    purpose: "Bun is used as the runtime and test runner, as indicated by the package.json script and the test file's import from 'bun:test'."
+    evidence: 
+      - package.json
+      - src/store.test.ts
+structure: 
+  - area: Source
+    purpose: Contains the main store implementation.
+    evidence: 
+      - src/store.ts
+  - area: Tests
+    purpose: Contains tests for the store.
+    evidence: 
+      - src/store.test.ts
+  - area: Project configuration
+    purpose: Defines project metadata and scripts.
+    evidence: 
+      - package.json
+  - area: Documentation
+    purpose: Provides an overview of the project.
+    evidence: 
+      - README.md
+  - area: Process artifacts
+    purpose: Contains logs and policy/constitution files that guide the development process.
+    evidence: 
+      - progress.log
+      - evals/archive-note/policy.yaml
+  - area: Evaluation artifacts
+    purpose: "Contains specifications and task graphs for previous features, which can serve as templates."
+    evidence: 
+      - evals/archive-note/spec.yaml
+      - evals/archive-note/tasks.yaml
+      - evals/archive-note/discovery.yaml
+      - evals/archive-note/plan.yaml
+      - evals/add-note-tag/spec.yaml
+      - evals/add-tag-to-note/spec.yaml
+relevant_files: 
+  - path: src/store.ts
+    purpose: "Contains the Note type and the store functions (addNote, listNotes, getNote) that will need to be extended to support deletion."
+    symbols: 
+      - Note
+      - addNote
+      - listNotes
+      - getNote
+      - resetNotes
+  - path: src/store.test.ts
+    purpose: Contains tests for the store; new tests for deletion should be added here.
+    symbols: 
+      - addNote
+      - getNote
+      - listNotes
+      - resetNotes
+  - path: README.md
+    purpose: Documents the current behavior; may need to be updated to mention deletion.
+    symbols: 
+      []
+  - path: package.json
+    purpose: Defines the test script; used to run tests.
+    symbols: 
+      []
+  - path: evals/archive-note/spec.yaml
+    purpose: "Provides a template for the specification format, which is similar to the current delete-note-by-id spec."
+    symbols: 
+      []
+  - path: evals/archive-note/tasks.yaml
+    purpose: "Provides a template for the task graph structure, which can be adapted for the delete feature."
+    symbols: 
+      []
+  - path: evals/archive-note/discovery.yaml
+    purpose: Provides a template for the discovery report format.
+    symbols: 
+      []
+  - path: evals/archive-note/plan.yaml
+    purpose: Provides a template for the technical plan format.
+    symbols: 
+      []
+  - path: evals/archive-note/policy.yaml
+    purpose: "Defines the policy for changes, including test-before-implementation and file limits."
+    symbols: 
+      []
+  - path: evals/add-note-tag/spec.yaml
+    purpose: Another example of a specification for a similar feature.
+    symbols: 
+      []
+  - path: evals/add-tag-to-note/spec.yaml
+    purpose: Another example of a specification for a similar feature.
+    symbols: 
+      []
+  - path: progress.log
+    purpose: "Contains logs of the development process, showing the sequence of steps."
+    symbols: 
+      []
+conventions: 
+  - statement: The store is the single source of truth for notes; nothing else keeps its own copy.
+    evidence: 
+      - evals/archive-note/discovery.yaml
+  - statement: "Public functions keep backward-compatible signatures: new parameters are optional."
+    evidence: 
+      - evals/archive-note/discovery.yaml
+  - statement: "Every behavioural change is covered by a test in the sibling `*.test.ts` file."
+    evidence: 
+      - evals/archive-note/discovery.yaml
+  - statement: Tests must be written before implementation.
+    evidence: 
+      - evals/archive-note/policy.yaml
+      - evals/archive-note/discovery.yaml
+  - statement: "The test suite is run with `bun test`."
+    evidence: 
+      - package.json
+      - evals/archive-note/discovery.yaml
+testing: 
+  - statement: "Tests are written using Bun's test runner, as seen in src/store.test.ts."
+    evidence: 
+      - src/store.test.ts
+  - statement: "The test file imports from 'bun:test' and uses `beforeEach` to reset the store."
+    evidence: 
+      - src/store.test.ts
+  - statement: "The test suite is run with `bun test`."
+    evidence: 
+      - package.json
+constraints: 
+  - statement: The store is the single source of truth for notes; nothing else keeps its own copy.
+    evidence: 
+      - evals/archive-note/discovery.yaml
+  - statement: "Public functions keep backward-compatible signatures: new parameters are optional."
+    evidence: 
+      - evals/archive-note/discovery.yaml
+  - statement: "Every behavioural change is covered by a test in the sibling `*.test.ts` file."
+    evidence: 
+      - evals/archive-note/discovery.yaml
+  - statement: Tests must be written before implementation.
+    evidence: 
+      - evals/archive-note/policy.yaml
+      - evals/archive-note/discovery.yaml
+  - statement: "The maximum number of files per task is 6, and the maximum number of created files per task is 3."
+    evidence: 
+      - evals/archive-note/policy.yaml
+  - statement: The maximum generated file size is 131072 bytes.
+    evidence: 
+      - evals/archive-note/policy.yaml
+  - statement: "Certain paths are forbidden: .git, .specs, .env, credentials."
+    evidence: 
+      - evals/archive-note/policy.yaml
+  - statement: "Only certain programs are allowed to be run: bun, cargo, deno, go, make, node, npm, npx, pnpm, pytest, python, python3, yarn."
+    evidence: 
+      - evals/archive-note/policy.yaml
+  - statement: External network access is not allowed.
+    evidence: 
+      - evals/archive-note/policy.yaml
+unknowns: 
+  - The exact naming and signature of the delete function is not specified.
+  - Whether the delete function should return the deleted note or a boolean is not specified.
+  - "Whether the delete function should handle non-existent ids gracefully (e.g., return undefined) is not specified."
+  - "Whether the delete operation should be reversible (e.g., undo) is not specified."
+  - Whether the listNotes function should be affected by deletion beyond the note being removed is not specified.
+  - Whether the getNote function should return undefined for deleted notes is implied by the acceptance criteria but not explicitly stated in the specification.
+  - The exact behavior of the delete function when the id does not exist is not specified.
+  - "Whether the README should be updated to document the delete feature is not specified in the specification, but it is a common convention in this project."

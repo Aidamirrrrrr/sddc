@@ -1,0 +1,212 @@
+import { Box, Text } from "ink";
+import { t } from "../language";
+import { phaseColor, phaseGlyph, theme } from "../theme";
+import type { AppState, Phase } from "./store";
+
+const CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+
+export function Header({ heading, subtitle }: { heading: string; subtitle: string }) {
+  return (
+    <Box marginBottom={1}>
+      <Text backgroundColor={theme.accent} color={theme.surface} bold>
+        {` ◆ ${heading} `}
+      </Text>
+      <Text backgroundColor={theme.surfaceRaised} color={theme.muted}>
+        {` ${subtitle} `}
+      </Text>
+    </Box>
+  );
+}
+
+/**
+ * What the session is working on and with, said once at the top.
+ *
+ * Printed into the scrollback rather than the live frame: it is the answer to "which project, which
+ * model, which rules" and someone scrolling back to check should find it where it happened, not
+ * pinned to the bottom of a screen that has moved on.
+ */
+export function Banner({
+  version,
+  project,
+  model,
+  facts,
+}: {
+  version: string;
+  project: string;
+  model: string;
+  facts: string[];
+}) {
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Box>
+        <Text backgroundColor={theme.accent} color={theme.surface} bold>
+          {"  ◆ sddc  "}
+        </Text>
+        <Text backgroundColor={theme.surfaceRaised} color={theme.text}>
+          {`  ${version}  `}
+        </Text>
+        <Text backgroundColor={theme.surfaceRaised} color={theme.muted}>
+          {`${project}  `}
+        </Text>
+      </Box>
+      <Box marginTop={1} marginLeft={2}>
+        <Text color={theme.muted}>{t({ en: "model  ", ru: "модель  " })}</Text>
+        <Text color={theme.text}>{model}</Text>
+      </Box>
+      {facts.map((fact) => (
+        <Box key={fact} marginLeft={2}>
+          <Text color={theme.muted}>{fact}</Text>
+        </Box>
+      ))}
+      <Box marginLeft={2} marginTop={1}>
+        <Text color={theme.muted} dimColor>
+          {t({
+            en: "/help for commands · esc interrupts · ctrl+c exits",
+            ru: "/help — команды · esc — прервать · ctrl+c — выход",
+          })}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+/** The persistent rail: what the run is made of, and where it currently is. */
+export function PhaseRail({ phases }: { phases: Phase[] }) {
+  if (phases.length === 0) return null;
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      {phases.map((phase, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a phase *is* its position in the run
+        <PhaseRow key={index} index={index} phase={phase} />
+      ))}
+    </Box>
+  );
+}
+
+function PhaseRow({ index, phase }: { index: number; phase: Phase }) {
+  const color = phaseColor(phase.state);
+  const active = phase.state === "active";
+  return (
+    <Box>
+      <Text color={active ? theme.accent : theme.muted}>{`  ${CIRCLED[index] ?? "·"}  `}</Text>
+      <Text color={color} bold={active}>
+        {phaseGlyph[phase.state]}
+      </Text>
+      <Text color={active ? theme.text : theme.muted} bold={active}>
+        {`  ${phase.label || "…"}`}
+      </Text>
+    </Box>
+  );
+}
+
+const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/** Seconds as a person reads them. */
+export function clock(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+/**
+ * What the run is spending, while it spends it.
+ *
+ * A stage can take two minutes with nothing to show, and a spinner alone cannot tell "thinking" from
+ * "wedged". Elapsed time, calls made and the share of the budget they came from are the three facts
+ * that separate those, and all three are already being tracked — they were simply never displayed
+ * until the run was over.
+ */
+export function StageIndicator({
+  label,
+  tick,
+  elapsedMs,
+  calls,
+  budget,
+  tip,
+}: {
+  label: string;
+  tick: number;
+  elapsedMs: number;
+  calls: number;
+  budget?: { used: number; limit: number };
+  /** Shown only once a wait is long enough to be worth reading through. */
+  tip?: string;
+}) {
+  const parts = [clock(elapsedMs), t({ en: `${calls} calls`, ru: `вызовов: ${calls}` })];
+  if (budget) parts.push(`${budget.used}/${budget.limit}`);
+  parts.push(t({ en: "esc to interrupt", ru: "esc — прервать" }));
+  const counters = `(${parts.join(" · ")})`;
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Box>
+        <Box marginLeft={2} marginRight={2}>
+          <Text color={theme.accent}>{FRAMES[tick % FRAMES.length]}</Text>
+        </Box>
+        {/* The label yields, not the counters: a stage name that wraps pushes the numbers off the
+          line and leaves the reader with neither half. */}
+        <Box flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text color={theme.text} wrap="truncate-end">
+            {label}
+          </Text>
+        </Box>
+        <Box marginLeft={2} flexShrink={0}>
+          <Text color={theme.muted} dimColor wrap="truncate-end">
+            {counters}
+          </Text>
+        </Box>
+      </Box>
+      {tip ? <StageTip tip={tip} /> : null}
+    </Box>
+  );
+}
+
+/**
+ * A wait long enough to read something in.
+ *
+ * Held back for the first few seconds so a quick stage does not flash a sentence nobody had time to
+ * finish, and so the tips land on the waits that actually need explaining.
+ */
+export function StageTip({ tip }: { tip: string }) {
+  return (
+    <Box marginBottom={1} marginLeft={5}>
+      <Text color={theme.muted} dimColor wrap="truncate-end">
+        {tip}
+      </Text>
+    </Box>
+  );
+}
+
+export function StatusBar({
+  state,
+  tick,
+  calls,
+  hint,
+}: {
+  state: AppState;
+  tick: number;
+  calls: number;
+  hint: string;
+}) {
+  // "N events" counted repaints, which is a fact about the renderer and not about the work. What a
+  // person wants from a status bar is how long this has taken and what it has cost.
+  const done = state.phases.filter((phase) => phase.state === "done").length;
+  const summary = [
+    clock(Date.now() - state.startedAt),
+    state.phases.length > 0
+      ? t({ en: `phase ${done}/${state.phases.length}`, ru: `фаза ${done}/${state.phases.length}` })
+      : undefined,
+    t({ en: `${calls} model calls`, ru: `вызовов модели: ${calls}` }),
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+  return (
+    <Box>
+      <Text backgroundColor={theme.surfaceRaised} color={theme.muted}>
+        {`  ${state.stage ? FRAMES[tick % FRAMES.length] : "·"}  ${summary}  `}
+      </Text>
+      <Text color={theme.muted} dimColor>
+        {`   ${hint}`}
+      </Text>
+    </Box>
+  );
+}

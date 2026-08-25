@@ -1,0 +1,198 @@
+status: ready
+feature: archive-note
+summary: "Executable task graph for archiving notes, with test-first ordering to satisfy the policy and serialized modifications to src/store.test.ts."
+tasks: 
+  - id: T1
+    title: Write tests for archiving a note
+    goal: Add tests in src/store.test.ts that cover archiving a note and verifying the note is marked as archived.
+    requirements: 
+      - R1
+    acceptance: 
+      - A1
+    depends_on: 
+      []
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.test.ts
+      modify: 
+        - src/store.test.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to confirm the new tests fail because the archiveNote function is not yet implemented.
+    done_when: 
+      - Tests exist for archiving a note and verifying the note is marked as archived.
+      - "The new tests fail when run with `bun test`."
+    risks: 
+      - "The tests may fail for reasons other than the missing implementation, such as import errors, but this is unlikely given the existing test file structure."
+    wave: 1
+    parallel: false
+  - id: T2
+    title: Write tests for hiding archived notes from listNotes
+    goal: Add tests in src/store.test.ts that verify archived notes are not included in the list returned by listNotes.
+    requirements: 
+      - R2
+    acceptance: 
+      - A2
+    depends_on: 
+      - T1
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.test.ts
+      modify: 
+        - src/store.test.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to confirm the new tests fail because listNotes does not yet filter archived notes.
+    done_when: 
+      - Tests exist for listing notes and verifying archived notes are not included.
+      - "The new tests fail when run with `bun test`."
+    risks: 
+      - "The tests may fail for reasons other than the missing implementation, such as import errors, but this is unlikely given the existing test file structure."
+    wave: 2
+    parallel: false
+  - id: T3
+    title: Update Note type with optional archived field
+    goal: Extend the Note type in src/store.ts to include an optional archived boolean field.
+    requirements: 
+      - R1
+    acceptance: 
+      []
+    depends_on: 
+      - T2
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.ts
+        - src/store.test.ts
+      modify: 
+        - src/store.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure existing tests still pass after the type change.
+    done_when: 
+      - The Note type includes an optional archived field of type boolean.
+      - Existing tests pass.
+    risks: 
+      - The type change is backward compatible and should not break existing code.
+    wave: 3
+    parallel: false
+  - id: T4
+    title: Add archiveNote function
+    goal: "Add a new exported function archiveNote(id: string): Note | undefined that sets the archived flag to true for the given note id."
+    requirements: 
+      - R1
+    acceptance: 
+      []
+    depends_on: 
+      - T3
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.ts
+        - src/store.test.ts
+      modify: 
+        - src/store.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure the new function works and existing tests pass.
+    done_when: 
+      - The archiveNote function is exported from src/store.ts.
+      - "The function returns the archived note when the id exists, and undefined otherwise."
+      - The function sets the archived flag to true on the note.
+      - Existing tests pass.
+    risks: 
+      - "The function may need to handle the case where the note does not exist, but returning undefined is consistent with getNote."
+    wave: 4
+    parallel: false
+  - id: T5
+    title: Modify listNotes to filter archived notes
+    goal: Update listNotes in src/store.ts to filter out notes where archived is true.
+    requirements: 
+      - R2
+    acceptance: 
+      []
+    depends_on: 
+      - T4
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.ts
+        - src/store.test.ts
+      modify: 
+        - src/store.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure archived notes are hidden from listNotes and all tests pass.
+    done_when: 
+      - listNotes returns only notes where archived is not true.
+      - All tests pass.
+    risks: 
+      - The filtering must not change the sort order of the remaining notes.
+    wave: 5
+    parallel: false
+  - id: T6
+    title: Update README documentation
+    goal: Update README.md to document the archiving feature.
+    requirements: 
+      - R1
+      - R2
+    acceptance: 
+      []
+    depends_on: 
+      - T5
+    permissions: 
+      []
+    files: 
+      read: 
+        - README.md
+      modify: 
+        - README.md
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure nothing is broken (though README changes do not affect tests).
+    done_when: 
+      - README.md mentions that notes can be archived.
+      - README.md documents the archiveNote function and that archived notes are hidden from the default list.
+    risks: 
+      - No significant risks; documentation only.
+    wave: 6
+    parallel: false
+questions: 
+  []

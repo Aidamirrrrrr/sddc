@@ -1,0 +1,135 @@
+status: ready
+feature: delete-note-by-id
+summary: "Executable task graph for deleting notes by id, with test-first ordering to satisfy the policy and serialized modifications to src/store.test.ts."
+tasks: 
+  - id: T1
+    title: Write tests for deleting a note by id
+    goal: Add tests in src/store.test.ts that cover deleting a note by id and verifying the note is no longer retrievable by that id.
+    requirements: 
+      - R1
+    acceptance: 
+      - A1
+    depends_on: 
+      []
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.test.ts
+      modify: 
+        - src/store.test.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to confirm the new tests fail because the deleteNote function is not yet implemented.
+    done_when: 
+      - Tests exist for deleting a note by id and verifying the note is no longer retrievable by that id.
+      - "The new tests fail when run with `bun test`."
+    risks: 
+      - "The tests may fail for reasons other than the missing implementation, such as import errors, but this is unlikely given the existing test file structure."
+    wave: 1
+    parallel: false
+  - id: T2
+    title: Write tests for removing deleted notes from listNotes
+    goal: Add tests in src/store.test.ts that verify a deleted note is not included in the list returned by listNotes.
+    requirements: 
+      - R2
+    acceptance: 
+      - A2
+    depends_on: 
+      - T1
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.test.ts
+      modify: 
+        - src/store.test.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to confirm the new tests fail because deleteNote is not yet implemented.
+    done_when: 
+      - Tests exist for listing notes and verifying a deleted note is not included.
+      - "The new tests fail when run with `bun test`."
+    risks: 
+      - "The tests may fail for reasons other than the missing implementation, such as import errors, but this is unlikely given the existing test file structure."
+    wave: 2
+    parallel: false
+  - id: T3
+    title: Add deleteNote function
+    goal: "Add a new exported function deleteNote(id: string): boolean that removes the note from the internal Map and returns true if a note was deleted, false otherwise."
+    requirements: 
+      - R1
+      - R2
+    acceptance: 
+      []
+    depends_on: 
+      - T2
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.ts
+        - src/store.test.ts
+      modify: 
+        - src/store.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure the new function works and all tests pass.
+    done_when: 
+      - The deleteNote function is exported from src/store.ts.
+      - The function returns true when the id exists and the note is removed from the store.
+      - The function returns false when the id does not exist.
+      - All tests pass.
+    risks: 
+      - "The function may need to handle the case where the note does not exist, but returning false is consistent with the plan."
+    wave: 3
+    parallel: false
+  - id: T4
+    title: Update README documentation
+    goal: Update README.md to document the deleteNote function and the deletion behavior.
+    requirements: 
+      - R1
+      - R2
+    acceptance: 
+      []
+    depends_on: 
+      - T3
+    permissions: 
+      []
+    files: 
+      read: 
+        - README.md
+      modify: 
+        - README.md
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure nothing is broken (though README changes do not affect tests).
+    done_when: 
+      - README.md mentions that notes can be deleted.
+      - README.md documents the deleteNote function and that deleted notes are removed from the list.
+    risks: 
+      - No significant risks; documentation only.
+    wave: 4
+    parallel: false
+questions: 
+  []

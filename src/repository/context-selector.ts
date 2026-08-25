@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { autocompleteMultiselect, cancel, isCancel, note, select, text } from "@clack/prompts";
 import { accent, phrase } from "../cli/ui";
+import { isTestPath } from "../policy/paths";
+import { driver } from "../ui/driver";
 import type { ContextSelector, RepositoryContext } from "./pipeline";
 import { listContextProfiles, writeContextProfile } from "./profiles";
 import { MAX_FILE_BYTES, MAX_SNAPSHOT_BYTES } from "./scan";
@@ -29,58 +30,50 @@ export function createRepositoryContextSelector(
       const added = current
         ? context.files.filter((path) => !current.files.includes(path)).length
         : 0;
-      const action = unwrap(
-        await select({
-          message: current
-            ? phrase({
-                en: `Review ${added} additional context file${added === 1 ? "" : "s"}`,
-                ru: `Проверьте новые файлы контекста: ${added}`,
-              })
-            : phrase({
-                en: "Review what the model may read",
-                ru: "Проверьте, какие файлы сможет прочитать модель",
-              }),
-          options: [
-            {
-              value: "confirm",
-              label: accent(
-                phrase({ en: "Continue with these files", ru: "Продолжить с этими файлами" }),
-              ),
-              hint: phrase({
-                en: "send the selected files to the model",
-                ru: "передать выбранные файлы модели",
-              }),
-            },
-            {
-              value: "edit",
-              label: phrase({ en: "Review file selection", ru: "Проверить список файлов" }),
-              hint: phrase({ en: "search, add, or remove", ru: "найти, добавить или убрать" }),
-            },
-            {
-              value: "preview",
-              label: phrase({ en: "Open a selected file", ru: "Открыть выбранный файл" }),
-            },
-            {
-              value: "context",
-              label: phrase({
-                en: "Add a note for the model",
-                ru: "Добавить пояснение для модели",
-              }),
-              hint: phrase({
-                en: "facts that are not in the code",
-                ru: "факты, которых нет в коде",
-              }),
-            },
-            {
-              value: "profiles",
-              label: phrase({ en: "Context profiles", ru: "Профили контекста" }),
-              hint: phrase({
-                en: "load or save this selection",
-                ru: "загрузить или сохранить набор",
-              }),
-            },
-          ],
-        }),
+      const action = await driver().select(
+        current
+          ? phrase({
+              en: `Review ${added} additional context file${added === 1 ? "" : "s"}`,
+              ru: `Проверьте новые файлы контекста: ${added}`,
+            })
+          : phrase({
+              en: "Review what the model may read",
+              ru: "Проверьте, какие файлы сможет прочитать модель",
+            }),
+        [
+          {
+            value: "confirm",
+            label: accent(
+              phrase({ en: "Continue with these files", ru: "Продолжить с этими файлами" }),
+            ),
+            hint: phrase({
+              en: "send the selected files to the model",
+              ru: "передать выбранные файлы модели",
+            }),
+          },
+          {
+            value: "edit",
+            label: phrase({ en: "Review file selection", ru: "Проверить список файлов" }),
+            hint: phrase({ en: "search, add, or remove", ru: "найти, добавить или убрать" }),
+          },
+          {
+            value: "preview",
+            label: phrase({ en: "Open a selected file", ru: "Открыть выбранный файл" }),
+          },
+          {
+            value: "context",
+            label: phrase({ en: "Add a note for the model", ru: "Добавить пояснение для модели" }),
+            hint: phrase({ en: "facts that are not in the code", ru: "факты, которых нет в коде" }),
+          },
+          {
+            value: "profiles",
+            label: phrase({ en: "Context profiles", ru: "Профили контекста" }),
+            hint: phrase({
+              en: "load or save this selection",
+              ru: "загрузить или сохранить набор",
+            }),
+          },
+        ],
       );
 
       if (action === "edit") context.files = await editFiles(index, context.files, reasons, sizes);
@@ -89,8 +82,9 @@ export function createRepositoryContextSelector(
       if (action === "profiles") context = await manageProfiles(root, context, sizes);
       if (action === "confirm") {
         const error = validateSelection(sizes)(context.files);
-        if (error) note(error, phrase({ en: "Cannot continue", ru: "Нельзя продолжить" }));
-        else return context;
+        if (error) {
+          driver().document(phrase({ en: "Cannot continue", ru: "Нельзя продолжить" }), error);
+        } else return context;
       }
     }
   };
@@ -101,38 +95,35 @@ async function manageProfiles(
   context: RepositoryContext,
   sizes: Map<string, number>,
 ): Promise<RepositoryContext> {
-  const action = unwrap(
-    await select({
-      message: phrase({ en: "Context profiles", ru: "Профили контекста" }),
-      options: [
-        { value: "load" as const, label: phrase({ en: "Load profile", ru: "Загрузить профиль" }) },
-        {
-          value: "save" as const,
-          label: phrase({ en: "Save current selection", ru: "Сохранить текущий набор" }),
-        },
-        { value: "back" as const, label: phrase({ en: "Back", ru: "Назад" }) },
-      ],
-    }),
+  const action = await driver().select(
+    phrase({ en: "Context profiles", ru: "Профили контекста" }),
+    [
+      { value: "load", label: phrase({ en: "Load profile", ru: "Загрузить профиль" }) },
+      {
+        value: "save",
+        label: phrase({ en: "Save current selection", ru: "Сохранить текущий набор" }),
+      },
+      { value: "back", label: phrase({ en: "Back", ru: "Назад" }) },
+    ],
   );
   if (action === "load") return loadProfile(root, context, sizes);
   if (action === "save") await saveProfile(root, context);
   return context;
 }
 
+/** Re-asks until the selection satisfies the count and size limits the model context imposes. */
 async function editFiles(
   index: Array<{ path: string; size: number }>,
   current: string[],
   reasons: Map<string, string>,
   sizes: Map<string, number>,
 ): Promise<string[]> {
-  return unwrap(
-    await autocompleteMultiselect({
-      message: phrase({ en: "Select repository context", ru: "Выберите контекст репозитория" }),
-      placeholder: phrase({ en: "Type to search files", ru: "Начните вводить имя файла" }),
-      maxItems: 12,
-      required: true,
-      initialValues: current,
-      options: index.map((file) => ({
+  const validate = validateSelection(sizes);
+  let selected = current;
+  while (true) {
+    selected = await driver().multiselect(
+      phrase({ en: "Select repository context", ru: "Выберите контекст репозитория" }),
+      index.map((file) => ({
         value: file.path,
         label: `[${category(file.path, reasons.has(file.path))}] ${file.path}`,
         hint:
@@ -141,40 +132,45 @@ async function editFiles(
             : (reasons.get(file.path) ?? formatSize(file.size)),
         disabled: file.size > MAX_FILE_BYTES,
       })),
-      validate: validateSelection(sizes),
-    }),
-  );
+      selected,
+    );
+    const error = validate(selected);
+    if (!error) return selected;
+    driver().document(phrase({ en: "Selection rejected", ru: "Набор отклонён" }), error);
+  }
 }
 
 async function previewFile(root: string, files: string[]): Promise<void> {
-  if (files.length === 0)
-    return note(
-      phrase({ en: "Select files first", ru: "Сначала выберите файлы" }),
+  if (files.length === 0) {
+    driver().document(
       phrase({ en: "Preview", ru: "Просмотр" }),
+      phrase({ en: "Select files first", ru: "Сначала выберите файлы" }),
     );
-  const path = unwrap(
-    await select({
-      message: phrase({ en: "Preview file", ru: "Посмотреть файл" }),
-      maxItems: 12,
-      options: files.map((file) => ({ value: file, label: file })),
-    }),
+    return;
+  }
+  const path = await driver().select(
+    phrase({ en: "Preview file", ru: "Посмотреть файл" }),
+    files.map((file) => ({ value: file, label: file })),
   );
   const content = await readFile(join(root, path), "utf8");
   const preview = content.slice(0, PREVIEW_CHARACTERS);
-  note(preview + (content.length > PREVIEW_CHARACTERS ? "\n... preview truncated" : ""), path);
+  driver().document(
+    path,
+    preview + (content.length > PREVIEW_CHARACTERS ? "\n... preview truncated" : ""),
+  );
 }
 
-async function editUserContext(initialValue: string): Promise<string> {
-  return unwrap(
-    await text({
-      message: phrase({ en: "Additional project context", ru: "Дополнительный контекст проекта" }),
+async function editUserContext(initial: string): Promise<string> {
+  return driver().text(
+    phrase({ en: "Additional project context", ru: "Дополнительный контекст проекта" }),
+    {
       placeholder: phrase({
         en: "Optional; press Enter to clear",
         ru: "Необязательно; Enter очищает поле",
       }),
-      initialValue,
-    }),
-  ).trim();
+      initial,
+    },
+  );
 }
 
 async function loadProfile(
@@ -184,39 +180,37 @@ async function loadProfile(
 ): Promise<RepositoryContext> {
   const profiles = await listContextProfiles(root);
   if (profiles.length === 0) {
-    note(
-      phrase({ en: "No saved profiles", ru: "Нет сохранённых профилей" }),
+    driver().document(
       phrase({ en: "Context profiles", ru: "Профили контекста" }),
+      phrase({ en: "No saved profiles", ru: "Нет сохранённых профилей" }),
     );
     return fallback;
   }
-  const profile = unwrap(
-    await select({
-      message: phrase({ en: "Load context profile", ru: "Загрузить профиль контекста" }),
-      options: profiles.map((item) => ({
-        value: item,
-        label: item.name,
-        hint: `${item.files.length} files`,
-      })),
-    }),
+  const name = await driver().select(
+    phrase({ en: "Load context profile", ru: "Загрузить профиль контекста" }),
+    profiles.map((item) => ({
+      value: item.name,
+      label: item.name,
+      hint: `${item.files.length} files`,
+    })),
   );
+  const profile = profiles.find((item) => item.name === name);
+  if (!profile) return fallback;
   return { files: safePaths(profile.files, sizes), userContext: profile.user_context };
 }
 
 async function saveProfile(root: string, context: RepositoryContext): Promise<void> {
-  const name = unwrap(
-    await text({
-      message: phrase({ en: "Profile name", ru: "Название профиля" }),
-      placeholder: "backend-auth",
-      validate: (value) => (!value?.trim() ? "Name is required" : undefined),
-    }),
-  );
+  const name = await driver().text(phrase({ en: "Profile name", ru: "Название профиля" }), {
+    placeholder: "backend-auth",
+    required: true,
+    requiredMessage: "Name is required",
+  });
   const path = await writeContextProfile(root, {
     name: name.trim(),
     files: context.files,
     user_context: context.userContext,
   });
-  note(path, phrase({ en: "Profile saved", ru: "Профиль сохранён" }));
+  driver().document(phrase({ en: "Profile saved", ru: "Профиль сохранён" }), path);
 }
 
 export function validateSelection(sizes: Map<string, number>) {
@@ -259,7 +253,8 @@ function showEstimate(
     config > 0 ? phrase({ en: `${config} config`, ru: `конфигураций: ${config}` }) : "",
     added > 0 ? phrase({ en: `+${added} new`, ru: `новых: +${added}` }) : "",
   ].filter(Boolean);
-  note(
+  driver().document(
+    phrase({ en: "Selected context", ru: "Выбранный контекст" }),
     [
       `${files.length} files · ${formatSize(bytes)} · ~${estimate.tokens.toLocaleString()} tokens · ${price}`,
       details.join(" · "),
@@ -271,13 +266,12 @@ function showEstimate(
     ]
       .filter(Boolean)
       .join("\n"),
-    phrase({ en: "Selected context", ru: "Выбранный контекст" }),
   );
 }
 
 function category(path: string, recommended: boolean): string {
   if (recommended) return "recommended";
-  if (/(^|\/)(__tests__|tests?|specs?)(\/|\.|$)|\.(test|spec)\.[^.]+$/i.test(path)) return "tests";
+  if (isTestPath(path)) return "tests";
   if (/(^|\/)(package\.json|bun\.lock|tsconfig[^/]*|biome\.json|\.github)(\/|$)/i.test(path))
     return "config";
   return "project";
@@ -291,10 +285,4 @@ function safePaths(paths: string[], sizes: Map<string, number>): string[] {
 
 function formatSize(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${Math.ceil(bytes / 1024)} KiB`;
-}
-
-function unwrap<T>(value: T | symbol): T {
-  if (!isCancel(value)) return value as T;
-  cancel(phrase({ en: "Repository discovery cancelled", ru: "Исследование отменено" }));
-  process.exit(0);
 }

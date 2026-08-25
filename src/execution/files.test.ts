@@ -13,7 +13,7 @@ test("applied files can be restored exactly", async () => {
     status: "ready",
     summary: "Change files",
     blocker: null,
-    traceability: [{ requirement_id: "R1", paths: ["existing.ts"] }],
+    traceability: [{ covers: "R1", paths: ["existing.ts"] }],
     changes: [
       {
         path: "existing.ts",
@@ -39,7 +39,7 @@ test("apply rejects a file changed after proposal generation", async () => {
       status: "ready",
       summary: "Stale change",
       blocker: null,
-      traceability: [{ requirement_id: "R1", paths: ["file.ts"] }],
+      traceability: [{ covers: "R1", paths: ["file.ts"] }],
       changes: [
         {
           path: "file.ts",
@@ -63,7 +63,7 @@ test("apply rejects destinations through symbolic links", async () => {
       status: "ready",
       summary: "Unsafe create",
       blocker: null,
-      traceability: [{ requirement_id: "R1", paths: ["linked/file.ts"] }],
+      traceability: [{ covers: "R1", paths: ["linked/file.ts"] }],
       changes: [
         { path: "linked/file.ts", operation: "create", expected_sha256: null, content: "bad\n" },
       ],

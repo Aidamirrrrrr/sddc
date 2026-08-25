@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { cancel, isCancel, text } from "@clack/prompts";
+import { driver } from "../ui/driver";
 
 export async function readInput(
   arguments_: string[],
@@ -11,15 +11,10 @@ export async function readInput(
   else if (process.stdin.isTTY && options.noInput) {
     throw new Error("Input is required with --no-input. Pass it after -- or through stdin.");
   } else if (process.stdin.isTTY) {
-    const value = await text({
-      message: label.replace(/:\s*$/, ""),
-      validate: (answer) => (answer?.trim() ? undefined : "Input cannot be empty"),
+    input = await driver().text(label.replace(/:\s*$/, ""), {
+      required: true,
+      requiredMessage: "Input cannot be empty",
     });
-    if (isCancel(value)) {
-      cancel("Cancelled");
-      process.exit(0);
-    }
-    input = value;
   } else input = await Bun.stdin.text();
   input = input.trim();
   if (!input && options.noInput)

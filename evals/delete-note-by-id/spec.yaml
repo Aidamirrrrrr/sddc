@@ -1,0 +1,23 @@
+status: ready
+feature: delete-note-by-id
+goal: Add a function that deletes a note by its id and removes it from the list
+requirements: 
+  - id: R1
+    statement: A function is provided that deletes a note by its id.
+  - id: R2
+    statement: Deleting a note removes it from the list of notes.
+acceptance: 
+  - id: A1
+    verifies: 
+      - R1
+    statement: "When a note is deleted by its id, the note is no longer retrievable by that id."
+  - id: A2
+    verifies: 
+      - R2
+    statement: "When a note is deleted by its id, the note is not included in the list of notes."
+issues: 
+  []
+questions: 
+  []
+subfeatures: 
+  []

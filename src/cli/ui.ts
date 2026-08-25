@@ -1,188 +1,217 @@
-import { cancel, intro, isCancel, log, note, outro, select, spinner, text } from "@clack/prompts";
+import { saveUserSetting } from "../config/env";
+import { startApp, stopApp } from "../ui/app";
+import { createClackDriver, paint } from "../ui/clack";
+import { type Choice, driver, setDriver, type TextOptions } from "../ui/driver";
+import { type Copy, setLanguage, t } from "../ui/language";
+import { createStreamDriver } from "../ui/stream";
+import { theme } from "../ui/theme";
 import type { ReviewDecision } from "./approval";
 
-export type Copy = { en: string; ru: string };
+export type { Copy } from "../ui/language";
+export type OutputMode = "app" | "interactive" | "plain" | "json";
 
-const RESET = "\u001B[0m";
-const CLAUDE_ORANGE = "\u001B[38;2;217;119;87m";
-const CLAUDE_MUTED = "\u001B[38;2;155;140;126m";
+let outputMode: OutputMode = "interactive";
+// Keeps the module usable before the CLI has resolved its output mode, matching the previous default.
+setDriver(createClackDriver());
 
-let russian = false;
-let outputMode: "interactive" | "plain" | "json" = "interactive";
-
-export function setOutputMode(mode: "interactive" | "plain" | "json"): void {
+export function setOutputMode(mode: OutputMode): void {
   outputMode = mode;
-}
-
-export function setUiLanguage(language: string): void {
-  russian = /^(ru|russian|рус)/i.test(language.trim());
-}
-
-export async function chooseUiLanguage(language?: "en" | "ru"): Promise<void> {
-  if (language) {
-    setUiLanguage(language);
+  if (mode === "app") {
+    setDriver(startApp());
     return;
   }
-  const selected = unwrap(
-    await select({
-      message: "Choose language / Выберите язык",
-      initialValue: /^ru/i.test(process.env.LANG ?? "") ? "ru" : "en",
-      options: [
-        { value: "ru" as const, label: "Русский" },
-        { value: "en" as const, label: "English" },
-      ],
-    }),
+  setDriver(mode === "plain" || mode === "json" ? createStreamDriver(mode) : createClackDriver());
+}
+
+/** Releases the terminal before anything outside the driver writes to stdout. */
+export function teardownUi(): void {
+  if (outputMode === "app") stopApp();
+}
+
+export function currentOutputMode(): OutputMode {
+  return outputMode;
+}
+
+export function setUiLanguage(value: string): void {
+  setLanguage(value);
+}
+
+export async function chooseUiLanguage(requested?: "en" | "ru"): Promise<void> {
+  if (requested) {
+    setUiLanguage(requested);
+    return;
+  }
+  // A configured preference is an answer already given; asking again every run is not a choice.
+  const configured = Bun.env.SDDC_LANG?.trim();
+  if (configured) {
+    setUiLanguage(configured);
+    return;
+  }
+  const chosen = await driver().select(
+    "Choose language / Выберите язык",
+    [
+      { value: "ru", label: "Русский" },
+      { value: "en", label: "English" },
+    ],
+    /^ru/i.test(process.env.LANG ?? "") ? "ru" : "en",
   );
-  setUiLanguage(selected);
+  setUiLanguage(chosen);
+  // Recorded, so this is asked once rather than at the top of every session. A configuration that
+  // cannot be written to is not a reason to refuse the run — it only means asking again next time.
+  await saveUserSetting("SDDC_LANG", chosen).catch(() => undefined);
 }
 
 export function phrase(copy: Copy): string {
-  return russian ? copy.ru : copy.en;
+  return t(copy);
 }
 
 export function accent(value: string): string {
-  return paint(value, CLAUDE_ORANGE);
+  return outputMode === "interactive" ? paint(value, theme.accent) : value;
 }
 
 export function muted(value: string): string {
-  return paint(value, CLAUDE_MUTED);
+  return outputMode === "interactive" ? paint(value, theme.muted) : value;
 }
 
 export function begin(): void {
-  if (outputMode === "json") {
-    emit("start", { name: "sddc" });
-    return;
-  }
-  if (outputMode === "plain") {
-    console.log("sddc");
-    return;
-  }
-  intro(accent("sddc"));
+  driver().begin("sddc");
+}
+
+export function banner(details: {
+  version: string;
+  project: string;
+  model: string;
+  facts: string[];
+}): void {
+  driver().banner(details);
 }
 
 export function finish(copy: Copy): void {
-  if (writeSimple("finish", phrase(copy))) return;
-  outro(phrase(copy));
+  driver().finish(phrase(copy));
 }
 
 export function info(copy: Copy): void {
-  if (writeSimple("info", phrase(copy))) return;
-  log.info(phrase(copy));
+  driver().info(phrase(copy));
 }
 
 export function success(copy: Copy): void {
-  if (writeSimple("success", phrase(copy))) return;
-  log.success(phrase(copy));
+  driver().success(phrase(copy));
+}
+
+export function warn(copy: Copy): void {
+  driver().warn(phrase(copy));
 }
 
 export function step(current: number, total: number, copy: Copy): void {
-  if (outputMode === "json") {
-    emit("step", { current, total, message: phrase(copy) });
-    return;
-  }
-  if (outputMode === "plain") {
-    console.log(`[${current}/${total}] ${phrase(copy)}`);
-    return;
-  }
-  log.step(`${accent(`${current}/${total}`)} ${phrase(copy)}`);
+  driver().step(current, total, phrase(copy));
 }
 
 export function document(title: Copy, content: string): void {
-  if (outputMode === "json") {
-    emit("document", { title: phrase(title), content });
-    return;
-  }
-  if (outputMode === "plain") {
-    console.log(`\n${phrase(title)}\n${content}`);
-    return;
-  }
-  note(content, accent(phrase(title)));
+  driver().document(phrase(title), content);
 }
 
-export async function withSpinner<T>(progress: Copy, complete: Copy, operation: () => Promise<T>) {
-  if (outputMode !== "interactive") {
-    info(progress);
-    const result = await operation();
-    success(complete);
-    return result;
-  }
-  const indicator = spinner();
-  indicator.start(phrase(progress));
-  try {
-    const result = await operation();
-    indicator.stop(phrase(complete));
-    return result;
-  } catch (error) {
-    indicator.stop(phrase({ en: "Stage failed", ru: "Ошибка этапа" }));
-    throw error;
-  }
+export function action(
+  summary: string,
+  details: string[],
+  tone?: "info" | "success" | "warn" | "danger",
+): void {
+  driver().action(summary, details, tone);
 }
 
-function emit(type: string, payload: Record<string, unknown>): void {
-  console.log(JSON.stringify({ type, ...payload }));
+export async function withSpinner<T>(
+  progress: Copy,
+  complete: Copy,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return driver().stage(
+    {
+      progress: phrase(progress),
+      complete: phrase(complete),
+      failed: phrase({ en: "Stage failed", ru: "Ошибка этапа" }),
+    },
+    operation,
+  );
 }
 
-function writeSimple(type: string, message: string): boolean {
-  if (outputMode === "json") {
-    emit(type, { message });
-    return true;
-  }
-  if (outputMode === "plain") {
-    console.log(message);
-    return true;
-  }
-  return false;
+export async function choose<T extends string>(
+  message: Copy,
+  choices: Choice<T>[],
+  initial?: T,
+): Promise<T> {
+  return driver().select(phrase(message), choices, initial);
+}
+
+export async function chooseMany<T extends string>(
+  message: Copy,
+  choices: Choice<T>[],
+  initial: T[],
+): Promise<T[]> {
+  return driver().multiselect(phrase(message), choices, initial);
+}
+
+export async function confirm(message: Copy, initial = false): Promise<boolean> {
+  return driver().confirm(phrase(message), initial);
+}
+
+export async function prompt(message: Copy, options?: TextOptions): Promise<string> {
+  return driver().text(phrase(message), options);
+}
+
+export function abort(message: Copy): never {
+  return driver().cancel(phrase(message));
 }
 
 export async function review(message: Copy): Promise<ReviewDecision> {
-  return unwrap(
-    await select({
-      message: phrase(message),
-      options: [
-        {
-          value: "accept" as const,
-          label: accent(phrase({ en: "Accept", ru: "Принять" })),
-          hint: phrase({ en: "continue to the next stage", ru: "перейти к следующему этапу" }),
-        },
-        {
-          value: "revise" as const,
-          label: phrase({ en: "Revise", ru: "Исправить" }),
-          hint: phrase({ en: "describe what should change", ru: "описать, что нужно изменить" }),
-        },
-      ],
-    }),
-  );
+  return driver().select(phrase(message), [
+    {
+      value: "accept" as const,
+      label: accent(phrase({ en: "Accept", ru: "Принять" })),
+      hint: phrase({ en: "continue to the next stage", ru: "перейти к следующему этапу" }),
+    },
+    {
+      value: "revise" as const,
+      label: phrase({ en: "Revise", ru: "Исправить" }),
+      hint: phrase({ en: "describe what should change", ru: "описать, что нужно изменить" }),
+    },
+  ]);
 }
+
+/** What the user can do with an artifact that is waiting for approval. */
+export type ArtifactAction = "accept" | "revise" | "edit" | "decisions";
 
 export async function reviewDocument(
   message: Copy,
   title: Copy,
   summary: string,
   content: string,
-): Promise<ReviewDecision> {
+): Promise<ArtifactAction> {
   document(title, summary);
   while (true) {
-    const action = unwrap(
-      await select({
-        message: phrase(message),
-        options: [
-          {
-            value: "accept" as const,
-            label: accent(phrase({ en: "Accept", ru: "Принять" })),
-            hint: phrase({ en: "continue to the next stage", ru: "перейти к следующему этапу" }),
-          },
-          {
-            value: "details" as const,
-            label: phrase({ en: "View full document", ru: "Показать документ полностью" }),
-          },
-          {
-            value: "revise" as const,
-            label: phrase({ en: "Revise", ru: "Исправить" }),
-            hint: phrase({ en: "describe what should change", ru: "описать, что нужно изменить" }),
-          },
-        ],
-      }),
-    );
+    const action = await driver().select(phrase(message), [
+      {
+        value: "accept" as const,
+        label: accent(phrase({ en: "Accept", ru: "Принять" })),
+        hint: phrase({ en: "continue to the next stage", ru: "перейти к следующему этапу" }),
+      },
+      {
+        value: "details" as const,
+        label: phrase({ en: "View full document", ru: "Показать документ полностью" }),
+      },
+      {
+        value: "edit" as const,
+        label: phrase({ en: "Edit directly", ru: "Отредактировать самому" }),
+        hint: phrase({ en: "open in $EDITOR", ru: "открыть в $EDITOR" }),
+      },
+      {
+        value: "revise" as const,
+        label: phrase({ en: "Ask for a revision", ru: "Попросить исправить" }),
+        hint: phrase({ en: "describe what should change", ru: "описать, что нужно изменить" }),
+      },
+      {
+        value: "decisions" as const,
+        label: phrase({ en: "Decisions so far", ru: "Принятые решения" }),
+      },
+    ]);
     if (action === "details") {
       document(title, content);
       continue;
@@ -192,22 +221,8 @@ export async function reviewDocument(
 }
 
 export async function required(message: Copy): Promise<string> {
-  return unwrap(
-    await text({
-      message: phrase(message),
-      validate: (value) =>
-        value?.trim() ? undefined : phrase({ en: "An answer is required", ru: "Нужен ответ" }),
-    }),
-  ).trim();
-}
-
-function unwrap<T>(value: T | symbol): T {
-  if (!isCancel(value)) return value as T;
-  cancel(phrase({ en: "Cancelled", ru: "Отменено" }));
-  process.exit(0);
-}
-
-function paint(value: string, color: string): string {
-  if (outputMode !== "interactive" || !process.stdout.isTTY || process.env.NO_COLOR) return value;
-  return `${color}${value}${RESET}`;
+  return driver().text(phrase(message), {
+    required: true,
+    requiredMessage: phrase({ en: "An answer is required", ru: "Нужен ответ" }),
+  });
 }

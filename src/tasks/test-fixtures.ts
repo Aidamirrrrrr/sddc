@@ -11,7 +11,8 @@ export function readyTasks(): TaskList {
         title: "Implement registration",
         goal: "Add the registration operation.",
         requirements: ["R1"],
-        acceptance: ["A1"],
+        // Serves the requirement; the criterion belongs to the task whose test verifies it.
+        acceptance: [],
         depends_on: [],
         permissions: [],
         files: { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] },

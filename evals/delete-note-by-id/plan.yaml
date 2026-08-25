@@ -1,0 +1,51 @@
+status: ready
+feature: delete-note-by-id
+summary: "Implement deletion of notes by id by adding a deleteNote function that removes the note from the in-memory store, and add tests to cover the new behavior."
+decisions: 
+  - statement: "Add a new exported function deleteNote(id: string): boolean that returns true if a note was deleted and false otherwise."
+    rationale: "The specification does not specify the return type; a boolean is simple and informative, consistent with common delete APIs. Returning the deleted note is unnecessary and could encourage holding stale references."
+    evidence: 
+      - src/store.ts
+  - statement: "deleteNote will remove the note from the internal Map, making it no longer retrievable by getNote and excluded from listNotes."
+    rationale: "This directly satisfies both acceptance criteria A1 and A2, and aligns with the principle that the store is the single source of truth."
+    evidence: 
+      - src/store.ts
+  - statement: "deleteNote will return false when the id does not exist, without throwing an error."
+    rationale: "This is a graceful, backward-compatible behavior consistent with getNote returning undefined for missing ids, and avoids breaking callers that may pass invalid ids."
+    evidence: 
+      - src/store.ts
+  - statement: No changes to the Note type are required.
+    rationale: Deletion does not require additional fields; the existing type is sufficient.
+    evidence: 
+      - src/store.ts
+approach: 
+  - id: S1
+    statement: "Add tests in src/store.test.ts that verify deleting a note by id removes it from getNote and listNotes, and that deleting a non-existent id returns false."
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - src/store.test.ts
+  - id: S2
+    statement: Implement the deleteNote function in src/store.ts that removes the note from the internal Map and returns a boolean indicating success.
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - src/store.ts
+  - id: S3
+    statement: Update README.md to document the deleteNote function and the deletion behavior.
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - README.md
+contracts: 
+  - name: deleteNote
+    kind: module
+    surface: "export function deleteNote(id: string): boolean"
+    change: new
+data_model: 
+  []
+questions: 
+  []

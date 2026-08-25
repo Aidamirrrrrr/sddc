@@ -1,3 +1,4 @@
+import { conventionalTestPaths, isBehaviouralSource, isTestPath } from "../policy/paths";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task, TaskList, TaskListDraft, TaskListReview } from "./schemas";
@@ -22,7 +23,7 @@ export function normalizeTaskList(draft: TaskListDraft, feature: string): TaskLi
   return {
     ...draft,
     feature,
-    tasks: assignWaves(renumbered),
+    tasks: resolveAcceptanceOwners(assignWaves(renumbered)),
     questions: draft.questions.map((question, index) => ({
       ...question,
       id: `Q${index + 1}`,
@@ -56,6 +57,32 @@ export function assignWaves(tasks: Omit<Task, "wave" | "parallel">[]): Task[] {
     const wave = waves[index] ?? 1;
     return { ...task, wave, parallel: (sizes.get(wave) ?? 1) > 1 };
   });
+}
+
+/**
+ * Decides who owns each acceptance criterion instead of asking.
+ *
+ * A criterion is a test, so its owner is the task that writes the test proving it. That is derivable
+ * from the graph, and six attempts at wording the rule showed it is not reliably answerable by a
+ * model — the same lesson waves already taught: compute what can be computed, and let the validator
+ * guard the residue rather than carry the mechanism.
+ */
+export function resolveAcceptanceOwners(tasks: Task[]): Task[] {
+  const owner = new Map<string, string>();
+  for (const id of new Set(tasks.flatMap((task) => task.acceptance))) {
+    const claimants = tasks.filter((task) => task.acceptance.includes(id));
+    // Prefer a claimant that writes a test; among equals the latest one, which is what completes it.
+    const proving = claimants.filter((task) =>
+      [...task.files.modify, ...task.files.create].some(isTestPath),
+    );
+    const candidates = proving.length > 0 ? proving : claimants;
+    const chosen = candidates.reduce((best, task) => (task.wave >= best.wave ? task : best));
+    owner.set(id, chosen.id);
+  }
+  return tasks.map((task) => ({
+    ...task,
+    acceptance: task.acceptance.filter((id) => owner.get(id) === task.id),
+  }));
 }
 
 export function orderTasks(tasks: Task[]): Task[] {
@@ -122,6 +149,8 @@ export function validateTaskList(
   if (list.status === "ready") {
     assertCoverage(requirements, coveredRequirements, "requirements");
     assertCoverage(acceptance, coveredAcceptance, "acceptance criteria");
+    assertExclusiveAcceptance(list.tasks);
+    assertTestsInScope(list.tasks, existingFiles, approvedFiles);
   }
   assertAcyclic(list.tasks);
 }
@@ -157,6 +186,62 @@ function validateReferences(
 ): void {
   const invalid = values.find((value) => !allowed.has(value));
   if (invalid) throw new Error(`${taskId} references unknown ${label}: ${invalid}`);
+}
+
+/**
+ * An acceptance criterion belongs to exactly one task.
+ *
+ * A criterion is a test, and a test has one home. Letting several tasks claim the same one makes the
+ * per-task review impossible to satisfy — no single task implements a criterion the graph split
+ * between four — and it destroys credit assignment: a failing criterion no longer names a task.
+ *
+ * Coverage becomes a partition rather than a cover, which is what makes it checkable here.
+ */
+function assertExclusiveAcceptance(tasks: Task[]): void {
+  const owners = new Map<string, string[]>();
+  for (const task of tasks) {
+    for (const id of task.acceptance) {
+      owners.set(id, [...(owners.get(id) ?? []), task.id]);
+    }
+  }
+  const shared = [...owners.entries()].filter(([, claimants]) => claimants.length > 1);
+  if (shared.length > 0) {
+    const detail = shared.map(([id, claimants]) => `${id} by ${claimants.join(", ")}`).join("; ");
+    throw new Error(`Acceptance criteria must be owned by exactly one task: ${detail}`);
+  }
+}
+
+/**
+ * A task changing source must bring the tests that already cover it.
+ *
+ * Otherwise the task either breaks them silently or, as happened in a real run, refuses to proceed
+ * because it cannot tell whether its change breaks a file it was never allowed to look at. Reading
+ * is enough — the task only has to be able to check.
+ *
+ * Only conventional siblings that genuinely exist are required, so an unconventional layout is
+ * never constrained by guesswork.
+ */
+function assertTestsInScope(
+  tasks: Task[],
+  existingFiles: Set<string>,
+  approvedFiles: Set<string>,
+): void {
+  for (const task of tasks) {
+    const visible = new Set([...task.files.read, ...task.files.modify, ...task.files.create]);
+    for (const source of task.files.modify.filter(isBehaviouralSource)) {
+      // Only tests the task is actually allowed to reference: read paths must come from approved
+      // discovery context, so demanding an unapproved file would make the graph unsatisfiable.
+      const covering = conventionalTestPaths(source).filter(
+        (path) => existingFiles.has(path) && approvedFiles.has(path),
+      );
+      const missing = covering.find((path) => !visible.has(path));
+      if (missing) {
+        throw new Error(
+          `${task.id} changes ${source} without ${missing} in scope, so it cannot tell whether the change breaks it`,
+        );
+      }
+    }
+  }
 }
 
 function assertCoverage(expected: Set<string>, actual: Set<string>, label: string): void {

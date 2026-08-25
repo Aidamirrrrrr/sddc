@@ -1,0 +1,27 @@
+status: ready
+feature: add-tag-to-note
+goal: Add an optional tag to a note so notes can be filtered by tag
+requirements: 
+  - id: R1
+    statement: A note can have an optional tag.
+  - id: R2
+    statement: Notes can be filtered by tag.
+acceptance: 
+  - id: A1
+    verifies: 
+      - R1
+    statement: "When a note is added with a tag, the note's tag is stored and retrievable."
+  - id: A2
+    verifies: 
+      - R1
+    statement: "When a note is added without a tag, the note has no tag."
+  - id: A3
+    verifies: 
+      - R2
+    statement: "When notes are filtered by a tag, only notes with that tag are returned."
+issues: 
+  []
+questions: 
+  []
+subfeatures: 
+  []

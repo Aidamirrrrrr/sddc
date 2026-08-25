@@ -105,6 +105,53 @@ test("planning pipeline repairs a plan rejected by validation", async () => {
   expect(client.calls).toBe(4);
 });
 
+test("a repair that is still wrong is drawn again rather than failing the phase", async () => {
+  const rejected = readyPlan();
+  rejected.decisions = [
+    { statement: "Reuse the store", rationale: "Exists", evidence: ["src/unknown.ts"] },
+  ];
+  const stillWrong = readyPlan();
+  stillWrong.decisions = [
+    { statement: "Reuse the store", rationale: "Exists", evidence: ["src/other.ts"] },
+  ];
+
+  const client = stub([
+    rejected,
+    audit(),
+    { plan: rejected, checks: passedChecks() },
+    stillWrong,
+    readyPlan(),
+  ]);
+  const result = await buildImplementationPlan(client, readySpec(), discovery());
+
+  // The phase used to get exactly one repair and then end the run; it now spends its sampling budget.
+  expect(result.decisions).toEqual([]);
+  expect(client.calls).toBe(5);
+});
+
+test("planning still fails once the sampling budget is spent", async () => {
+  const rejected = readyPlan();
+  rejected.decisions = [
+    { statement: "Reuse the store", rationale: "Exists", evidence: ["src/unknown.ts"] },
+  ];
+
+  const client = stub([
+    rejected,
+    audit(),
+    { plan: rejected, checks: passedChecks() },
+    readyPlan_with_bad_evidence(),
+    readyPlan_with_bad_evidence(),
+  ]);
+
+  expect(buildImplementationPlan(client, readySpec(), discovery())).rejects.toThrow();
+});
+
+function readyPlan_with_bad_evidence(): ImplementationPlan {
+  const plan = readyPlan();
+  plan.decisions = [{ statement: "Reuse", rationale: "Exists", evidence: ["src/missing.ts"] }];
+  return plan;
+}
+
 function stub(responses: unknown[]) {
   return {
     calls: 0,

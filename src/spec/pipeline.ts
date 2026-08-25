@@ -1,5 +1,8 @@
 import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
+import { sampleUntilValid } from "../ai/sample";
+import { defaultPolicy } from "../policy/load";
+import type { Policy } from "../policy/schemas";
 import type { RequestRepositoryContext } from "../repository/request-context";
 import { normalizeSpec } from "./normalize";
 import { prompts } from "./prompts";
@@ -20,11 +23,14 @@ export async function buildSpec(
   client: ObjectGenerator,
   request: string,
   repository?: RequestRepositoryContext,
+  policy: Policy = defaultPolicy,
+  constitution = "",
 ): Promise<Spec> {
   const extraction = await client.generateObject(prompts.extract, request, extractionSchema);
   const context = {
     request,
     outputLanguage: extraction.language,
+    constitution: constitution || undefined,
     extraction,
     repositoryContext: repository
       ? { userContext: repository.userContext || undefined, snapshots: repository.snapshots }
@@ -60,24 +66,42 @@ export async function buildSpec(
     return buildClarificationSpec(extraction, { ...analysis, questions });
   }
 
-  const candidate = await client.generateObject(prompts.writer, pretty(context), specSchema);
-  const review = await client.generateObject(
-    prompts.reviewer,
-    pretty({ ...context, candidate }),
-    reviewSchema,
-  );
-  const spec = normalizeSpec({
-    ...review.spec,
-    feature: extraction.feature,
-    goal: extraction.goal,
-    status: "ready",
-    issues: [],
-    questions: [],
-    subfeatures: [],
-  });
-  validateReview(review.checks);
-  validateSpec(spec);
-  return spec;
+  // The first phase was the only one without rejection sampling: a single unusable draw from the
+  // writer ended the run outright, in the phase where the user has invested the least and would have
+  // to start over. The verifier here is free and deterministic like every other one.
+  return sampleUntilValid(
+    policy.sampling.max_attempts,
+    async (rejection) => {
+      const attemptContext =
+        rejection === undefined ? context : { ...context, validationError: rejection };
+      const candidate = await client.generateObject(
+        prompts.writer,
+        pretty(attemptContext),
+        specSchema,
+      );
+      const review = await client.generateObject(
+        prompts.reviewer,
+        pretty({ ...attemptContext, candidate }),
+        reviewSchema,
+      );
+      return {
+        review,
+        spec: normalizeSpec({
+          ...review.spec,
+          feature: extraction.feature,
+          goal: extraction.goal,
+          status: "ready",
+          issues: [],
+          questions: [],
+          subfeatures: [],
+        }),
+      };
+    },
+    ({ review, spec }) => {
+      validateReview(review.checks);
+      validateSpec(spec);
+    },
+  ).then(({ spec }) => spec);
 }
 
 export async function runStage(

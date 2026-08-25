@@ -1,0 +1,68 @@
+status: ready
+feature: add-tag-to-note
+summary: "Extend the Note type with an optional tag field, update addNote to accept an optional tag, and add a filterNotesByTag function. Update tests and documentation accordingly."
+decisions: 
+  - statement: The Note type will be extended with an optional tag field of type string.
+    rationale: The specification requires an optional tag on a note. The simplest representation is a string field on the Note type.
+    evidence: 
+      - src/store.ts
+  - statement: The addNote function will accept an optional second parameter for the tag.
+    rationale: This keeps the API backward compatible and allows notes to be created with or without a tag.
+    evidence: 
+      - src/store.ts
+  - statement: "A new function filterNotesByTag(tag: string): Note[] will be added to the store module."
+    rationale: "This provides a clear API for filtering notes by tag, satisfying requirement R2."
+    evidence: 
+      - src/store.ts
+approach: 
+  - id: S1
+    statement: Update the Note type in src/store.ts to include an optional tag field.
+    requirements: 
+      - R1
+    touches: 
+      - src/store.ts
+  - id: S2
+    statement: Update the addNote function signature to accept an optional tag parameter and store it on the note.
+    requirements: 
+      - R1
+    touches: 
+      - src/store.ts
+  - id: S3
+    statement: "Add a new function filterNotesByTag that returns notes with the given tag, sorted by createdAt descending."
+    requirements: 
+      - R2
+    touches: 
+      - src/store.ts
+  - id: S4
+    statement: "Update the test file src/store.test.ts to cover the new behavior: adding a note with a tag, adding a note without a tag, and filtering by tag."
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - src/store.test.ts
+  - id: S5
+    statement: Update README.md to document the optional tag and the filtering function.
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - README.md
+contracts: 
+  - name: addNote
+    kind: module
+    surface: "addNote(text: string, tag?: string): Note"
+    change: extended
+  - name: filterNotesByTag
+    kind: module
+    surface: "filterNotesByTag(tag: string): Note[]"
+    change: new
+data_model: 
+  - entity: Note
+    fields: 
+      - "id: string"
+      - "text: string"
+      - "createdAt: number"
+      - "tag?: string"
+    change: extended
+questions: 
+  []

@@ -50,3 +50,31 @@ function requireTwoTasks(tasks: ReturnType<typeof readyTasks>["tasks"]) {
   if (!first || !second) throw new Error("Test fixture must contain two tasks");
   return [first, second] as const;
 }
+
+test("a shared file is ordered whichever way the dependency points", () => {
+  // Waves come from the graph, not from the position a task happens to occupy in the array, so
+  // requiring the later-indexed task to be the dependent one rejected valid graphs.
+  const tasks = readyTasks().tasks;
+  const [first, second] = requireTwoTasks(tasks);
+  second.depends_on = [];
+  second.files.modify = [...first.files.modify];
+  first.depends_on = [second.id];
+
+  expect(() => validateTaskPolicy(tasks, defaultPolicy)).not.toThrow();
+});
+
+test("a transitive dependency orders a shared file just as well", () => {
+  const tasks = readyTasks().tasks;
+  const [first, second] = requireTwoTasks(tasks);
+  const middle = {
+    ...second,
+    id: "T3",
+    depends_on: [second.id],
+    files: { read: [], modify: [], create: ["src/middle.ts"] },
+  };
+  second.depends_on = [];
+  second.files.modify = [...first.files.modify];
+  first.depends_on = [middle.id];
+
+  expect(() => validateTaskPolicy([first, second, middle], defaultPolicy)).not.toThrow();
+});

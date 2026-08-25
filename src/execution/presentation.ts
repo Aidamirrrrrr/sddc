@@ -22,7 +22,7 @@ export function contractSummary(feature: string, tasks: Task[], policy: Policy):
 
 export function traceability(proposal: ChangeProposal): string {
   return proposal.traceability
-    .map((item) => `${item.requirement_id} -> ${item.paths.join(", ")}`)
+    .map((item) => `${item.covers} -> ${item.paths.join(", ")}`)
     .join("\n");
 }
 

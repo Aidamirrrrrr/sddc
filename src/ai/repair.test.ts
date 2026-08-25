@@ -27,6 +27,32 @@ describe("withOneRepair", () => {
     expect(prompts[1]).toContain("original");
   });
 
+  test("retries an empty response with reasoning degraded instead of repair instructions", async () => {
+    const attempts: Array<{ prompt: string; degraded: boolean }> = [];
+    const result = await withOneRepair("original", async (prompt, { degraded }) => {
+      attempts.push({ prompt, degraded });
+      if (attempts.length === 1) throw new Error("No output generated.");
+      return "recovered";
+    });
+
+    expect(result).toBe("recovered");
+    expect(attempts).toEqual([
+      { prompt: "original", degraded: false },
+      { prompt: "original", degraded: true },
+    ]);
+  });
+
+  test("keeps reasoning enabled when the response merely failed validation", async () => {
+    const attempts: boolean[] = [];
+    await withOneRepair("original", async (_prompt, { degraded }) => {
+      attempts.push(degraded);
+      if (attempts.length === 1) throw new Error("missing field");
+      return "corrected";
+    });
+
+    expect(attempts).toEqual([false, false]);
+  });
+
   test("stops after the repair attempt fails", async () => {
     let attempts = 0;
     const operation = withOneRepair("original", async () => {

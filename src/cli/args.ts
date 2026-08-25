@@ -1,8 +1,14 @@
 export type Cli = {
   stage?: string;
   recompile?: "plan" | "tasks" | "execute";
+  analyze: boolean;
+  evaluate: boolean;
+  evalRecord: boolean;
+  live: boolean;
   language?: "en" | "ru";
   thinking: boolean;
+  /** Overrides the run's model-call ceiling for this invocation only. */
+  maxCalls?: number;
   help: boolean;
   init: boolean;
   version: boolean;
@@ -16,6 +22,10 @@ export type Cli = {
 
 export function parseCli(args: string[]): Cli {
   const cli: Cli = {
+    analyze: false,
+    evaluate: false,
+    evalRecord: false,
+    live: false,
     thinking: false,
     help: false,
     init: false,
@@ -47,6 +57,14 @@ export function parseCli(args: string[]): Cli {
       cli.noInput = true;
     } else if (value === "--debug") {
       cli.debug = true;
+    } else if (value === "--analyze") {
+      cli.analyze = true;
+    } else if (value === "--eval") {
+      cli.evaluate = true;
+    } else if (value === "--eval-record") {
+      cli.evalRecord = true;
+    } else if (value === "--live") {
+      cli.live = true;
     } else if (value === "--recompile") {
       const phase = requireArgument(args, ++index, "--recompile");
       if (phase !== "plan" && phase !== "tasks" && phase !== "execute") {
@@ -59,6 +77,13 @@ export function parseCli(args: string[]): Cli {
       const language = requireArgument(args, ++index, "--lang");
       if (language !== "en" && language !== "ru") throw new Error("--lang must be 'en' or 'ru'");
       cli.language = language;
+    } else if (value === "--max-calls") {
+      const raw = requireArgument(args, ++index, "--max-calls");
+      const calls = Number(raw);
+      if (!Number.isInteger(calls) || calls < 1) {
+        throw new Error("--max-calls must be a positive integer");
+      }
+      cli.maxCalls = calls;
     } else if (value === "--thinking") {
       const mode = requireArgument(args, ++index, "--thinking");
       if (mode !== "on" && mode !== "off") {

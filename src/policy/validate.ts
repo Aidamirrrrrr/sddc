@@ -1,5 +1,10 @@
+import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
+import { isBehaviouralSource, isTestPath, writesOnlyTests } from "./paths";
 import type { Policy } from "./schemas";
+
+/** What a criterion proves, so "the test covering this task" can mean something checkable. */
+export type AcceptanceCoverage = Pick<Spec, "acceptance">;
 
 const DEPENDENCY_FILES = new Set([
   "Cargo.lock",
@@ -17,7 +22,11 @@ const DEPENDENCY_FILES = new Set([
   "yarn.lock",
 ]);
 
-export function validateTaskPolicy(tasks: Task[], policy: Policy): void {
+export function validateTaskPolicy(
+  tasks: Task[],
+  policy: Policy,
+  coverage?: AcceptanceCoverage,
+): void {
   for (const task of tasks) {
     const changed = [...new Set([...task.files.modify, ...task.files.create])];
     if (changed.length > policy.changes.max_files_per_task) {
@@ -51,6 +60,8 @@ export function validateTaskPolicy(tasks: Task[], policy: Policy): void {
     }
   }
   validateWriteOrdering(tasks);
+  assertOwnersCanProve(tasks, policy);
+  if (policy.changes.require_test_before_implementation) validateTestFirst(tasks, coverage);
 }
 
 function usesExternalNetwork(program: string, args: string[]): boolean {
@@ -93,17 +104,106 @@ function validateChangedPath(task: Task, path: string, policy: Policy): void {
   }
 }
 
+/**
+ * SDD Article III, enforced on the graph rather than asked for in a prompt.
+ *
+ * A task that changes behavioural source must depend — directly or transitively — on a task that
+ * writes a test. Writing the test in the same task is deliberately not enough: "first" would then
+ * mean nothing, and the ordering is exactly what the article is about.
+ */
+function validateTestFirst(tasks: Task[], coverage?: AcceptanceCoverage): void {
+  const writesTest = (task: Task): boolean =>
+    [...task.files.modify, ...task.files.create].some(isTestPath);
+
+  // What each acceptance criterion verifies, so a test task can be tied to the work it proves.
+  const verifies = new Map(
+    (coverage?.acceptance ?? []).map((item) => [item.id, new Set(item.verifies)]),
+  );
+  /**
+   * Whether a test task proves *this* task rather than merely existing before it.
+   *
+   * Any-test-will-do let one decorative test task in the root satisfy the article for the whole
+   * graph, which is the letter of Article III without its substance. The link is the requirement:
+   * either both tasks serve it, or the test task owns a criterion that verifies it.
+   */
+  const proves = (test: Task, task: Task): boolean => {
+    const served = new Set(task.requirements);
+    if (test.requirements.some((id) => served.has(id))) return true;
+    return test.acceptance.some((id) =>
+      [...(verifies.get(id) ?? [])].some((requirement) => served.has(requirement)),
+    );
+  };
+
+  for (const task of tasks) {
+    const source = [...task.files.modify, ...task.files.create].filter(isBehaviouralSource);
+    if (source.length === 0) continue;
+    const earlier = tasks.filter(
+      (other) =>
+        other.id !== task.id && writesTest(other) && dependsTransitively(task.id, other.id, tasks),
+    );
+    if (earlier.length === 0) {
+      throw new Error(
+        `${task.id} changes ${source.join(", ")} without depending on a task that writes a test`,
+      );
+    }
+    if (!earlier.some((test) => proves(test, task))) {
+      throw new Error(
+        `${task.id} changes ${source.join(", ")} but no test it depends on ` +
+          `(${earlier.map((test) => test.id).join(", ")}) covers ${task.requirements.join(", ")}`,
+      );
+    }
+  }
+}
+
+/**
+ * A criterion's owner must be able to prove it — unless test-first says otherwise.
+ *
+ * A task owning criteria that writes only tests and waits for nobody normally runs before the code
+ * under test exists, so its test cannot even compile. Under require_test_before_implementation that
+ * is the prescribed shape: the test lands first and is expected to fail until the implementation
+ * arrives. Enforcing both at once left no satisfiable graph, which is how this ended up next to the
+ * rule it has to agree with.
+ */
+function assertOwnersCanProve(tasks: Task[], policy: Policy): void {
+  if (policy.changes.require_test_before_implementation) return;
+  const someoneWritesSource = tasks.some((task) =>
+    [...task.files.modify, ...task.files.create].some(isBehaviouralSource),
+  );
+  if (!someoneWritesSource) return;
+  for (const task of tasks) {
+    if (task.acceptance.length === 0) continue;
+    if (!writesOnlyTests(task.files)) continue;
+    if (task.depends_on.length > 0) continue;
+    throw new Error(
+      `${task.id} owns ${task.acceptance.join(", ")} but only writes tests and depends on nothing, ` +
+        "so it runs before the code under test exists",
+    );
+  }
+}
+
+/**
+ * Two tasks writing the same file must be ordered by a dependency — in either direction.
+ *
+ * The order they happen to occupy in the array is not the order they run in: waves come from the
+ * graph. Requiring the *later-indexed* task to be the dependent one rejected valid graphs whose
+ * dependency pointed the other way, which is the same mistake as a validator demanding what another
+ * one forbids: the rule has to be stated over the graph, because the graph is what executes.
+ */
 function validateWriteOrdering(tasks: Task[]): void {
   for (let index = 0; index < tasks.length; index += 1) {
     const task = tasks[index];
     if (!task) continue;
     const writes = new Set([...task.files.modify, ...task.files.create]);
-    for (const later of tasks.slice(index + 1)) {
-      const overlap = [...later.files.modify, ...later.files.create].find((path) =>
+    for (const other of tasks.slice(index + 1)) {
+      const overlap = [...other.files.modify, ...other.files.create].find((path) =>
         writes.has(path),
       );
-      if (overlap && !dependsTransitively(later.id, task.id, tasks)) {
-        throw new Error(`${task.id} and ${later.id} both change ${overlap} without ordering`);
+      if (!overlap) continue;
+      const ordered =
+        dependsTransitively(other.id, task.id, tasks) ||
+        dependsTransitively(task.id, other.id, tasks);
+      if (!ordered) {
+        throw new Error(`${task.id} and ${other.id} both change ${overlap} without ordering`);
       }
     }
   }

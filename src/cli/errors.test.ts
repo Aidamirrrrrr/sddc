@@ -15,3 +15,12 @@ test("presents nested stage failures with a useful localized recovery hint", () 
     hint: "Модель дважды вернула некорректный структурированный ответ. Повторите запуск или включите --thinking on.",
   });
 });
+
+test("explains an exhausted output budget behind a named task stage", () => {
+  const error = new Error("Failed tasks-audit", { cause: new Error("No output generated.") });
+
+  expect(presentError(error)).toEqual({
+    message: "task coverage check could not be completed: No output generated.",
+    hint: "The model returned no structured output twice; its output budget is likely exhausted by reasoning. Raise AI_MAX_OUTPUT_TOKENS in ~/.config/sddc/.env, or rerun with --thinking off.",
+  });
+});

@@ -4,8 +4,15 @@ export const taskSchema = z.object({
   id: z.string(),
   title: z.string(),
   goal: z.string(),
+  /** Every task must serve something; requirements may be served by several tasks. */
   requirements: z.array(z.string()).min(1),
-  acceptance: z.array(z.string()).min(1),
+  /**
+   * The acceptance criteria this task owns — and owns exclusively.
+   *
+   * May be empty: a task that serves a requirement without completing a criterion of its own is
+   * legitimate, and under test-first the criterion belongs to the task that writes its test.
+   */
+  acceptance: z.array(z.string()),
   depends_on: z.array(z.string()),
   permissions: z.array(z.enum(["dependencies", "configuration", "migration", "external_network"])),
   files: z.object({
