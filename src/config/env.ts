@@ -6,15 +6,24 @@ export type ModelConfig = {
   apiUrl: string;
   apiToken: string;
   model: string;
-  maxOutputTokens: number;
+  /** Undefined sends no cap at all, leaving the model's own maximum in force. */
+  maxOutputTokens: number | undefined;
 };
 
 /**
- * Audit and review stages carry the whole upstream context, and reasoning tokens are billed against
- * this same budget, so it has to leave room for the structured answer after the model has thought.
+ * How much room a stage gets for its answer.
+ *
+ * This is the completion cap, not the context window: the window is an input limit we never set,
+ * and a model's maximum output is an order of magnitude smaller than it. Reasoning tokens are
+ * charged against this same budget, so a heavy stage can spend the whole thing thinking and return
+ * no JSON — which is what the default is sized to avoid.
+ *
+ * It stays a default rather than being removed because an uncapped completion against a per-token
+ * endpoint is an open-ended bill. `AI_MAX_OUTPUT_TOKENS=off` removes it deliberately.
  */
-const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
 const MINIMUM_MAX_OUTPUT_TOKENS = 1_024;
+const UNCAPPED = new Set(["off", "none", "max", "0"]);
 
 export function loadModelConfig(): ModelConfig {
   return {
@@ -25,13 +34,14 @@ export function loadModelConfig(): ModelConfig {
   };
 }
 
-export function loadMaxOutputTokens(): number {
+export function loadMaxOutputTokens(): number | undefined {
   const value = Bun.env.AI_MAX_OUTPUT_TOKENS?.trim();
   if (!value) return DEFAULT_MAX_OUTPUT_TOKENS;
+  if (UNCAPPED.has(value.toLocaleLowerCase())) return undefined;
   const tokens = Number(value);
   if (!Number.isInteger(tokens) || tokens < MINIMUM_MAX_OUTPUT_TOKENS) {
     throw new Error(
-      `AI_MAX_OUTPUT_TOKENS must be an integer of at least ${MINIMUM_MAX_OUTPUT_TOKENS}`,
+      `AI_MAX_OUTPUT_TOKENS must be "off" or an integer of at least ${MINIMUM_MAX_OUTPUT_TOKENS}`,
     );
   }
   return tokens;

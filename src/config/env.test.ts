@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initializeUserConfig, loadUserEnvironment, userConfigPath } from "./env";
+import {
+  initializeUserConfig,
+  loadMaxOutputTokens,
+  loadUserEnvironment,
+  userConfigPath,
+} from "./env";
 
 const original = {
   configHome: Bun.env.XDG_CONFIG_HOME,
@@ -54,3 +59,23 @@ function restore(name: string, value: string | undefined): void {
   if (value === undefined) delete Bun.env[name];
   else Bun.env[name] = value;
 }
+
+test("the completion cap can be removed deliberately", () => {
+  const previous = Bun.env.AI_MAX_OUTPUT_TOKENS;
+  try {
+    for (const value of ["off", "none", "max", "0", "OFF"]) {
+      Bun.env.AI_MAX_OUTPUT_TOKENS = value;
+      // Undefined means the parameter is not sent, so the model's own maximum applies.
+      expect(loadMaxOutputTokens()).toBeUndefined();
+    }
+    Bun.env.AI_MAX_OUTPUT_TOKENS = "65536";
+    expect(loadMaxOutputTokens()).toBe(65_536);
+    Bun.env.AI_MAX_OUTPUT_TOKENS = "";
+    expect(loadMaxOutputTokens()).toBe(32_768);
+    Bun.env.AI_MAX_OUTPUT_TOKENS = "12";
+    expect(() => loadMaxOutputTokens()).toThrow('must be "off" or an integer');
+  } finally {
+    if (previous === undefined) delete Bun.env.AI_MAX_OUTPUT_TOKENS;
+    else Bun.env.AI_MAX_OUTPUT_TOKENS = previous;
+  }
+});

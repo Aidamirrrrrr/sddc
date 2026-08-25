@@ -82,3 +82,47 @@ function task() {
   if (!first) throw new Error("Fixture must contain a task");
   return first;
 }
+
+function review(overrides: Partial<ExecutionReview> = {}): ExecutionReview {
+  return {
+    decision: "pass",
+    checks: Array.from({ length: 7 }, (_, index) => ({
+      id: `E${index + 1}` as ExecutionReview["checks"][number]["id"],
+      passed: true,
+      finding: "Passed",
+    })),
+    findings: [],
+    ...overrides,
+  };
+}
+
+test("a rejection names the check that refused, not only the prose", () => {
+  const rejected = review();
+  rejected.checks[0] = {
+    id: "E1",
+    passed: false,
+    finding: "The acceptance criteria are asserted but not yet implemented",
+  };
+  // A live run failed with exactly this shape: the reviewer's own findings said the proposal was
+  // correct, and nothing in the message named the check that disagreed.
+  rejected.findings = [
+    "The proposal correctly adds tests and is expected to fail. No issues found.",
+  ];
+
+  expect(() => validateExecutionReview(rejected)).toThrow(
+    "failed checks: E1 (The acceptance criteria are asserted but not yet implemented)",
+  );
+});
+
+test("a reject decision with every check passed is reported as the contradiction it is", () => {
+  expect(() => validateExecutionReview(review({ decision: "reject" }))).toThrow(
+    "decision is reject with every check passed",
+  );
+});
+
+test("a check the reviewer never returned is still named", () => {
+  const partial = review();
+  partial.checks = partial.checks.slice(0, 5);
+
+  expect(() => validateExecutionReview(partial)).toThrow("failed checks: E6; E7");
+});

@@ -18,7 +18,7 @@ Rules:
 - For a created file, expected_sha256 must be null.
 - Preserve unrelated code and the project's established conventions.
 - Satisfy the listed requirements, acceptance criteria and done_when conditions, and produce the outcome expectation describes.
-- Trace every task requirement and acceptance criterion to at least one changed file.
+- Trace every task requirement and acceptance criterion to at least one file, and only ever to a file listed in your own changes. A file you merely read — including the source a test exercises — is not traceability. For a task that writes only tests, every criterion traces to the test file that asserts it.
 - Treat previous verification output as diagnostics, not as permission to expand scope.
 - Verification commands run in the project as it already is. Files a command merely needs to exist — package manifests, lockfiles, tooling config — do not belong in files.modify, and their absence from it is never a reason to block.
 - Code your task does not touch may be missing or incomplete because a pending sibling owns it: that is the plan working, not a blocker. Implement your slice and leave theirs alone.
@@ -34,8 +34,16 @@ task is required to produce — when it says the command must fail, a test that 
 and must not be rejected for failing. otherTasks marks siblings applied or pending; code owned by a
 pending sibling is legitimately absent.
 
+Judge every check against expectation, not against a habit. When expectation says the verification
+must fail, the task's work is the assertions themselves: a requirement or criterion is implemented
+when the proposal asserts it, even though nothing satisfies that assertion yet. Failing for exactly
+that reason is the task succeeding. Do not fail a check because the code under test is absent, and do
+not reject a proposal whose findings you would otherwise write as "no issues found" — decision and
+checks must agree with the prose you write.
+
 Return exactly one result for every check:
-E1 all task requirements and acceptance criteria are implemented;
+E1 every task requirement and acceptance criterion is addressed by the proposal — implemented when
+the task writes implementation, asserted when the task writes tests;
 E2 every change stays within the approved scope;
 E3 public behavior or API changes only when explicitly required;
 E4 no plaintext secrets, credentials, or sensitive data are introduced;

@@ -501,14 +501,21 @@ AI_API_TOKEN=your-token
 AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
-AI_MAX_OUTPUT_TOKENS=optional-output-budget
+AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
 ```
 
-`AI_MAX_OUTPUT_TOKENS` sets the output budget of a single model call (default
-16384, minimum 1024). On reasoning models the thinking tokens are billed against
-that same budget, so a value that is too small yields an empty response on heavy
-stages such as `tasks-audit`. When a response does come back empty, the agent
-retries once with reasoning degraded so the whole budget goes to the answer.
+`AI_MAX_OUTPUT_TOKENS` caps a single model **completion** (default 32768,
+minimum 1024). It is not the context window: the window limits the input and is
+never set here, while a model's maximum output is an order of magnitude smaller
+than it. On reasoning models the thinking tokens are billed against this same
+budget, so a value that is too small yields an empty response on heavy stages
+such as `tasks-audit`. When a response does come back empty, the agent retries
+once with reasoning degraded so the whole budget goes to the answer.
+
+Set `AI_MAX_OUTPUT_TOKENS=off` to send no cap at all and leave the model's own
+maximum in force. That is the right setting when the endpoint is a flat-rate or
+self-hosted one; against a per-token endpoint the default is a deliberate bound
+on an otherwise open-ended bill.
 
 Process environment variables take precedence over the user configuration.
 To install a development build from this repository, run

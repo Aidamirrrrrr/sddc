@@ -58,8 +58,24 @@ export function validateExecutionReview(review: ExecutionReview): void {
   const missing = Array.from({ length: 7 }, (_, index) => `E${index + 1}`).filter(
     (id) => !passed.has(id as ExecutionReview["checks"][number]["id"]),
   );
-  if (review.decision !== "pass" || missing.length > 0) {
-    const findings = review.findings.length > 0 ? review.findings.join("; ") : missing.join(", ");
-    throw new Error(`Execution review rejected proposal: ${findings}`);
-  }
+  if (review.decision === "pass" && missing.length === 0) return;
+
+  // This message is the next draw's validation_error and the journal's account of the failure, so
+  // it has to say which check refused. Reporting only the prose findings hid that entirely: a run
+  // failed with the reviewer's own words saying the proposal was correct, and nothing named the
+  // check that disagreed with them.
+  const refused = missing
+    .map((id) => {
+      const finding = review.checks.find((check) => check.id === id)?.finding.trim();
+      return finding ? `${id} (${finding})` : id;
+    })
+    .join("; ");
+  const parts = [
+    refused && `failed checks: ${refused}`,
+    review.decision !== "pass" &&
+      missing.length === 0 &&
+      "decision is reject with every check passed",
+    review.findings.length > 0 && `findings: ${review.findings.join("; ")}`,
+  ].filter(Boolean);
+  throw new Error(`Execution review rejected proposal: ${parts.join(" · ")}`);
 }

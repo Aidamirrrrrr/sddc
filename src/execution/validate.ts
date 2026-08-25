@@ -109,10 +109,25 @@ export function validateProposal(
   const traced = new Map(
     proposal.traceability.map((item) => [item.requirement_id, new Set(item.paths)]),
   );
+  const changed = [...seen].join(", ");
   for (const criterion of [...task.requirements, ...task.acceptance]) {
     const paths = traced.get(criterion);
-    if (!paths || [...paths].some((path) => !seen.has(path))) {
-      throw new Error(`${task.id} has invalid traceability for ${criterion}`);
+    // The message travels to the repair turn as its validation_error, so it names what was wrong
+    // rather than only that something was. "Invalid traceability for A1" left the next draw
+    // guessing, and the commonest guess is to point at the file under test, which it never changed.
+    if (!paths) {
+      throw new Error(
+        `${task.id} has no traceability entry for ${criterion}. Every requirement and acceptance ` +
+          `criterion needs one, whose paths are drawn from this proposal's own changes: ${changed}`,
+      );
+    }
+    const foreign = [...paths].filter((path) => !seen.has(path));
+    if (foreign.length > 0) {
+      throw new Error(
+        `${task.id} traces ${criterion} to ${foreign.join(", ")}, which this proposal does not ` +
+          `change. Traceability points at the files you changed (${changed}), never at a file you ` +
+          "only read.",
+      );
     }
   }
   if (changedLines > policy.execution.max_changed_lines_per_task) {

@@ -31,7 +31,7 @@ export function composePrompt(instruction: string, context: string): string {
 export class ModelClient {
   private readonly model: LanguageModel;
   private readonly thinking: boolean;
-  private readonly maxOutputTokens: number;
+  private readonly maxOutputTokens: number | undefined;
 
   constructor(config: ModelConfig, thinking: boolean) {
     const provider = createOpenAICompatible({
@@ -58,7 +58,10 @@ export class ModelClient {
             system: PREAMBLE,
             prompt: currentPrompt,
             temperature: 0,
-            maxOutputTokens: this.maxOutputTokens,
+            // Omitted entirely when unset, so the model's own maximum applies rather than ours.
+            ...(this.maxOutputTokens === undefined
+              ? {}
+              : { maxOutputTokens: this.maxOutputTokens }),
             maxRetries: 0,
             output: Output.object({
               name: "stage_output",

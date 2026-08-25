@@ -192,6 +192,7 @@ function testOnlyTask(): Task {
   return {
     ...first,
     id: "T1",
+    requirements: ["R1"],
     acceptance: [],
     files: { read: ["src/store.ts"], modify: ["src/store.test.ts"], create: [] },
   };
@@ -211,3 +212,55 @@ function blockedOn(required: string[]): ChangeProposal {
     changes: [],
   };
 }
+
+test("tracing a criterion to a file the proposal only reads is explained, not just refused", () => {
+  const task = testOnlyTask();
+  const files = [{ path: "src/store.test.ts", content: "old\n", sha256: sha256("old\n") }];
+  const proposal: ChangeProposal = {
+    task_id: "T1",
+    status: "ready",
+    summary: "Add tag tests",
+    blocker: null,
+    // The commonest wrong guess: point at the source under test rather than the file changed.
+    traceability: [
+      { requirement_id: "R1", paths: ["src/store.test.ts"] },
+      { requirement_id: "A1", paths: ["src/store.ts"] },
+    ],
+    changes: [
+      {
+        path: "src/store.test.ts",
+        operation: "modify",
+        expected_sha256: sha256("old\n"),
+        content: "new\n",
+      },
+    ],
+  };
+
+  expect(() =>
+    validateProposal({ ...proposal }, { ...task, acceptance: ["A1"] }, files, defaultPolicy),
+  ).toThrow("traces A1 to src/store.ts, which this proposal does not change");
+});
+
+test("a missing traceability entry says which criterion and what to point at", () => {
+  const task = testOnlyTask();
+  const files = [{ path: "src/store.test.ts", content: "old\n", sha256: sha256("old\n") }];
+  const proposal: ChangeProposal = {
+    task_id: "T1",
+    status: "ready",
+    summary: "Add tag tests",
+    blocker: null,
+    traceability: [{ requirement_id: "R1", paths: ["src/store.test.ts"] }],
+    changes: [
+      {
+        path: "src/store.test.ts",
+        operation: "modify",
+        expected_sha256: sha256("old\n"),
+        content: "new\n",
+      },
+    ],
+  };
+
+  expect(() =>
+    validateProposal(proposal, { ...task, acceptance: ["A1"] }, files, defaultPolicy),
+  ).toThrow("no traceability entry for A1");
+});
