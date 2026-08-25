@@ -24,7 +24,16 @@ export type Block =
    * Summarising it and hanging the detail off it keeps a long run scannable without hiding what it
    * actually did.
    */
-  | { id: number; kind: "action"; tone: Tone; title: string; details: string[] };
+  | { id: number; kind: "action"; tone: Tone; title: string; details: string[] }
+  /** Said once at the top: which project, which model, which rules are in force. */
+  | {
+      id: number;
+      kind: "banner";
+      version: string;
+      project: string;
+      model: string;
+      facts: string[];
+    };
 
 /** `Omit` collapses a union into its shared keys, so it has to be distributed by hand. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

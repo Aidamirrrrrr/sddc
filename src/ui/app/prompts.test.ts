@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Choice } from "../driver";
-import { filterChoices, nextEnabled, windowAround } from "./prompts";
+import { choiceForDigit, filterChoices, labelColumn, nextEnabled, windowAround } from "./prompts";
 
 function choices(...labels: string[]): Choice<string>[] {
   return labels.map((label) => ({ value: label, label }));
@@ -87,4 +87,46 @@ test("a paste without a newline is just text", () => {
 
   expect(typed).toBe("half an answer");
   expect(rest.length > 0).toBe(false);
+});
+
+test("a digit selects the choice at that position", () => {
+  const list = choices("strict", "normal", "trusted");
+
+  expect(choiceForDigit(list, "1")?.value).toBe("strict");
+  expect(choiceForDigit(list, "3")?.value).toBe("trusted");
+  expect(choiceForDigit(list, "4")).toBeUndefined();
+  expect(choiceForDigit(list, "0")).toBeUndefined();
+  expect(choiceForDigit(list, "x")).toBeUndefined();
+});
+
+test("a disabled row keeps its number but cannot be chosen by it", () => {
+  const list: Choice<string>[] = [
+    { value: "accept", label: "Accept" },
+    { value: "revise", label: "Revise", disabled: true },
+    { value: "quit", label: "Quit" },
+  ];
+
+  // Numbering that shifted when a row was disabled would move the answer under the reader between
+  // one prompt and the next.
+  expect(choiceForDigit(list, "2")).toBeUndefined();
+  expect(choiceForDigit(list, "3")?.value).toBe("quit");
+});
+
+test("hints line up in a column, and a plain list is not padded into a table", () => {
+  const hinted: Choice<string>[] = [
+    { value: "strict", label: "Strict", hint: "approve every command" },
+    { value: "trusted", label: "Trusted", hint: "automatic diffs" },
+  ];
+
+  expect(labelColumn(hinted)).toBe(7);
+  expect(labelColumn(choices("a", "b"))).toBe(0);
+});
+
+test("one very long label does not indent every hint off the screen", () => {
+  const list: Choice<string>[] = [
+    { value: "a", label: "src/features/billing/invoice-reconciliation.ts", hint: "modify" },
+    { value: "b", label: "src/store.ts", hint: "modify" },
+  ];
+
+  expect(labelColumn(list)).toBe(24);
 });

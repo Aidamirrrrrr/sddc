@@ -6,7 +6,7 @@ import { sessionUsage } from "../../ai/usage";
 import { theme } from "../theme";
 import { CommandLine } from "./CommandLine";
 import { runCommand } from "./commands";
-import { Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
+import { Banner, Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
 import { useKeys } from "./keys";
 import { Panel, PanelBody } from "./Panel";
 import { ConfirmPrompt, MultiSelectPrompt, SelectPrompt, TextPrompt } from "./prompts";
@@ -184,6 +184,16 @@ function HistoryBlock({ block }: { block: Block }) {
       <Panel title={block.title}>
         <PanelBody body={block.body} />
       </Panel>
+    );
+  }
+  if (block.kind === "banner") {
+    return (
+      <Banner
+        version={block.version}
+        project={block.project}
+        model={block.model}
+        facts={block.facts}
+      />
     );
   }
   if (block.kind === "action") {

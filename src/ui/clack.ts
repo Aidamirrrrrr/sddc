@@ -26,6 +26,11 @@ export function createClackDriver(): Driver {
     warn: (message) => log.warn(message),
     step: (current, total, message) =>
       log.step(`${paint(`${current}/${total}`, theme.accent)} ${message}`),
+    banner: ({ version, project, model, facts }) =>
+      note(
+        [`project  ${project}`, `model    ${model}`, ...facts].join("\n"),
+        paint(`sddc ${version}`, theme.accent),
+      ),
     document: (title, content) => note(content, paint(title, theme.accent)),
     // No structure to draw with, so the summary leads and its evidence is indented under it.
     action: (summary, details) =>

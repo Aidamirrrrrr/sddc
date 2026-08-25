@@ -42,6 +42,7 @@ export function startApp(root = process.cwd()): Driver {
 
   return {
     begin: (title) => store.update((state) => ({ ...state, heading: title })),
+    banner: (details) => store.push({ kind: "banner", ...details }),
     // Nothing announces the end of the last phase, so completing the run closes it.
     finish: (message) =>
       store.update((state) => ({ ...markCurrentPhase(state, "done"), finished: message })),

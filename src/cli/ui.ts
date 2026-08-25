@@ -74,6 +74,15 @@ export function begin(): void {
   driver().begin("sddc");
 }
 
+export function banner(details: {
+  version: string;
+  project: string;
+  model: string;
+  facts: string[];
+}): void {
+  driver().banner(details);
+}
+
 export function finish(copy: Copy): void {
   driver().finish(phrase(copy));
 }

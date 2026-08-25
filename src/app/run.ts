@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { budgetState, onBudgetWarning, setBudget } from "../ai/budget";
 import { ModelClient } from "../ai/model-client";
 import { formatUsage, sessionUsage } from "../ai/usage";
@@ -6,6 +7,7 @@ import { parseCli } from "../cli/args";
 import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
 import {
+  banner,
   begin,
   chooseUiLanguage,
   finish,
@@ -79,7 +81,8 @@ export async function runCli(arguments_: string[]): Promise<void> {
   if (!cli.stage) begin();
   if (interactive && !cli.stage) await chooseUiLanguage(cli.language);
   else setUiLanguage(cli.language ?? (/^ru/i.test(process.env.LANG ?? "") ? "ru" : "en"));
-  const client = new ModelClient(loadModelConfig(), cli.thinking);
+  const modelConfig = loadModelConfig();
+  const client = new ModelClient(modelConfig, cli.thinking);
   // Set before the first stage runs, so intake is inside the ceiling rather than outside it. The
   // project's policy is the source; the flag overrides it for one invocation.
   const runPolicy = await loadPolicy(process.cwd());
@@ -96,6 +99,18 @@ export async function runCli(arguments_: string[]): Promise<void> {
     if (result === undefined) throw new Error(`Unknown stage "${cli.stage}"`);
     console.log(JSON.stringify(result, null, cli.json ? undefined : 2));
     return;
+  }
+
+  if (!cli.stage) {
+    banner({
+      version: VERSION,
+      project: basename(process.cwd()),
+      model: modelConfig.model,
+      facts: [
+        `budget   ${cli.maxCalls ?? runPolicy.budget.max_model_calls} model calls`,
+        `rules    ${runPolicy.changes.require_test_before_implementation ? "test-first enforced" : "test-first off"}`,
+      ],
+    });
   }
 
   if (cli.analyze) {

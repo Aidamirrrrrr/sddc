@@ -24,6 +24,13 @@ export type TextOptions = {
 
 export type Driver = {
   begin(title: string): void;
+  /**
+   * Opens the session with what it is working on and with.
+   *
+   * Separate from `begin` because it is content rather than chrome: it belongs in the scrollback
+   * where someone scrolling back to check which model ran will actually find it.
+   */
+  banner(details: { version: string; project: string; model: string; facts: string[] }): void;
   finish(message: string): void;
   info(message: string): void;
   success(message: string): void;

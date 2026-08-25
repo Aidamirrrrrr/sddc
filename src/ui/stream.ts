@@ -24,6 +24,8 @@ export function createStreamDriver(mode: "plain" | "json"): Driver {
     warn: (message) => write("warn", { message }, message),
     step: (current, total, message) =>
       write("step", { current, total, message }, `[${current}/${total}] ${message}`),
+    banner: (details) =>
+      write("banner", details, `sddc ${details.version} · ${details.project} · ${details.model}`),
     document: (title, content) => write("document", { title, content }, `\n${title}\n${content}`),
     action: (summary, details, tone = "success") =>
       write(

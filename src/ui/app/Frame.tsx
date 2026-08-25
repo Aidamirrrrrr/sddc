@@ -17,6 +17,55 @@ export function Header({ heading, subtitle }: { heading: string; subtitle: strin
   );
 }
 
+/**
+ * What the session is working on and with, said once at the top.
+ *
+ * Printed into the scrollback rather than the live frame: it is the answer to "which project, which
+ * model, which rules" and someone scrolling back to check should find it where it happened, not
+ * pinned to the bottom of a screen that has moved on.
+ */
+export function Banner({
+  version,
+  project,
+  model,
+  facts,
+}: {
+  version: string;
+  project: string;
+  model: string;
+  facts: string[];
+}) {
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Box>
+        <Text backgroundColor={theme.accent} color={theme.surface} bold>
+          {"  ◆ sddc  "}
+        </Text>
+        <Text backgroundColor={theme.surfaceRaised} color={theme.text}>
+          {`  ${version}  `}
+        </Text>
+        <Text backgroundColor={theme.surfaceRaised} color={theme.muted}>
+          {`${project}  `}
+        </Text>
+      </Box>
+      <Box marginTop={1} marginLeft={2}>
+        <Text color={theme.muted}>{"model  "}</Text>
+        <Text color={theme.text}>{model}</Text>
+      </Box>
+      {facts.map((fact) => (
+        <Box key={fact} marginLeft={2}>
+          <Text color={theme.muted}>{fact}</Text>
+        </Box>
+      ))}
+      <Box marginLeft={2} marginTop={1}>
+        <Text color={theme.muted} dimColor>
+          {"/help for commands · esc interrupts · ctrl+c exits"}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
 /** The persistent rail: what the run is made of, and where it currently is. */
 export function PhaseRail({ phases }: { phases: Phase[] }) {
   if (phases.length === 0) return null;

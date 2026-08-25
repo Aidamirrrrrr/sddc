@@ -55,6 +55,36 @@ export function windowAround<T>(items: T[], cursor: number, size = WINDOW): T[] 
   return items.slice(start, start + size);
 }
 
+/**
+ * The choice a digit key selects.
+ *
+ * Numbering makes a decision a single keystroke instead of an aim-then-confirm, which matters most
+ * for the prompts that appear over and over — approving a diff, approving a command. Disabled rows
+ * keep their number rather than being skipped, so the numbering does not shift under the reader
+ * between one prompt and the next.
+ */
+export function choiceForDigit<T extends string>(
+  choices: Choice<T>[],
+  input: string,
+): Choice<T> | undefined {
+  if (!/^[1-9]$/.test(input)) return undefined;
+  const choice = choices[Number(input) - 1];
+  return choice && !choice.disabled ? choice : undefined;
+}
+
+/**
+ * How wide the label column has to be for the hints to line up.
+ *
+ * Zero when nothing carries a hint, so a plain list is not padded into a table for no reason. Long
+ * labels are excluded from the measurement — one path in a file picker should not indent every hint
+ * beside it off the screen.
+ */
+export function labelColumn<T extends string>(choices: Choice<T>[], limit = 24): number {
+  const hinted = choices.filter((choice) => choice.hint);
+  if (hinted.length === 0) return 0;
+  return Math.min(limit, Math.max(...hinted.map((choice) => choice.label.length)));
+}
+
 export function filterChoices<T extends string>(choices: Choice<T>[], query: string): Choice<T>[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return choices;
@@ -82,20 +112,26 @@ export function SelectPrompt({
         );
   });
 
-  useKeys((_input, key) => {
+  useKeys((input, key) => {
     if (key.upArrow) setCursor((current) => nextEnabled(choices, current, -1));
     else if (key.downArrow) setCursor((current) => nextEnabled(choices, current, 1));
     else if (key.return) {
       const choice = choices[cursor];
       if (choice && !choice.disabled) onSubmit(choice.value);
+    } else {
+      const picked = choiceForDigit(choices, input);
+      if (picked) onSubmit(picked.value);
     }
   });
 
   // Long lists (file pickers, feature lists) are windowed so the prompt never outgrows the frame.
   const window = windowAround(choices, cursor);
+  const numbered = choices.length <= 9;
+  // Hints only read as a column when they start in one.
+  const labelWidth = labelColumn(choices);
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.accent} paddingX={1}>
       <Question message={message} />
       {window.map((choice) => {
         const index = choices.indexOf(choice);
@@ -106,8 +142,13 @@ export function SelectPrompt({
             <Text color={selected ? theme.accent : theme.surfaceRaised}>
               {selected ? "  ▌ " : "    "}
             </Text>
+            {numbered ? (
+              <Text color={choice.disabled ? theme.muted : theme.accent} dimColor={!selected}>
+                {`${index + 1}. `}
+              </Text>
+            ) : null}
             <Text color={color} bold={selected} dimColor={choice.disabled}>
-              {choice.label}
+              {labelWidth > 0 ? choice.label.padEnd(labelWidth) : choice.label}
             </Text>
             {choice.hint ? (
               <Text color={theme.muted} dimColor>
@@ -122,7 +163,7 @@ export function SelectPrompt({
           {`    ${cursor + 1} of ${choices.length}`}
         </Text>
       ) : null}
-      <Hint>↑↓ move · enter select</Hint>
+      <Hint>{numbered ? "1-9 choose · ↑↓ move · enter select" : "↑↓ move · enter select"}</Hint>
     </Box>
   );
 }
@@ -140,23 +181,23 @@ export function ConfirmPrompt({
 
   useKeys((input, key) => {
     if (key.leftArrow || key.rightArrow || input === "\t") setValue((current) => !current);
-    else if (input.toLowerCase() === "y") onSubmit(true);
-    else if (input.toLowerCase() === "n") onSubmit(false);
+    else if (input.toLowerCase() === "y" || input === "1") onSubmit(true);
+    else if (input.toLowerCase() === "n" || input === "2") onSubmit(false);
     else if (key.return) onSubmit(value);
   });
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.accent} paddingX={1}>
       <Question message={message} />
       <Box>
         <Text color={value ? theme.accent : theme.muted} bold={value}>
-          {value ? "  ▌ Yes" : "    Yes"}
+          {value ? "  ▌ 1. Yes" : "    1. Yes"}
         </Text>
         <Text color={value ? theme.muted : theme.accent} bold={!value}>
-          {value ? "    No" : "  ▌ No"}
+          {value ? "    2. No" : "  ▌ 2. No"}
         </Text>
       </Box>
-      <Hint>y/n · ←→ switch · enter confirm</Hint>
+      <Hint>1/2 · y/n · ←→ switch · enter confirm</Hint>
     </Box>
   );
 }
