@@ -55,3 +55,36 @@ test("the expectation is derived from the files, so a task cannot declare its wa
   expect(verificationSatisfied(tests, testFirst, green)).toBe(false);
   expect(verificationSatisfied(source, testFirst, green)).toBe(true);
 });
+
+const crashed = [
+  { program: "bun", args: ["test"], exit_code: 127, timed_out: false, output: "command not found" },
+];
+const timedOut = [{ program: "bun", args: ["test"], exit_code: 143, timed_out: true, output: "" }];
+const killed = [
+  { program: "bun", args: ["test"], exit_code: 139, timed_out: false, output: "segfault" },
+];
+
+test("a suite that could not run is not a correctly failing test", () => {
+  const task = taskWriting([], ["src/auth.test.ts"]);
+
+  // Accepting any non-zero exit made the inverted expectation trivially satisfiable: a typo in the
+  // test file counted as red-green discipline.
+  expect(verificationSatisfied(task, testFirst, crashed)).toBe(false);
+  expect(verificationSatisfied(task, testFirst, timedOut)).toBe(false);
+  expect(verificationSatisfied(task, testFirst, killed)).toBe(false);
+});
+
+test("an inverted expectation with nothing to judge is not satisfied", () => {
+  const task = taskWriting([], ["src/auth.test.ts"]);
+
+  expect(verificationSatisfied(task, testFirst, [])).toBe(false);
+  // And the ordinary direction agrees: no command run is no evidence of success.
+  expect(verificationSatisfied(taskWriting(["src/auth.ts"]), defaultPolicy, [])).toBe(false);
+});
+
+test("a red run is judged by the command that actually failed", () => {
+  const task = taskWriting([], ["src/auth.test.ts"]);
+  const passedThenFailed = [...green, ...red];
+
+  expect(verificationSatisfied(task, testFirst, passedThenFailed)).toBe(true);
+});

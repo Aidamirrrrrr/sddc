@@ -90,3 +90,56 @@ test("test paths are recognised across common layouts", () => {
   expect(isBehaviouralSource("src/auth.ts")).toBe(true);
   expect(isBehaviouralSource("package.json")).toBe(false);
 });
+
+const coverage = {
+  acceptance: [
+    { id: "A1", verifies: ["R1"], statement: "Signing in succeeds" },
+    { id: "A9", verifies: ["R9"], statement: "Something unrelated" },
+  ],
+};
+
+function serving(id: string, dependsOn: string[], writes: string[], requirements: string[]): Task {
+  return { ...task(id, dependsOn, writes), requirements, acceptance: [] };
+}
+
+test("a test task counts only when it covers the work depending on it", () => {
+  // T1 writes a test for a different requirement entirely; T2 leaning on it is not test-first.
+  const tasks = assignWaves([
+    serving("T1", [], ["src/billing.test.ts"], ["R9"]),
+    serving("T2", ["T1"], ["src/auth.ts"], ["R1"]),
+  ]);
+
+  expect(() => validateTaskPolicy(tasks, testFirst, coverage)).toThrow(
+    "no test it depends on (T1) covers R1",
+  );
+});
+
+test("sharing the requirement is enough to make the test count", () => {
+  const tasks = assignWaves([
+    serving("T1", [], ["src/auth.test.ts"], ["R1"]),
+    serving("T2", ["T1"], ["src/auth.ts"], ["R1"]),
+  ]);
+
+  expect(() => validateTaskPolicy(tasks, testFirst, coverage)).not.toThrow();
+});
+
+test("owning a criterion that verifies the requirement also counts", () => {
+  const [first, second] = assignWaves([
+    serving("T1", [], ["src/auth.test.ts"], ["R2"]),
+    serving("T2", ["T1"], ["src/auth.ts"], ["R1"]),
+  ]);
+  if (!first || !second) throw new Error("Expected two tasks");
+  // T1 serves a different requirement, but the criterion it owns is what proves R1.
+  first.acceptance = ["A1"];
+
+  expect(() => validateTaskPolicy([first, second], testFirst, coverage)).not.toThrow();
+});
+
+test("without spec coverage the rule falls back to shared requirements", () => {
+  const tasks = assignWaves([
+    serving("T1", [], ["src/auth.test.ts"], ["R1"]),
+    serving("T2", ["T1"], ["src/auth.ts"], ["R1"]),
+  ]);
+
+  expect(() => validateTaskPolicy(tasks, testFirst)).not.toThrow();
+});

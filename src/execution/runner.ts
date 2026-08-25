@@ -8,6 +8,7 @@ import { orderTasks } from "../tasks/validate";
 import { createGitCheckpoint } from "./checkpoint";
 import { groupByWave, prefetchable } from "./concurrency";
 import { type FileBackup, restoreFiles } from "./files";
+import type { ProposalContext } from "./pipeline";
 import { validateResume } from "./resume";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
 import { loadExecutionJournal, writeExecutionJournal } from "./storage";
@@ -48,6 +49,7 @@ function createPrefetcher(
   ordered: Task[],
   policy: Policy,
   mode: ExecutionJournal["mode"],
+  stage: () => ProposalContext,
 ) {
   const pending = new Map<string, Promise<TaskPreparation>>();
   const released = new Set<number>();
@@ -60,7 +62,7 @@ function createPrefetcher(
       const group = waves.find((tasks) => tasks[0]?.wave === wave) ?? [];
       // The first task of the wave is about to run inline; only its siblings are worth prefetching.
       for (const task of prefetchable(group).slice(1)) {
-        const work = prepareTask(client, root, spec, plan, task, "", policy, ordered);
+        const work = prepareTask(client, root, spec, plan, task, "", policy, ordered, stage());
         // A prefetch that fails must surface when the task is reached, not as an unhandled rejection.
         work.catch(() => undefined);
         pending.set(task.id, work);
@@ -73,6 +75,26 @@ function createPrefetcher(
       // A failed prefetch is not a failed task: fall back to generating it inline.
       return work.catch(() => undefined);
     },
+  };
+}
+
+/** Records a task whose proposal could never be produced, so the run ends as a journal, not a stack. */
+function unproducible(task: Task, reason: string): ExecutionTaskResult {
+  return {
+    task_id: task.id,
+    status: "failed",
+    changed_files: [],
+    verification: [
+      {
+        program: "sddc",
+        args: ["propose"],
+        exit_code: 1,
+        timed_out: false,
+        output: `No usable proposal for ${task.id}:\n${reason}`,
+      },
+    ],
+    output_hashes: [],
+    checkpoint: null,
   };
 }
 
@@ -106,6 +128,7 @@ export async function executePlan(
   policy: Policy = defaultPolicy,
   mode = policy.execution.default_approval_mode,
   resumeJournal?: ExecutionJournal,
+  upstream: Pick<ProposalContext, "constitution" | "clarifications"> = {},
 ): Promise<ExecutionJournal> {
   const ordered = orderTasks(tasks);
   const existing = resumeJournal ?? (await loadExecutionJournal(root, plan.feature));
@@ -137,11 +160,40 @@ export async function executePlan(
   const backups = new Map<string, FileBackup>();
   const feedback = new Map<string, string>();
   const attempts = new Map<string, number>();
-  const prefetch = createPrefetcher(client, root, spec, plan, ordered, policy, mode);
+  // Rebuilt per call rather than captured, so a task always sees which siblings have really landed.
+  const stage = (): ProposalContext => ({
+    ...upstream,
+    completed: new Set(completed),
+    // A completed task with a failing command is the red-by-design test task of Article III; from
+    // there on, the suite its siblings run is red for a reason none of them caused.
+    suiteRedByDesign: journal.tasks.some(
+      (item) =>
+        item.status === "completed" && item.verification.some((check) => check.exit_code !== 0),
+    ),
+  });
+  const prefetch = createPrefetcher(client, root, spec, plan, ordered, policy, mode, stage);
   if (journal.pending_feedback) {
     feedback.set(journal.pending_feedback.task_id, journal.pending_feedback.feedback);
     journal.pending_feedback = null;
   }
+  /**
+   * Books another attempt at a task, and says whether the run has spent them all.
+   *
+   * Every path that sends a task round again goes through here — a failed verification, a rejected
+   * diff, a rolled-back result. Bounding only some of them left the others able to loop forever,
+   * which is precisely the hole the bound was added to close.
+   */
+  const retryTask = (task: Task, reason: string): boolean => {
+    const used = (attempts.get(task.id) ?? 1) + 1;
+    if (used > policy.execution.max_task_attempts) {
+      journal.status = "failed";
+      journal.tasks.push(exhausted(task, used - 1, reason));
+      return false;
+    }
+    attempts.set(task.id, used);
+    feedback.set(task.id, reason);
+    return true;
+  };
   let index = 0;
 
   while (index < ordered.length) {
@@ -161,20 +213,33 @@ export async function executePlan(
     // Arriving at a task is what releases its wave: everything before it has already been written,
     // so the files its siblings read are settled.
     prefetch.schedule(task.wave);
-    const outcome = await executeTask(
-      client,
-      root,
-      spec,
-      plan,
-      task,
-      hooks,
-      policy,
-      mode,
-      pending,
-      // A retry carries new feedback, so the proposal generated before it is no longer the answer.
-      pending ? undefined : await prefetch.take(task.id),
-      ordered,
-    );
+    // Every model call under here is already retried and sampled; when it still comes back with
+    // nothing usable — a budget spent on a refusal the validator keeps rejecting, a provider that
+    // stays down — that is this task failing, not the program crashing. The user gets a journal
+    // naming the task and the reason, and every task completed before it stays on disk.
+    let outcome: Awaited<ReturnType<typeof executeTask>>;
+    try {
+      outcome = await executeTask(
+        client,
+        root,
+        spec,
+        plan,
+        task,
+        hooks,
+        policy,
+        mode,
+        pending,
+        // A retry carries new feedback, so the proposal generated before it is no longer the answer.
+        pending ? undefined : await prefetch.take(task.id),
+        ordered,
+        stage(),
+      );
+    } catch (error) {
+      journal.status = "failed";
+      journal.tasks.push(unproducible(task, describe(error)));
+      await writeExecutionJournal(root, journal);
+      return journal;
+    }
     if (outcome.kind === "blocked") {
       hooks.proposalBlocked?.(task, outcome.proposal);
       journal.status = "blocked";
@@ -188,27 +253,22 @@ export async function executePlan(
       return journal;
     }
     if (outcome.kind === "retry") {
-      // Every other loop in the pipeline is bounded by policy; without this one a task whose
-      // verification keeps failing is retried for as long as something keeps approving it.
-      const used = (attempts.get(task.id) ?? 1) + 1;
-      if (used > policy.execution.max_task_attempts) {
-        journal.status = "failed";
-        journal.tasks.push(exhausted(task, used - 1, outcome.feedback));
+      if (!retryTask(task, outcome.feedback)) {
         await writeExecutionJournal(root, journal);
         return journal;
       }
-      attempts.set(task.id, used);
-      feedback.set(task.id, outcome.feedback);
       continue;
     }
 
     const action = (await hooks.afterTask?.(task, outcome.result)) ?? "continue";
     if (action === "rollback") {
       await restoreFiles(root, outcome.backup);
-      feedback.set(
-        task.id,
-        "User rolled back the verified proposal and requested another version.",
-      );
+      if (
+        !retryTask(task, "User rolled back the verified proposal and requested another version.")
+      ) {
+        await writeExecutionJournal(root, journal);
+        return journal;
+      }
       continue;
     }
     if (action === "checkpoint") {
@@ -252,10 +312,17 @@ export async function executePlan(
     journal.status = "in_progress";
     journal.pending_feedback = { task_id: final.taskId, feedback: final.feedback };
     await writeExecutionJournal(root, journal);
-    return executePlan(client, root, spec, plan, tasks, hooks, policy, mode, journal);
+    return executePlan(client, root, spec, plan, tasks, hooks, policy, mode, journal, upstream);
   }
 
   journal.status = "completed";
   await writeExecutionJournal(root, journal);
   return journal;
+}
+
+/** The message plus its cause: the sampling failure that matters is usually the wrapped one. */
+function describe(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause === undefined ? "" : `: ${String(error.cause)}`;
+  return `${error.message}${cause}`.slice(0, 2_000);
 }

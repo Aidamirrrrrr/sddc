@@ -41,19 +41,20 @@ export async function buildTaskList(
     constitution: constitution || undefined,
     plan,
     policy,
+    // One name for one thing across every stage of the phase. The stages used to disagree: the
+    // authoring stages were given `discovery` and the checking ones `approvedPaths`, while the
+    // prompts for both spoke of `discovery.context.files` — so half of them were enforcing a rule
+    // against a field they had not been given.
+    approvedPaths: discovery.context.files,
+    repositoryIndex: repository.paths,
     userInput: userInput || undefined,
   };
   const authoring = {
     ...shared,
     discovery,
-    repositoryIndex: repository.paths,
     approvedSnapshots: repository.snapshots,
   };
-  const checking = {
-    ...shared,
-    approvedPaths: discovery.context.files,
-    repositoryIndex: repository.paths,
-  };
+  const checking = shared;
   const context = authoring;
   // The first draw runs the full draft/audit/review chain; a rejection is repaired instead, which is
   // both cheaper and better informed than starting over.
@@ -67,13 +68,15 @@ export async function buildTaskList(
         const draft = await stage("tasks-draft", () =>
           client.generateObject(taskPrompts.draft, pretty(context), taskListDraftSchema),
         );
-        const audit = await stage("tasks-audit", () =>
+        const audit = await advisoryStage(() =>
           client.generateObject(taskPrompts.audit, pretty({ ...checking, draft }), taskAuditSchema),
         );
         review = await stage("tasks-review", () =>
           client.generateObject(
             taskPrompts.review,
-            pretty({ ...checking, draft, audit }),
+            // Omitted rather than nulled when the audit did not come back, so the shared prefix the
+            // provider caches is unaffected by whether it did.
+            pretty(audit === undefined ? { ...checking, draft } : { ...checking, draft, audit }),
             taskListReviewSchema,
           ),
         );
@@ -101,7 +104,7 @@ export async function buildTaskList(
       if (list.status !== "ready") return;
       if (review) validateTaskListReview(review);
       validateTaskList(list, spec, discovery, repository.paths);
-      validateTaskPolicy(list.tasks, policy);
+      validateTaskPolicy(list.tasks, policy, spec);
     },
   ).then(({ list }) => list);
 }
@@ -175,8 +178,17 @@ function pretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+/**
+ * Runs a stage whose output only advises the next one.
+ *
+ * The audit reports coverage and smells, and every hard thing it reports — coverage, cycles, write
+ * ordering, unapproved paths — is recomputed for free and exactly by the validators that actually
+ * gate the graph. It is also, measurably, the stage most likely to exhaust its output budget and
+ * return nothing: letting that end a run means the phase is only as reliable as its least reliable
+ * advisory step, which is the wrong thing to be true.
+ */
+async function advisoryStage<T>(operation: () => Promise<T>): Promise<T | undefined> {
+  return operation().catch(() => undefined);
 }
 
 async function stage<T>(name: string, operation: () => Promise<T>): Promise<T> {

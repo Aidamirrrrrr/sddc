@@ -12,20 +12,46 @@ import type { ChangeProposal } from "./schemas";
  * task already lists that file as writable. Nothing upstream can fix that, because there is nothing
  * to fix — so it is rejected here and goes through the ordinary one-revision repair instead.
  */
-function validateBlocker(blocker: NonNullable<ChangeProposal["blocker"]>, task: Task): void {
+function validateBlocker(
+  blocker: NonNullable<ChangeProposal["blocker"]>,
+  task: Task,
+  graph: Task[],
+): void {
+  if (blocker.required_files.length === 0) return;
   const writable = [...task.files.modify, ...task.files.create];
   const granted = new Set(writable);
   const alreadyGranted = blocker.required_files.filter((path) => granted.has(path));
-  if (
-    blocker.required_files.length > 0 &&
-    alreadyGranted.length === blocker.required_files.length
-  ) {
+  if (alreadyGranted.length === blocker.required_files.length) {
     // This message becomes the repair turn's validation_error, so it states the fact that
     // contradicts the refusal. Naming the error alone was measured to leave the model blocking.
     throw new Error(
       `${task.id} blocked on files it may already write: ${alreadyGranted.join(", ")}. ` +
         `The task grants write access to ${writable.join(", ")}, so the approved scope is ` +
         "sufficient and a blocker is wrong. Return the change instead.",
+    );
+  }
+
+  // The other false refusal, seen every time test-first was switched on: a test task refuses because
+  // the function it must call does not exist yet, when the very next task in the graph creates it.
+  // The task is asking for the plan to be undone. Whether a sibling owns the file is a fact about
+  // the graph, so it is settled here rather than argued about in a prompt.
+  const owners = new Map<string, string[]>();
+  for (const other of graph) {
+    if (other.id === task.id) continue;
+    for (const path of [...other.files.modify, ...other.files.create]) {
+      owners.set(path, [...(owners.get(path) ?? []), other.id]);
+    }
+  }
+  const ownedElsewhere = blocker.required_files.filter((path) => owners.has(path));
+  if (ownedElsewhere.length === blocker.required_files.length) {
+    const detail = ownedElsewhere
+      .map((path) => `${path} (owned by ${owners.get(path)?.join(", ")})`)
+      .join(", ");
+    throw new Error(
+      `${task.id} blocked on files another task in this graph already owns: ${detail}. ` +
+        "Those files are not missing, they are simply not written yet, and taking them over " +
+        "would undo the accepted plan. Code your task must reference may legitimately not exist " +
+        "yet — write your slice against it as it will be, and return the change instead.",
     );
   }
 }
@@ -35,6 +61,7 @@ export function validateProposal(
   task: Task,
   files: ExecutionFile[],
   policy: Policy = defaultPolicy,
+  graph: Task[] = [task],
 ): void {
   if (proposal.task_id !== task.id)
     throw new Error(`Proposal targets ${proposal.task_id}, not ${task.id}`);
@@ -42,7 +69,7 @@ export function validateProposal(
     if (!proposal.blocker) throw new Error(`${task.id} blocked proposal has no blocker`);
     if (proposal.changes.length > 0)
       throw new Error(`${task.id} blocked proposal contains changes`);
-    validateBlocker(proposal.blocker, task);
+    validateBlocker(proposal.blocker, task, graph);
     return;
   }
   if (proposal.blocker) throw new Error(`${task.id} ready proposal contains a blocker`);

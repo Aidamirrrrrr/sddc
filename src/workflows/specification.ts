@@ -17,9 +17,10 @@ export async function createApprovedSpecification(
   interactive: boolean,
   policy: Policy,
   context: DialogueContext,
+  constitution = "",
 ): Promise<Spec | null> {
   if (!interactive) {
-    const spec = await buildSpec(client, initialRequest, repository);
+    const spec = await buildSpec(client, initialRequest, repository, policy, constitution);
     document({ en: "Draft requirements", ru: "Черновик требований" }, specDocument(spec));
     const path = await writeSpec(spec, false);
     success({ en: `Draft written to ${path}`, ru: `Черновик сохранён: ${path}` });
@@ -32,7 +33,8 @@ export async function createApprovedSpecification(
     request: context.request,
     policy,
     initial: initialState(context, "spec"),
-    build: (input) => buildSpec(client, `${initialRequest}${input}`, repository),
+    build: (input) =>
+      buildSpec(client, `${initialRequest}${input}`, repository, policy, constitution),
     progress: { en: "Preparing requirements", ru: "Готовлю требования" },
     complete: { en: "Requirements are ready for review", ru: "Требования готовы к проверке" },
     title: { en: "Requirements", ru: "Требования" },

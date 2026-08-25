@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
+import { sampleUntilValid } from "../ai/sample";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
 import { type FileSnapshot, indexRepository, readSnapshots } from "../repository/scan";
@@ -52,44 +53,60 @@ export async function buildImplementationPlan(
     policy,
     userInput: userInput || undefined,
   };
-  const draft = await stage("planning-draft", () =>
-    client.generateObject(planningPrompts.draft, pretty(context), implementationPlanSchema),
-  );
-  const audit = await stage("planning-audit", () =>
-    client.generateObject(planningPrompts.audit, pretty({ ...context, draft }), planAuditSchema),
-  );
-  const review = await stage("planning-review", () =>
-    client.generateObject(
-      planningPrompts.review,
-      pretty({ ...context, draft, audit }),
-      planReviewSchema,
-    ),
-  );
-  let plan = normalizePlan(review.plan, spec.feature);
-  if (plan.status === "needs_clarification") {
-    plan = await filterPlanQuestions(client, plan, context, spec, discovery);
-  }
-  try {
-    if (plan.status === "ready") validatePlanReview(review);
-    validatePlan(plan, spec, discovery);
-    return plan;
-  } catch (error) {
-    plan = normalizePlan(
-      await stage("planning-repair", () =>
-        client.generateObject(
-          planningPrompts.repair,
-          pretty({ ...context, rejectedPlan: plan, validationError: errorMessage(error) }),
-          implementationPlanSchema,
+  // One draw is a full draft/audit/review chain; a rejected one is repaired rather than restarted,
+  // which is both cheaper and better informed. The plan phase used to get exactly one repair and
+  // then fail the run, while tasks and execution already sampled — the verifier is the same price
+  // here, so there was no reason for this phase to be the brittle one.
+  let previous: ImplementationPlan | undefined;
+  return sampleUntilValid(
+    policy.sampling.max_attempts,
+    async (rejection) => {
+      if (rejection === undefined || !previous) {
+        const draft = await stage("planning-draft", () =>
+          client.generateObject(planningPrompts.draft, pretty(context), implementationPlanSchema),
+        );
+        // Advisory, like the task audit: nothing it reports gates the plan, and letting it end the
+        // run made the phase only as reliable as a step whose output is a hint.
+        const audit = await client
+          .generateObject(planningPrompts.audit, pretty({ ...context, draft }), planAuditSchema)
+          .catch(() => undefined);
+        const review = await stage("planning-review", () =>
+          client.generateObject(
+            planningPrompts.review,
+            pretty(audit === undefined ? { ...context, draft } : { ...context, draft, audit }),
+            planReviewSchema,
+          ),
+        );
+        let plan = normalizePlan(review.plan, spec.feature);
+        if (plan.status === "needs_clarification") {
+          plan = await filterPlanQuestions(client, plan, context, spec, discovery);
+        }
+        previous = plan;
+        return { plan, review };
+      }
+      let plan = normalizePlan(
+        await stage("planning-repair", () =>
+          client.generateObject(
+            planningPrompts.repair,
+            pretty({ ...context, rejectedPlan: previous, validationError: rejection }),
+            implementationPlanSchema,
+          ),
         ),
-      ),
-      spec.feature,
-    );
-    if (plan.status === "needs_clarification") {
-      plan = await filterPlanQuestions(client, plan, context, spec, discovery);
-    }
-    validatePlan(plan, spec, discovery);
-    return plan;
-  }
+        spec.feature,
+      );
+      if (plan.status === "needs_clarification") {
+        plan = await filterPlanQuestions(client, plan, context, spec, discovery);
+      }
+      previous = plan;
+      return { plan, review: undefined };
+    },
+    ({ plan, review }) => {
+      // A plan still asking questions is not a rejected draw: the user has to answer first.
+      if (plan.status !== "ready") return;
+      if (review) validatePlanReview(review);
+      validatePlan(plan, spec, discovery);
+    },
+  ).then(({ plan }) => plan);
 }
 
 export async function runPlanningStage(
@@ -158,10 +175,6 @@ async function filterPlanQuestions(
 
 function pretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function stage<T>(name: string, operation: () => Promise<T>): Promise<T> {

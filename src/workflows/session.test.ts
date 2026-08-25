@@ -2,7 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearSession, hasRecordedAnswers, loadSession, phaseState, saveSession } from "./session";
+import {
+  clearSession,
+  hasRecordedAnswers,
+  loadSession,
+  phaseState,
+  saveSession,
+  userAnswers,
+} from "./session";
 
 async function workspace(): Promise<string> {
   return mkdtemp(join(tmpdir(), "sddc-session-"));
@@ -68,4 +75,38 @@ test("a completed feature clears the conversation", async () => {
   expect(await loadSession(root, "request")).toBeUndefined();
   // Clearing an already clean workspace is a no-op rather than a failure.
   await clearSession(root);
+});
+
+test("recorded answers travel forward without the artifacts they rejected", () => {
+  const session = {
+    version: 1 as const,
+    request: "Add tags",
+    updated_at: new Date().toISOString(),
+    spec: {
+      input:
+        "\n\nUser clarifications:\nQ1: Tags are optional.\n\n" +
+        "Rejected specification:\nrequirements:\n  - id: R1\n    statement: nonsense\n\n" +
+        "User review feedback:\nR1 is wrong, tags are per note.\n",
+      clarification_rounds: 1,
+      revision_rounds: 1,
+    },
+    tasks: {
+      input: "\n\nUser task clarifications:\nQ1: One task per file.\n",
+      clarification_rounds: 1,
+      revision_rounds: 0,
+    },
+  };
+
+  const answers = userAnswers(session);
+
+  expect(answers).toContain("Q1: Tags are optional.");
+  expect(answers).toContain("R1 is wrong, tags are per note.");
+  expect(answers).toContain("Q1: One task per file.");
+  // The rejected draft is echoed back only so the next attempt can see it; downstream it is noise.
+  expect(answers).not.toContain("statement: nonsense");
+  expect(answers).not.toContain("Rejected specification:");
+});
+
+test("a run with nothing recorded carries nothing forward", () => {
+  expect(userAnswers(undefined)).toBe("");
 });

@@ -81,6 +81,46 @@ export async function saveSession(
   await Bun.write(path, Bun.YAML.stringify(session, null, 2));
 }
 
+/** Decisions are worth carrying forward; the artifacts they rejected are not. */
+const MAX_ANSWER_BYTES = 8 * 1024;
+
+/**
+ * Everything the user actually decided during the dialogue, as prose.
+ *
+ * The phase artifacts record what was decided but not why, and never in the user's own words. The
+ * execution phase used to see none of it: a run could ask the user a question in phase ② and hand
+ * the implementer a task graph that no longer remembered the answer.
+ *
+ * A rejected artifact is echoed back into the same buffer so the next attempt can see what was
+ * wrong, and it is pure noise here — it is dropped rather than shipped to a phase that would only
+ * have to read past it.
+ */
+export function userAnswers(session: Session | undefined): string {
+  if (!session) return "";
+  const text = dialoguePhases
+    .map((phase) => withoutRejectedArtifacts(phaseState(session, phase).input))
+    .filter(Boolean)
+    .join("\n\n");
+  return text.length <= MAX_ANSWER_BYTES ? text : `${text.slice(-MAX_ANSWER_BYTES)}`;
+}
+
+function withoutRejectedArtifacts(input: string): string {
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of input.split("\n")) {
+    if (/^Rejected /.test(line)) {
+      skipping = true;
+      continue;
+    }
+    if (/^User review feedback:/.test(line)) skipping = false;
+    if (!skipping) kept.push(line);
+  }
+  return kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Called once a feature is fully delivered, so the next run starts from a clean conversation. */
 export async function clearSession(root: string): Promise<void> {
   await Bun.file(sessionPath(root))

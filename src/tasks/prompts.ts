@@ -1,44 +1,68 @@
 export const taskPrompts = {
-  draft: `Derive an executable task graph from an accepted implementation plan. The plan already fixed
-the technical approach, contracts, and data model; do not revisit those decisions and do not write code
-or patches. One task may carry several approach steps: grouping steps is not revisiting the plan, and is required
-whenever a criterion's code and its test live in different steps. Changing the approach itself is what is forbidden.
-Each task implements part of the accepted approach, has one focused goal, cites requirement
-and acceptance IDs from the specification, and lists explicit read/modify/create paths, dependencies,
-verification commands, completion conditions, and concrete risks. One rule governs acceptance: a criterion belongs to the task that writes its test, and to that task only. So exactly
-one task lists any given acceptance ID, and that task's files.modify or files.create contains the test file proving
-it. Every other task — including one implementing the very code under test — lists an empty acceptance array and
-serves requirements instead. Requirements may be served by several tasks; acceptance IDs may not. When a completion condition mentions existing tests, list the test files covering whatever the task modifies in its
-files.read, so that condition can be checked against the code rather than assumed. Existing read and modify paths must
-come from discovery.context.files. New paths may appear only in create. Declare a dependency only when
-a task truly needs the output of another one: independent tasks are executed as one parallel wave, so
-every unnecessary dependency makes the graph slower. Two tasks that write the same file must be
-ordered by a dependency. Use only commands supported by repository evidence, represented as a program
-and an argument array, never as a shell string. Every file argument must already exist or be created
-by that task or a dependency. When policy.changes.require_test_before_implementation is true, a task that changes
-behavioural source must depend on a separate earlier task that writes the test covering it; writing the test in the
-same task does not satisfy the rule. Its test is expected to fail until the implementation lands. Follow the supplied policy, and the constitution principles when one is supplied. Declare
-permissions only when a task genuinely needs them; a permission is visible to the user and is not a way to bypass a forbidden
-policy. Ask at most three neutral questions, and only when the plan left a user-owned decision
-genuinely open. Write all prose in outputLanguage and return JSON only.`,
+  draft: `Derive an executable task graph from an accepted implementation plan.
 
-  audit: `Audit a task graph without rewriting it. Check every specification requirement and acceptance
-criterion for task coverage. Look for tasks that are too broad, unapproved existing files, invalid
-commands, missing dependencies, dependency cycles, unsafe write ordering, dependencies that are not
-actually needed, and tasks that go beyond the accepted plan. Prefer needs_clarification only for
-genuinely blocking user-owned decisions. Use IDs from the supplied artifacts, write prose in
-outputLanguage, and return JSON only.`,
+The plan already fixed the technical approach, contracts, and data model; do not revisit those
+decisions and do not write code or patches. One task may carry several approach steps: grouping steps
+is not revisiting the plan, and is required whenever a criterion's code and its test live in
+different steps. Changing the approach itself is what is forbidden.
 
-  review: `Produce the final task graph after reviewing the draft and audit. Do not write code. Resolve
-mechanical problems, split broad tasks, drop dependencies that are not required so independent work
-can run in the same wave, and preserve full traceability to the specification and the accepted plan.
-Existing read/modify paths must be approved discovery context files; only create paths may be new.
-Return needs_clarification when blocking user-owned information is missing. Also return exactly these
-checks, each passed only when true:
+Each task implements part of the accepted approach, has one focused goal, cites requirement and
+acceptance IDs from the specification, and lists explicit read/modify/create paths, dependencies,
+verification commands, completion conditions, and concrete risks.
+
+Acceptance: every acceptance criterion must be claimed by the task that writes the test proving it.
+Do not worry about a criterion appearing on more than one task — the host assigns each criterion to a
+single owner afterwards. A criterion claimed by no task at all is the failure to avoid.
+
+Paths: existing read and modify paths must come from discovery.context.files, which is supplied as
+approvedPaths. New paths may appear only in create. When a completion condition mentions existing
+tests, list the test files covering whatever the task modifies in its files.read, so that condition
+can be checked against the code rather than assumed.
+
+Dependencies: declare one only when a task truly needs the output of another. Independent tasks are
+executed as one parallel wave, so every unnecessary dependency makes the graph slower. Two tasks that
+write the same file must be ordered by a dependency, in either direction.
+
+Verification: use only commands supported by repository evidence, represented as a program and an
+argument array, never as a shell string. Every file argument must already exist or be created by that
+task or a dependency.
+
+When policy.changes.require_test_before_implementation is true, a task that changes behavioural
+source must depend on a separate earlier task that writes the test covering it; writing the test in
+the same task does not satisfy the rule. That test task must serve at least one of the same
+requirement IDs as the task depending on it, or own an acceptance criterion verifying one of them —
+a test unrelated to the work does not make the work test-first. Its test is expected to fail until
+the implementation lands.
+
+Follow the supplied policy, and the constitution principles when one is supplied. Declare permissions
+only when a task genuinely needs them; a permission is visible to the user and is not a way to bypass
+a forbidden policy. Ask at most three neutral questions, and only when the plan left a user-owned
+decision genuinely open. Write all prose in outputLanguage and return JSON only.`,
+
+  audit: `Audit a task graph without rewriting it. approvedPaths holds the repository files already
+approved for reading and modifying; repositoryIndex holds every safe path. File contents are not
+supplied because nothing here needs them.
+
+Check every specification requirement and acceptance criterion for task coverage. Look for tasks that
+are too broad, existing read/modify paths absent from approvedPaths, invalid commands, missing
+dependencies, dependency cycles, two tasks writing one file with no dependency between them in either
+direction, needless dependencies, and tasks that go beyond the accepted plan. Prefer
+needs_clarification only for genuinely blocking user-owned decisions. Use IDs from the supplied
+artifacts, write prose in outputLanguage, and return JSON only.`,
+
+  review: `Produce the final task graph after reviewing the draft and audit. Do not write code.
+approvedPaths holds the repository files already approved for reading and modifying.
+
+Resolve mechanical problems, split broad tasks, drop dependencies that are not required so
+independent work can run in the same wave, and preserve full traceability to the specification and
+the accepted plan. Existing read/modify paths must appear in approvedPaths; only create paths may be
+new. Return needs_clarification when blocking user-owned information is missing. Also return exactly
+these checks, each passed only when true:
 C1 all requirements covered; C2 all acceptance criteria covered; C3 tasks are focused; C4 dependencies
-are complete and acyclic; C5 existing paths are approved; C6 create paths are explicit; C7 verification
-commands are evidence-backed; C8 every task follows the accepted plan; C9 write ordering is safe;
-C10 completion criteria are testable. Write all prose in outputLanguage and return JSON only.`,
+are complete and acyclic; C5 existing paths are in approvedPaths; C6 create paths are explicit;
+C7 verification commands are evidence-backed; C8 every task follows the accepted plan; C9 write
+ordering is safe; C10 completion criteria are testable. Write all prose in outputLanguage and return
+JSON only.`,
 
   questions: `Review only the blocking questions in a task graph. Remove questions that are answered by
 the specification, the accepted plan, the repository index, snapshots, or discovery. Remove questions
@@ -51,8 +75,10 @@ in use, file placement, testing mechanics, or reversible implementation choices 
 implementation. Write every question in outputLanguage and return JSON only.`,
 
   repair: `Repair a rejected task graph using the validation error. Do not write code, do not change the
-accepted plan, and do not add unsupported decisions. Preserve traceability to the accepted
-specification and use only approved existing repository files. Use supplied snapshots for local
-implementation details. If the error cannot be resolved without a user-owned decision, return
-needs_clarification with a neutral question. Write all prose in outputLanguage and return JSON only.`,
+accepted plan, and do not add unsupported decisions. The error is deterministic: it states exactly
+what the graph must satisfy, so correct that rather than defending the rejected graph. Preserve
+traceability to the accepted specification and use only approved existing repository files. Use
+supplied snapshots for local implementation details. If the error cannot be resolved without a
+user-owned decision, return needs_clarification with a neutral question. Write all prose in
+outputLanguage and return JSON only.`,
 } as const;

@@ -123,3 +123,127 @@ test("a lone task simply has no siblings to be told about", async () => {
 
   expect(captured.otherTasks).toEqual([]);
 });
+
+test("the implementer is given the accepted plan, not a summary of it", async () => {
+  let captured: Record<string, unknown> = {};
+  const [first] = readyTasks().tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  first.acceptance = [];
+  const plan = readyPlan();
+
+  await buildTaskProposal(
+    capturingClient((context) => {
+      captured = context;
+    }),
+    await workspace(),
+    readySpec(),
+    plan,
+    first,
+  );
+
+  // Phases 3 and 4 exist to fix decisions; withholding them made every task decide again.
+  expect(captured.plan).toMatchObject({
+    summary: plan.summary,
+    decisions: plan.decisions,
+    approach: plan.approach,
+    contracts: plan.contracts,
+    data_model: plan.data_model,
+  });
+});
+
+test("upstream decisions travel with the task", async () => {
+  let captured: Record<string, unknown> = {};
+  const [first] = readyTasks().tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  first.acceptance = [];
+
+  await buildTaskProposal(
+    capturingClient((context) => {
+      captured = context;
+    }),
+    await workspace(),
+    readySpec(),
+    readyPlan(),
+    first,
+    "",
+    defaultPolicy,
+    [first],
+    { constitution: "Every module owns its errors.", clarifications: "Q1: keep the old endpoint." },
+  );
+
+  expect(captured.constitution).toBe("Every module owns its errors.");
+  expect(captured.userDecisions).toBe("Q1: keep the old endpoint.");
+});
+
+test("the outline says which siblings have actually landed", async () => {
+  let captured: Record<string, unknown> = {};
+  const graph = readyTasks().tasks;
+  const [first, second] = graph;
+  if (!first || !second) throw new Error("Fixture must contain two tasks");
+  first.acceptance = [];
+
+  await buildTaskProposal(
+    capturingClient((context) => {
+      captured = context;
+    }),
+    await workspace(),
+    readySpec(),
+    readyPlan(),
+    first,
+    "",
+    defaultPolicy,
+    graph,
+    { completed: [second.id] },
+  );
+
+  // "Missing" and "not written yet" call for opposite reactions.
+  expect(captured.otherTasks).toEqual([expect.objectContaining({ id: "T2", status: "applied" })]);
+});
+
+test("under test-first a test-only task is told its command must fail", async () => {
+  let captured: Record<string, unknown> = {};
+  const [first] = readyTasks().tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  first.acceptance = [];
+  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+  const testFirst = {
+    ...defaultPolicy,
+    changes: { ...defaultPolicy.changes, require_test_before_implementation: true },
+  };
+
+  // The stub proposes a source change this task may not make, so the draw is rejected. The context
+  // it was given is what this test is about, and it was captured before that.
+  await buildTaskProposal(
+    capturingClient((context) => {
+      captured = context;
+    }),
+    await workspace(),
+    readySpec(),
+    readyPlan(),
+    first,
+    "",
+    testFirst,
+  ).catch(() => undefined);
+
+  // The executor used to learn this only by failing once.
+  expect(captured.expectation).toContain("REQUIRED TO FAIL");
+});
+
+test("an ordinary task is told the opposite", async () => {
+  let captured: Record<string, unknown> = {};
+  const [first] = readyTasks().tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  first.acceptance = [];
+
+  await buildTaskProposal(
+    capturingClient((context) => {
+      captured = context;
+    }),
+    await workspace(),
+    readySpec(),
+    readyPlan(),
+    first,
+  );
+
+  expect(captured.expectation).toContain("must pass");
+});

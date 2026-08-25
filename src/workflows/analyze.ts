@@ -125,6 +125,34 @@ function planToTaskGaps(plan: ImplementationPlan, tasks: TaskList): Finding[] {
     }));
 }
 
+/**
+ * The `analyze` gate, run in the flow rather than only on demand.
+ *
+ * SDD puts a cross-artifact check between the task graph and implementation, and this one existed
+ * only as a separate command — so the phase it was meant to protect never ran it. Findings do not
+ * stop the run on their own: the per-phase validators already refuse the graphs that cannot execute,
+ * and what is left here is drift a person should look at and decide about.
+ */
+export async function reportConsistency(root: string, feature: string): Promise<Finding[]> {
+  const findings = await analyzeFeature(root, feature).catch(() => []);
+  if (findings.length === 0) {
+    success({
+      en: "Specification, plan, and tasks agree",
+      ru: "Спецификация, план и задачи согласованы",
+    });
+    return findings;
+  }
+  document(
+    { en: `Consistency findings · ${feature}`, ru: `Расхождения · ${feature}` },
+    findings.map((finding) => `[${finding.severity}] ${finding.statement}`).join("\n"),
+  );
+  warn({
+    en: `${findings.length} findings between the accepted artifacts`,
+    ru: `Расхождений между принятыми артефактами: ${findings.length}`,
+  });
+  return findings;
+}
+
 /** `sddc --analyze [feature]`: reports drift without changing a single artifact. */
 export async function runAnalyze(root: string, requestedFeature: string): Promise<void> {
   const feature = await resolveFeature(root, requestedFeature);

@@ -85,6 +85,23 @@ AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
 ```
 
+### Test-first (SDD Article III)
+
+SDD states that no implementation is written before the test that covers it. `sddc` enforces this on
+the task graph rather than asking a model to comply: with
+`changes.require_test_before_implementation` on, a task changing behavioural source must depend on an
+earlier task that writes a test covering the same requirement, and that test task's verification is
+required to *fail* — a test that already passes asserts nothing.
+
+The rule ships **off by default**, because a graph that never satisfies it only teaches people to
+switch it off. Turn it on per project in `.sddc/policy.yaml`:
+
+```yaml
+version: 1
+changes:
+  require_test_before_implementation: true
+```
+
 ### Documentation
 
 - [English documentation](docs/en/README.md)
@@ -173,6 +190,23 @@ AI_API_TOKEN=your-token
 AI_API_URL=https://example.com/v1/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
+```
+
+### Сначала тест (Article III в SDD)
+
+SDD требует, чтобы реализация не появлялась раньше покрывающего её теста. `sddc` проверяет это по
+графу задач, а не просьбой к модели: при включённом
+`changes.require_test_before_implementation` задача, меняющая исходный код, обязана зависеть от более
+ранней задачи с тестом на то же требование, и проверка этой тестовой задачи обязана **упасть** — тест,
+который проходит сразу, ничего не утверждает.
+
+По умолчанию правило **выключено**: граф, который никогда его не выполняет, научил бы только тому, как
+его отключать. Включается в `.sddc/policy.yaml` для конкретного проекта:
+
+```yaml
+version: 1
+changes:
+  require_test_before_implementation: true
 ```
 
 ### Документация

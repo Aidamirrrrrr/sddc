@@ -5,16 +5,48 @@ import type { ExecutionFile } from "./context";
 import { executionPrompts } from "./prompts";
 import { type ChangeProposal, type ExecutionReview, executionReviewSchema } from "./schemas";
 
+/**
+ * Everything the reviewer needs to answer its own checks.
+ *
+ * E7 asks whether the proposal introduces an undeclared decision, and E1 whether the task's
+ * criteria are met. Neither is answerable from the specification alone: what counts as *declared*
+ * lives in the accepted plan and the constitution, and whether verification should come out red or
+ * green is the host's call. Handing the reviewer less than the implementer had made it reject
+ * correct work for being unexplained.
+ */
+export type ReviewContext = {
+  spec: Spec;
+  task: Task;
+  files: ExecutionFile[];
+  plan: unknown;
+  constitution: string | undefined;
+  outputLanguage: string;
+  expectation: string;
+  otherTasks: unknown;
+};
+
 export async function reviewProposal(
   client: Pick<ModelClient, "generateObject">,
-  spec: Spec,
-  task: Task,
-  files: ExecutionFile[],
   proposal: ChangeProposal,
+  context: ReviewContext,
 ): Promise<ExecutionReview> {
   const review = await client.generateObject(
     executionPrompts.review,
-    JSON.stringify({ specification: spec, task, original_files: files, proposal }, null, 2),
+    JSON.stringify(
+      {
+        outputLanguage: context.outputLanguage,
+        specification: context.spec,
+        constitution: context.constitution,
+        plan: context.plan,
+        task: context.task,
+        expectation: context.expectation,
+        otherTasks: context.otherTasks,
+        original_files: context.files,
+        proposal,
+      },
+      null,
+      2,
+    ),
     executionReviewSchema,
   );
   validateExecutionReview(review);

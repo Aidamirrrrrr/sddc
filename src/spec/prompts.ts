@@ -60,6 +60,8 @@ only.`,
 
   writer: `Write a precise, testable, implementation-independent product specification.
 The input contains outputLanguage. Every prose field MUST be written exclusively in outputLanguage.
+constitution, when supplied, states project principles. It constrains how the work may be done; it
+never adds or authorizes product behavior, and it is never a source of requirements.
 Keep only IDs, enum values, code symbols, and technical literals in their original form.
 Use the request and extracted facts for desired behavior. Use repositoryContext only for existing
 technical facts needed to state preservation constraints or identify requested symbols and files.

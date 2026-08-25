@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { defaultPolicy } from "../policy/load";
+import type { Task } from "../tasks/schemas";
 import { readyTasks } from "../tasks/test-fixtures";
 import { sha256 } from "./context";
+import type { ChangeProposal } from "./schemas";
 import { validateProposal } from "./validate";
 
 test("proposal accepts only approved task writes with current hashes", () => {
@@ -151,3 +153,61 @@ test("a blocker asking for a decision rather than a file is left alone", () => {
 
   expect(() => validateProposal(blocked, task, [])).not.toThrow();
 });
+
+test("a blocker asking for a file a sibling task owns is rejected", () => {
+  const task = testOnlyTask();
+  const sibling = {
+    ...task,
+    id: "T3",
+    files: { read: [], modify: ["src/store.ts"], create: [] },
+  };
+  const proposal = blockedOn(["src/store.ts"]);
+
+  // The refusal seen on every test-first run: the test cannot call a function that does not exist,
+  // so the task asks to write the implementation itself — which is the accepted plan undone.
+  expect(() => validateProposal(proposal, task, [], defaultPolicy, [task, sibling])).toThrow(
+    "owned by T3",
+  );
+});
+
+test("a blocker naming a file no task owns is a real answer", () => {
+  const task = testOnlyTask();
+  const proposal = blockedOn(["src/migrations/001.sql"]);
+
+  expect(() => validateProposal(proposal, task, [], defaultPolicy, [task])).not.toThrow();
+});
+
+test("a blocker naming both an owned and an unowned file still stands", () => {
+  const task = testOnlyTask();
+  const sibling = { ...task, id: "T3", files: { read: [], modify: ["src/store.ts"], create: [] } };
+  const proposal = blockedOn(["src/store.ts", "config/secrets.yaml"]);
+
+  // Only a refusal the graph fully answers is wrong; a partial one may still be reporting a gap.
+  expect(() => validateProposal(proposal, task, [], defaultPolicy, [task, sibling])).not.toThrow();
+});
+
+function testOnlyTask(): Task {
+  const [first] = readyTasks().tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  return {
+    ...first,
+    id: "T1",
+    acceptance: [],
+    files: { read: ["src/store.ts"], modify: ["src/store.test.ts"], create: [] },
+  };
+}
+
+function blockedOn(required: string[]): ChangeProposal {
+  return {
+    task_id: "T1",
+    status: "blocked",
+    summary: "Cannot write the test",
+    blocker: {
+      reason: "The function under test does not exist yet",
+      required_files: required,
+      required_decision: "Allow this task to write the implementation",
+    },
+    traceability: [],
+    changes: [],
+  };
+}

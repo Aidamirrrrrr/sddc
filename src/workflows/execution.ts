@@ -15,13 +15,14 @@ export async function runApprovedExecution(
   plan: ImplementationPlan,
   tasks: TaskList,
   policy: Policy,
+  upstream: { constitution?: string; clarifications?: string } = {},
 ): Promise<void> {
   const configuration = await configureExecution(root, tasks.feature, tasks.tasks, policy);
   if (!configuration) {
     finish({ en: "Implementation was not started", ru: "Реализация не запущена" });
     return;
   }
-  validateTaskPolicy(tasks.tasks, policy);
+  validateTaskPolicy(tasks.tasks, policy, spec);
   const journal = await executePlan(
     client,
     root,
@@ -31,6 +32,8 @@ export async function runApprovedExecution(
     configuration.hooks,
     policy,
     configuration.mode,
+    undefined,
+    upstream,
   );
   const path = `.specs/${plan.feature}/execution.yaml`;
   success({

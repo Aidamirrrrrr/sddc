@@ -45,7 +45,9 @@ export function scoreCase(item: EvalCase, candidate: Candidate = {}): CaseScore 
         validateTaskList(tasks, item.spec, item.discovery, repositoryPaths),
       ),
     );
-    checks.push(check("tasks-policy", () => validateTaskPolicy(tasks.tasks, item.policy)));
+    checks.push(
+      check("tasks-policy", () => validateTaskPolicy(tasks.tasks, item.policy, item.spec)),
+    );
   }
 
   const findings = artifactFindings(item.spec, plan, tasks).length;

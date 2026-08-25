@@ -1,9 +1,4 @@
-import {
-  conventionalTestPaths,
-  isBehaviouralSource,
-  isTestPath,
-  writesOnlyTests,
-} from "../policy/paths";
+import { conventionalTestPaths, isBehaviouralSource, isTestPath } from "../policy/paths";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task, TaskList, TaskListDraft, TaskListReview } from "./schemas";

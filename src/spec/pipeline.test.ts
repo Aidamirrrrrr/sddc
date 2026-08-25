@@ -131,6 +131,49 @@ describe("specification flow", () => {
     expect(client.inputs).toHaveLength(5);
   });
 
+  test("an unusable draw from the writer is redrawn instead of ending the run", async () => {
+    const candidate = readySpec();
+    // A criterion verifying a requirement that does not exist: normalizing drops the reference and
+    // the spec then fails its own coverage check. That used to end the run outright.
+    const broken = {
+      ...candidate,
+      acceptance: [{ id: "A1", verifies: ["nothing"], statement: "Пользователь создан." }],
+    };
+    const client = new StubModelClient(
+      extraction(["Система создаёт пользователя."]),
+      ready,
+      ready,
+      broken,
+      { spec: broken, checks: checks() },
+      candidate,
+      { spec: candidate, checks: checks() },
+    );
+
+    const spec = await buildSpec(client, "Полное описание регистрации.");
+
+    expect(spec.status).toBe("ready");
+    expect(spec.acceptance[0]).toMatchObject({ id: "A1", verifies: ["R1"] });
+    // The second draw was told what was wrong with the first.
+    expect(client.inputs.at(-2)).toContain("validationError");
+  });
+
+  test("a phase that never produces a valid specification still fails", async () => {
+    const broken = {
+      ...readySpec(),
+      acceptance: [{ id: "A1", verifies: ["nothing"], statement: "Пользователь создан." }],
+    };
+    const client = new StubModelClient(
+      extraction(["Система создаёт пользователя."]),
+      ready,
+      ready,
+      ...Array.from({ length: 3 }, () => [broken, { spec: broken, checks: checks() }]).flat(),
+    );
+
+    expect(buildSpec(client, "Полное описание регистрации.")).rejects.toThrow(
+      "Requirements without acceptance coverage",
+    );
+  });
+
   test("drops a repository question answered by approved code context", async () => {
     const unnecessaryQuestion = {
       decision: "needs_clarification",

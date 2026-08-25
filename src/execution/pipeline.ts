@@ -2,16 +2,45 @@ import type { ModelClient } from "../ai/model-client";
 import { sampleUntilValid } from "../ai/sample";
 import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
+import { writesOnlyTests } from "../policy/paths";
 import type { Policy } from "../policy/schemas";
+import { specificationLanguage } from "../spec/language";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
-import { readTaskFiles } from "./context";
+import { type ExecutionFile, readTaskFiles } from "./context";
 import { executionPrompts } from "./prompts";
 import { reviewProposal } from "./review";
 import { type ChangeProposal, changeProposalSchema, executionReviewSchema } from "./schemas";
 import { validateProposal } from "./validate";
 
 type ObjectGenerator = Pick<ModelClient, "generateObject">;
+
+/**
+ * What the earlier phases decided, carried into the one that writes code.
+ *
+ * Everything here was established upstream and used to stop at the task graph: the constitution the
+ * plan was held to, the answers the user typed during clarification, which siblings have actually
+ * landed. A phase that cannot see the decisions it is implementing re-derives them, and re-deriving
+ * a decision is how an execution phase introduces the architecture nobody asked for.
+ */
+export type ProposalContext = {
+  constitution?: string;
+  /** Answers the user gave in the dialogue phases; no artifact records them verbatim. */
+  clarifications?: string;
+  /** Task ids whose changes are already on disk, so the outline can say what is real. */
+  completed?: Iterable<string>;
+  /** Files the caller already read, so one attempt works from exactly one snapshot. */
+  files?: ExecutionFile[];
+  /**
+   * Whether a task already completed in this run left the suite red on purpose.
+   *
+   * Host-only: it never reaches a prompt. Under test-first the test task lands first and is judged
+   * by failing, and from that moment every other task shares a workspace whose suite is red by
+   * design. Without this the exemption for an inherited failure would have to apply always, which
+   * would excuse a task whose verification simply never passes.
+   */
+  suiteRedByDesign?: boolean;
+};
 
 /**
  * The default repair instruction warns against expanding scope, which pushes a model that has just
@@ -25,10 +54,6 @@ function repairInstruction(rejectedBlocker: boolean): string {
     : "Correct the proposal once without expanding the approved scope.";
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * What the rest of the graph is doing, read-only.
  *
@@ -37,7 +62,7 @@ function errorMessage(error: unknown): string {
  * using it does not exist yet, when a sibling task is about to add exactly that. Permissions are
  * unaffected: writing is still governed solely by the task's own files.
  */
-function graphOutline(graph: Task[], current: Task) {
+function graphOutline(graph: Task[], current: Task, completed: Set<string>) {
   return graph
     .filter((task) => task.id !== current.id)
     .map((task) => ({
@@ -47,7 +72,35 @@ function graphOutline(graph: Task[], current: Task) {
       depends_on: task.depends_on,
       writes: [...task.files.modify, ...task.files.create],
       covers: [...task.requirements, ...task.acceptance],
+      // "Missing" and "not written yet" call for opposite reactions, and the outline was silent
+      // about which one a sibling is in.
+      status: completed.has(task.id) ? "applied" : "pending",
     }));
+}
+
+/**
+ * The verification outcome the host will accept, stated by the host.
+ *
+ * Under test-first a task that writes only tests is judged red, not green. Leaving that to the
+ * prompt meant the executor was told to satisfy verification while the runner was waiting for the
+ * opposite, and it learned the truth only by failing once. It is derived from the task's own files,
+ * so it cannot be talked out of.
+ */
+function verificationExpectation(task: Task, policy: Policy): string {
+  if (policy.changes.require_test_before_implementation && writesOnlyTests(task.files)) {
+    return (
+      "This task writes only tests, and the implementation it covers does not exist yet. Its " +
+      "verification command is REQUIRED TO FAIL: write a test that asserts the required behaviour " +
+      "and therefore fails now. A test that passes today asserts nothing and will be rejected. " +
+      "The functions, fields and signatures the test calls may not exist yet — reference them " +
+      "anyway, exactly as they will be once implemented. That is what makes the test fail today, " +
+      "and it is the whole point: a pending sibling task adds them. Do not stub them, do not skip " +
+      "the test, do not weaken the assertion so it passes, and never take over the implementation " +
+      "file to make the reference resolve. The only wrong failure is a test file so malformed the " +
+      "suite cannot start."
+    );
+  }
+  return "Verification commands must pass once this task's changes are applied.";
 }
 
 export async function buildTaskProposal(
@@ -59,13 +112,28 @@ export async function buildTaskProposal(
   feedback = "",
   policy: Policy = defaultPolicy,
   graph: Task[] = [task],
+  stage: ProposalContext = {},
 ): Promise<ChangeProposal> {
-  const files = await readTaskFiles(root, task);
+  const files = stage.files ?? (await readTaskFiles(root, task));
+  // Ordered so the part shared by every task of the run — language, spec, constitution, plan —
+  // forms one prefix, and only the per-task tail changes. That is what a provider can cache.
   const context = {
+    outputLanguage: specificationLanguage(spec),
     specification: spec,
-    plan_summary: plan.summary,
+    constitution: stage.constitution || undefined,
+    // The whole accepted plan, not a one-line summary of it. The decisions, contracts and data
+    // model are the thing phases 3 and 4 exist to fix; withholding them made every task re-decide.
+    plan: {
+      summary: plan.summary,
+      decisions: plan.decisions,
+      approach: plan.approach,
+      contracts: plan.contracts,
+      data_model: plan.data_model,
+    },
+    userDecisions: stage.clarifications || undefined,
     task,
-    otherTasks: graphOutline(graph, task),
+    expectation: verificationExpectation(task, policy),
+    otherTasks: graphOutline(graph, task, new Set(stage.completed ?? [])),
     files,
     feedback,
   };
@@ -92,10 +160,21 @@ export async function buildTaskProposal(
       return proposal;
     },
     async (proposal) => {
-      validateProposal(proposal, task, files, policy);
+      validateProposal(proposal, task, files, policy, graph);
       // A blocker that survived validation is a real one: it is an answer, not a bad draw.
       if (proposal.status === "blocked") return;
-      await reviewProposal(client, spec, task, files, proposal);
+      await reviewProposal(client, proposal, {
+        spec,
+        task,
+        files,
+        // The reviewer's E7 asks whether an undeclared decision crept in. It cannot answer that
+        // without the artifact that declares them, and used to be handed only the specification.
+        plan: context.plan,
+        constitution: context.constitution,
+        outputLanguage: context.outputLanguage,
+        expectation: context.expectation,
+        otherTasks: context.otherTasks,
+      });
     },
   );
 }

@@ -6,7 +6,7 @@ import { buildTaskList } from "./pipeline";
 /** Records the context each stage was handed. */
 function recordingClient(seen: Map<string, Record<string, unknown>>) {
   return {
-    async generateObject<T>(instruction: string, context: string): Promise<T> {
+    async generateObject<T>(_instruction: string, context: string): Promise<T> {
       const parsed = JSON.parse(context) as Record<string, unknown>;
       const stage = parsed.audit ? "review" : parsed.draft ? "audit" : "draft";
       seen.set(stage, parsed);

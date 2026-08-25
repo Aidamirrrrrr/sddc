@@ -29,7 +29,7 @@ import { writeImplementationPlan } from "../planning/storage";
 import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
 import { writeTaskList } from "../tasks/storage";
-import { runAnalyze } from "../workflows/analyze";
+import { reportConsistency, runAnalyze } from "../workflows/analyze";
 import type { DialogueContext } from "../workflows/context";
 import { createApprovedDiscovery } from "../workflows/discovery";
 import { runApprovedExecution } from "../workflows/execution";
@@ -39,7 +39,7 @@ import { createApprovedPlan } from "../workflows/planning";
 import { recordPlanProvenance, recordTaskProvenance } from "../workflows/provenance";
 import { runRecompile } from "../workflows/recompile";
 import { createRequestContext } from "../workflows/request-context";
-import { clearSession, hasRecordedAnswers, loadSession } from "../workflows/session";
+import { clearSession, hasRecordedAnswers, loadSession, userAnswers } from "../workflows/session";
 import { createApprovedSpecification } from "../workflows/specification";
 import { createApprovedTaskList } from "../workflows/tasks";
 import { runDiagnosticStage } from "./stages";
@@ -149,6 +149,8 @@ export async function runCli(arguments_: string[]): Promise<void> {
     ? await createRequestContext(client, request, root)
     : undefined;
   step(2, 5, { en: "Agree on requirements", ru: "Согласование требований" });
+  // Loaded before the first phase that could contradict it, not just before planning.
+  const constitution = await loadConstitution(root);
   const spec = await createApprovedSpecification(
     client,
     request,
@@ -156,12 +158,12 @@ export async function runCli(arguments_: string[]): Promise<void> {
     interactive,
     policy,
     context,
+    constitution,
   );
   if (spec?.status !== "ready") return;
 
   step(3, 5, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
   const discovery = await createApprovedDiscovery(client, spec, root, requestContext);
-  const constitution = await loadConstitution(root);
   const repository = await preparePlanningContext(root, discovery);
   const plan = await createApprovedPlan(
     client,
@@ -192,8 +194,13 @@ export async function runCli(arguments_: string[]): Promise<void> {
   await writeQuickstart(root, spec, tasks);
   success({ en: `Task graph saved to ${tasksPath}`, ru: `Граф задач сохранён: ${tasksPath}` });
   await persistGovernance(root, spec, discovery, plan, tasks, policy);
-  // Every recorded answer now lives in a saved artifact, so the conversation no longer needs replay.
+  // The artifacts record what was decided; only the session holds the user's own words. Read them
+  // out before the conversation is cleared, so the implementation phase still has them.
+  const clarifications = userAnswers(await loadSession(root, request));
   await clearSession(root);
+  // SDD's analyze step: the artifacts are accepted, so this is the last moment they can be compared
+  // with each other before anything is built from them — a dry run wants it most of all.
+  await reportConsistency(root, spec.feature);
   if (cli.dryRun) {
     reportUsage();
     finish({
@@ -203,7 +210,10 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
   step(5, 5, { en: "Controlled implementation", ru: "Контролируемая реализация" });
-  await runApprovedExecution(client, root, spec, plan, tasks, policy);
+  await runApprovedExecution(client, root, spec, plan, tasks, policy, {
+    constitution,
+    clarifications,
+  });
   reportUsage();
 }
 
