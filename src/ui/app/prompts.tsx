@@ -30,12 +30,34 @@ function Hint({ children }: { children: string }) {
 }
 
 /** Moves through selectable rows, skipping disabled ones in the direction of travel. */
-function nextEnabled<T extends string>(choices: Choice<T>[], from: number, step: number): number {
+export function nextEnabled<T extends string>(
+  choices: Choice<T>[],
+  from: number,
+  step: number,
+): number {
   for (let offset = 1; offset <= choices.length; offset += 1) {
     const index = (from + step * offset + choices.length * offset) % choices.length;
     if (!choices[index]?.disabled) return index;
   }
   return from;
+}
+
+/**
+ * Keeps a long list inside the frame by showing a fixed window around the cursor.
+ *
+ * Pure so the scrolling arithmetic — the part that goes wrong at the ends of a list — can be tested
+ * without a terminal.
+ */
+export function windowAround<T>(items: T[], cursor: number, size = WINDOW): T[] {
+  if (items.length <= size) return items;
+  const start = Math.max(0, Math.min(cursor - Math.floor(size / 2), items.length - size));
+  return items.slice(start, start + size);
+}
+
+export function filterChoices<T extends string>(choices: Choice<T>[], query: string): Choice<T>[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return choices;
+  return choices.filter((choice) => choice.label.toLowerCase().includes(needle));
 }
 
 export function SelectPrompt({
@@ -69,8 +91,7 @@ export function SelectPrompt({
   });
 
   // Long lists (file pickers, feature lists) are windowed so the prompt never outgrows the frame.
-  const start = Math.max(0, Math.min(cursor - 5, choices.length - WINDOW));
-  const window = choices.slice(Math.max(0, start), Math.max(0, start) + WINDOW);
+  const window = windowAround(choices, cursor);
 
   return (
     <Box flexDirection="column">
@@ -158,12 +179,8 @@ export function MultiSelectPrompt({
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
 
-  const visible = useMemo(() => {
-    const needle = query.toLowerCase();
-    return choices.filter((choice) => choice.label.toLowerCase().includes(needle));
-  }, [choices, query]);
-
-  const window = visible.slice(Math.max(0, cursor - 6), Math.max(0, cursor - 6) + 12);
+  const visible = useMemo(() => filterChoices(choices, query), [choices, query]);
+  const window = windowAround(visible, cursor);
 
   useInput((input, key) => {
     if (key.upArrow) setCursor((current) => Math.max(0, current - 1));
