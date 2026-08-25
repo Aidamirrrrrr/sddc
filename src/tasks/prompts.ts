@@ -1,14 +1,17 @@
 export const taskPrompts = {
   draft: `Derive an executable task graph from an accepted implementation plan. The plan already fixed
 the technical approach, contracts, and data model; do not revisit those decisions and do not write code
-or patches. Each task implements part of the accepted approach, has one focused goal, cites requirement
+or patches. One task may carry several approach steps: grouping steps is not revisiting the plan, and is required
+whenever a criterion's code and its test live in different steps. Changing the approach itself is what is forbidden.
+Each task implements part of the accepted approach, has one focused goal, cites requirement
 and acceptance IDs from the specification, and lists explicit read/modify/create paths, dependencies,
-verification commands, completion conditions, and concrete risks. Every acceptance criterion belongs to exactly one task, and a criterion is a test, so it belongs to the task that
-demonstrates it. That task must therefore write the test proving it: list the test file in its own files.modify or
-files.create. Never list the same acceptance ID on two tasks, and never leave a criterion with a task that cannot
-prove it. Group criteria that share files into one task rather than splitting a criterion across several. A task
-that serves a requirement without proving a criterion leaves acceptance empty. Requirements may be served by
-several tasks. Existing read and modify paths must
+verification commands, completion conditions, and concrete risks. Every acceptance criterion belongs to exactly one task: the task that proves it. By default that one task writes
+both the change the criterion describes and the test proving it, listing all of those files in its own files.modify
+or files.create, so the task is self-contained and its verification passes on its own. Never split a criterion
+across tasks, never list the same acceptance ID twice, and never leave a criterion with a task that cannot prove it.
+Group criteria that share files into one task. A task that serves a requirement without proving a criterion leaves
+acceptance empty. Requirements may be served by several tasks. When a completion condition mentions existing tests, list the test files covering whatever the task modifies in its
+files.read, so that condition can be checked against the code rather than assumed. Existing read and modify paths must
 come from discovery.context.files. New paths may appear only in create. Declare a dependency only when
 a task truly needs the output of another one: independent tasks are executed as one parallel wave, so
 every unnecessary dependency makes the graph slower. Two tasks that write the same file must be

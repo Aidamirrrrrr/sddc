@@ -1,3 +1,4 @@
+import { isBehaviouralSource, writesOnlyTests } from "../policy/paths";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task, TaskList, TaskListDraft, TaskListReview } from "./schemas";
@@ -123,6 +124,7 @@ export function validateTaskList(
     assertCoverage(requirements, coveredRequirements, "requirements");
     assertCoverage(acceptance, coveredAcceptance, "acceptance criteria");
     assertExclusiveAcceptance(list.tasks);
+    assertOwnersCanProve(list.tasks);
   }
   assertAcyclic(list.tasks);
 }
@@ -180,6 +182,32 @@ function assertExclusiveAcceptance(tasks: Task[]): void {
   if (shared.length > 0) {
     const detail = shared.map(([id, claimants]) => `${id} by ${claimants.join(", ")}`).join("; ");
     throw new Error(`Acceptance criteria must be owned by exactly one task: ${detail}`);
+  }
+}
+
+/**
+ * A criterion's owner must be able to prove it.
+ *
+ * A task that owns criteria, writes nothing but tests, and depends on no one runs before the code it
+ * tests exists — its test cannot even compile. That is unprovable by construction, so it is caught
+ * here rather than by a blocker halfway through execution.
+ *
+ * A test-only task with no dependencies is fine when nothing else writes source: the behaviour it
+ * covers already exists, and the test is simply being added.
+ */
+function assertOwnersCanProve(tasks: Task[]): void {
+  const someoneWritesSource = tasks.some((task) =>
+    [...task.files.modify, ...task.files.create].some(isBehaviouralSource),
+  );
+  if (!someoneWritesSource) return;
+  for (const task of tasks) {
+    if (task.acceptance.length === 0) continue;
+    if (!writesOnlyTests(task.files)) continue;
+    if (task.depends_on.length > 0) continue;
+    throw new Error(
+      `${task.id} owns ${task.acceptance.join(", ")} but only writes tests and depends on nothing, ` +
+        "so it runs before the code under test exists",
+    );
   }
 }
 
