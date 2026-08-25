@@ -39,7 +39,17 @@ export const policySchema = z.object({
   execution: z.object({
     default_approval_mode: z.enum(["strict", "normal", "trusted"]),
     max_changed_lines_per_task: z.number().int().positive(),
+    /** How many times a draw may be redrawn because its *shape* was rejected: schema, scope, review. */
     max_proposal_revisions: z.number().int().nonnegative(),
+    /**
+     * How many times a task may look at what its own code actually did and correct it.
+     *
+     * A different loop from the one above, and the one that makes this phase an agent rather than a
+     * single shot: the proposal is applied, the verification commands really run, and their output
+     * goes back to the model. Bounded because it is the only loop that costs a model call *and* a
+     * command run per turn.
+     */
+    max_task_iterations: z.number().int().positive(),
     /**
      * How many times one task may be attempted before the run gives up on it.
      *

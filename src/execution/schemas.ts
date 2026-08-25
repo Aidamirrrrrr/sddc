@@ -11,9 +11,17 @@ export const changeProposalSchema = z.object({
       required_decision: z.string().nullable(),
     })
     .nullable(),
+  /**
+   * What each changed file is for.
+   *
+   * The field was called `requirement_id`, and models filled it with requirements only — the
+   * acceptance criteria a task owns were silently left out, which the validator then rejected on
+   * every draw. The name was the whole cause: it said requirement, so it got requirements. It now
+   * says what it holds, which is a requirement ID or an acceptance criterion ID.
+   */
   traceability: z.array(
     z.object({
-      requirement_id: z.string(),
+      covers: z.string(),
       paths: z.array(z.string()).min(1),
     }),
   ),

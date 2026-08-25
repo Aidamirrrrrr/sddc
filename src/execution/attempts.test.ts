@@ -5,39 +5,45 @@ import { join } from "node:path";
 import { readyPlan, readySpec } from "../planning/test-fixtures";
 import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
-import { sha256 } from "./context";
 import { executionPrompts } from "./prompts";
 import { executePlan } from "./runner";
 
-/** Always proposes a change whose verification will fail. */
+/**
+ * Always proposes a change whose verification will fail, against whatever snapshot it is given.
+ *
+ * Reading the supplied hash rather than a fixed one is what lets it survive the agent loop: from the
+ * second turn on, the file on disk holds the previous turn's attempt.
+ */
 function failingClient() {
   return {
-    async generateObject<T>(system: string): Promise<T> {
-      if (system === executionPrompts.implement) {
+    async generateObject<T>(system: string, prompt: string): Promise<T> {
+      if (system !== executionPrompts.implement) {
         return {
-          task_id: "T1",
-          status: "ready",
-          summary: "Change auth",
-          blocker: null,
-          traceability: [{ requirement_id: "R1", paths: ["src/auth.ts"] }],
-          changes: [
-            {
-              path: "src/auth.ts",
-              operation: "modify",
-              expected_sha256: sha256("old\n"),
-              content: "new\n",
-            },
-          ],
+          decision: "pass",
+          checks: Array.from({ length: 7 }, (_, index) => ({
+            id: `E${index + 1}`,
+            passed: true,
+            finding: "Passed",
+          })),
+          findings: [],
         } as T;
       }
+      const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
+      const file = (context.files as Array<{ path: string; sha256: string }>)[0];
       return {
-        decision: "pass",
-        checks: Array.from({ length: 7 }, (_, index) => ({
-          id: `E${index + 1}`,
-          passed: true,
-          finding: "Passed",
-        })),
-        findings: [],
+        task_id: "T1",
+        status: "ready",
+        summary: "Change auth",
+        blocker: null,
+        traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
+        changes: [
+          {
+            path: "src/auth.ts",
+            operation: "modify",
+            expected_sha256: file?.sha256,
+            content: `attempt ${file?.sha256?.slice(0, 8)}\n`,
+          },
+        ],
       } as T;
     },
   };
@@ -154,8 +160,14 @@ test("rolling a verified task back is bounded like every other retry", async () 
   expect(journal.tasks[0]?.verification[0]?.output).toContain("Gave up on T1 after 2 attempts");
 });
 
-/** Proposes against whatever snapshot it was actually given, the way a model would. */
-function snapshotAwareClient() {
+/**
+ * Moves the file out from under its own proposal, in the window the model call occupies.
+ *
+ * That window is where this really happens: a sibling's proposal was prefetched from an older
+ * snapshot, or an editor saved while the model was thinking.
+ */
+function movingClient(root: string) {
+  let moved = false;
   return {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       if (system !== executionPrompts.implement) {
@@ -171,53 +183,57 @@ function snapshotAwareClient() {
       }
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
       const file = (context.files as Array<{ path: string; sha256: string }>)[0];
-      return {
+      const proposal = {
         task_id: "T1",
         status: "ready",
         summary: "Change auth",
         blocker: null,
-        traceability: [{ requirement_id: "R1", paths: ["src/auth.ts"] }],
+        traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
         changes: [
           {
             path: "src/auth.ts",
             operation: "modify",
             expected_sha256: file?.sha256,
-            content: `new ${file?.sha256?.slice(0, 6)}\n`,
+            content: "changed\n",
           },
         ],
-      } as T;
+      };
+      if (!moved) {
+        moved = true;
+        await Bun.write(join(root, "src/auth.ts"), "someone else got there first\n");
+      }
+      return proposal as T;
     },
   };
 }
 
 test("a workspace that moved under a proposal is retried, not thrown", async () => {
   const root = await workspace();
-  let attempts = 0;
+  let retries = 0;
 
   const journal = await executePlan(
-    snapshotAwareClient(),
+    movingClient(root),
     root,
     readySpec(),
     readyPlan(),
     passingTask(),
     {
       async review() {
-        attempts += 1;
-        // Change the file behind the proposal exactly once, so the first apply finds a stale hash.
-        if (attempts === 1) await Bun.write(join(root, "src/auth.ts"), "moved\n");
         return { accepted: true };
       },
       async retryAfterFailure() {
+        retries += 1;
         return false;
       },
     },
     defaultPolicy,
-    "normal",
+    "trusted",
   );
 
-  // The run survived: the stale draw was a retry, and the second one applied cleanly.
+  // The stale draw is a retry, and the next one is built from the file as it now is.
   expect(journal.status).toBe("completed");
-  expect(attempts).toBe(2);
+  expect(retries).toBe(0);
+  expect(await Bun.file(join(root, "src/auth.ts")).text()).toBe("changed\n");
 });
 
 test("a task whose proposal can never be produced ends the run as a journal", async () => {

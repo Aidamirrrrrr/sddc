@@ -39,7 +39,7 @@ function client() {
         status: "ready",
         summary: `Change ${path}`,
         blocker: null,
-        traceability: [{ requirement_id: "R1", paths: [path] }],
+        traceability: [{ covers: "R1", paths: [path] }],
         changes: [
           { path, operation: "modify", expected_sha256: file?.sha256, content: `new ${id}\n` },
         ],

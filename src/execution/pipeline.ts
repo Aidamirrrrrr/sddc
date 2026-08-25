@@ -9,7 +9,6 @@ import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
 import { type ExecutionFile, readTaskFiles } from "./context";
 import { executionPrompts } from "./prompts";
-import { reviewProposal } from "./review";
 import { type ChangeProposal, changeProposalSchema, executionReviewSchema } from "./schemas";
 import { validateProposal } from "./validate";
 
@@ -159,24 +158,38 @@ export async function buildTaskProposal(
       previous = proposal;
       return proposal;
     },
-    async (proposal) => {
-      validateProposal(proposal, task, files, policy, graph);
-      // A blocker that survived validation is a real one: it is an answer, not a bad draw.
-      if (proposal.status === "blocked") return;
-      await reviewProposal(client, proposal, {
-        spec,
-        task,
-        files,
-        // The reviewer's E7 asks whether an undeclared decision crept in. It cannot answer that
-        // without the artifact that declares them, and used to be handed only the specification.
-        plan: context.plan,
-        constitution: context.constitution,
-        outputLanguage: context.outputLanguage,
-        expectation: context.expectation,
-        otherTasks: context.otherTasks,
-      });
-    },
+    // Only the deterministic gate runs here. The read-only reviewer used to run on every draw, which
+    // put a model's opinion in front of the code ever being executed: a proposal could be refused
+    // three times over a judgement call while the commands that would have settled it never ran.
+    // It is now the gate on what the loop finally settles, where its findings can be acted on.
+    (proposal) => validateProposal(proposal, task, files, policy, graph),
   );
+}
+
+/** The context the read-only reviewer needs, assembled from the same material the implementer saw. */
+export function reviewContextFor(
+  spec: Spec,
+  plan: ImplementationPlan,
+  task: Task,
+  policy: Policy,
+  graph: Task[],
+  stage: ProposalContext,
+) {
+  return {
+    spec,
+    task,
+    plan: {
+      summary: plan.summary,
+      decisions: plan.decisions,
+      approach: plan.approach,
+      contracts: plan.contracts,
+      data_model: plan.data_model,
+    },
+    constitution: stage.constitution || undefined,
+    outputLanguage: specificationLanguage(spec),
+    expectation: verificationExpectation(task, policy),
+    otherTasks: graphOutline(graph, task, new Set(stage.completed ?? [])),
+  };
 }
 
 export async function runExecutionStage(

@@ -65,7 +65,7 @@ function proposal() {
     status: "ready" as const,
     summary: "Change auth",
     blocker: null,
-    traceability: [{ requirement_id: "R1", paths: ["src/auth.ts"] }],
+    traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
     changes: [
       {
         path: "src/auth.ts",

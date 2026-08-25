@@ -18,7 +18,8 @@ Rules:
 - For a created file, expected_sha256 must be null.
 - Preserve unrelated code and the project's established conventions.
 - Satisfy the listed requirements, acceptance criteria and done_when conditions, and produce the outcome expectation describes.
-- Trace every task requirement and acceptance criterion to at least one file, and only ever to a file listed in your own changes. A file you merely read — including the source a test exercises — is not traceability. For a task that writes only tests, every criterion traces to the test file that asserts it.
+- traceability must contain one entry for every ID in task.requirements AND every ID in task.acceptance — the acceptance criteria are not optional, and a missing one is a rejected proposal. Each entry's covers field holds that single ID.
+- Trace each of them to at least one file, and only ever to a file listed in your own changes. A file you merely read — including the source a test exercises — is not traceability. For a task that writes only tests, every criterion traces to the test file that asserts it.
 - Treat previous verification output as diagnostics, not as permission to expand scope.
 - Verification commands run in the project as it already is. Files a command merely needs to exist — package manifests, lockfiles, tooling config — do not belong in files.modify, and their absence from it is never a reason to block.
 - Code your task does not touch may be missing or incomplete because a pending sibling owns it: that is the plan working, not a blocker. Implement your slice and leave theirs alone.

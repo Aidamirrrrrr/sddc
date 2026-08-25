@@ -7,12 +7,14 @@ import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
 import { readRepositoryDiscovery, readSpec } from "../spec/storage";
 import { readTaskList, writeTaskList } from "../tasks/storage";
+import { reportConsistency } from "./analyze";
 import { recompileContext } from "./context";
 import { runApprovedExecution } from "./execution";
 import { resolveFeature } from "./features";
 import { persistGovernance } from "./governance";
 import { createApprovedPlan } from "./planning";
 import { recordPlanProvenance, recordTaskProvenance } from "./provenance";
+import { loadSession, userAnswers } from "./session";
 import { createApprovedTaskList } from "./tasks";
 
 export type RecompilePhase = "plan" | "tasks" | "execute";
@@ -87,11 +89,19 @@ export async function runRecompile(
     });
     return;
   }
+  // The same gate the main flow runs before implementing: recompiling is exactly when artifacts
+  // drift apart, so skipping it here would leave it missing where it is needed most.
+  await reportConsistency(root, feature);
   step(next(), total, {
     en: "Controlled implementation",
     ru: "Контролируемая реализация",
   });
-  await runApprovedExecution(client, root, spec, plan, tasks, policy);
+  // The constitution reaches the implementation phase here too; recompiling must not quietly
+  // produce code held to fewer principles than a first run would be.
+  await runApprovedExecution(client, root, spec, plan, tasks, policy, {
+    constitution,
+    clarifications: userAnswers(await loadSession(root, context.request)),
+  });
 }
 
 async function readStoredPlan(root: string, feature: string, phase: RecompilePhase) {

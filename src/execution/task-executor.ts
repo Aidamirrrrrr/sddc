@@ -4,13 +4,13 @@ import { writesOnlyTests } from "../policy/paths";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
+import { runTaskAgent, WorkspaceMovedError } from "./agent";
 import { readTaskFiles, sha256 } from "./context";
-import { applyProposal, type FileBackup, restoreFiles } from "./files";
+import { type FileBackup, restoreFiles } from "./files";
 import { buildTaskProposal, type ProposalContext } from "./pipeline";
 import { renderProposal } from "./render";
 import type { ExecutionHooks } from "./runner";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
-import { runVerification } from "./verify";
 
 export type TaskOutcome =
   | { kind: "completed"; result: ExecutionTaskResult; backup: FileBackup }
@@ -73,50 +73,55 @@ export async function executeTask(
   graph: Task[] = [task],
   stage: ProposalContext = {},
 ): Promise<TaskOutcome> {
-  const { files, proposal } =
-    prepared ?? (await prepareTask(client, root, spec, plan, task, feedback, policy, graph, stage));
-  if (proposal.status === "blocked") return { kind: "blocked", proposal };
   if (
     task.permissions.length > 0 &&
     hooks.approveSensitive &&
     !(await hooks.approveSensitive(task))
   ) {
-    return { kind: "blocked", proposal: blockedByUser(task, proposal) };
-  }
-  if (mode !== "trusted") {
-    const review = await hooks.review(task, proposal, renderProposal(proposal, files));
-    if (!review.accepted)
-      return { kind: "retry", feedback: `User rejected proposal: ${review.feedback}` };
+    return { kind: "blocked", proposal: blockedByUser(task) };
   }
 
-  // The workspace can move under a proposal — a prefetched sibling was built from an older
-  // snapshot, an editor saved, a formatter ran. That is a stale draw, not a broken run, so it goes
-  // back through the ordinary retry with the reason attached instead of escaping as an exception.
-  let backup: FileBackup;
+  // The task now runs as a loop that writes, verifies and corrects itself inside its own approved
+  // scope, so the workspace is touched before the user has approved anything. That is the price of
+  // letting the model see what its code actually does — and it is fully refundable: every turn folds
+  // into one backup, and every path out of here either keeps the result or restores it exactly.
+  let outcome: Awaited<ReturnType<typeof runTaskAgent>>;
   try {
-    backup = await applyProposal(root, proposal);
-  } catch (error) {
-    return {
-      kind: "retry",
-      feedback: `The workspace changed after the proposal was built: ${errorMessage(error)}. Rebuild the change from the supplied file contents.`,
-    };
-  }
-  let verification: ExecutionTaskResult["verification"];
-  try {
-    verification = await runVerification(root, task, {
+    outcome = await runTaskAgent({
+      client,
+      root,
+      spec,
+      plan,
+      task,
       policy,
-      approve:
-        (mode === "strict" || task.permissions.includes("external_network")) && hooks.approveCommand
-          ? (item) => hooks.approveCommand?.(task, item) ?? Promise.resolve(false)
-          : undefined,
+      graph,
+      stage,
+      feedback,
+      ...(prepared && !feedback ? { prepared } : {}),
+      ...(shouldApproveCommands(task, mode) && hooks.approveCommand
+        ? { approveCommand: (item) => hooks.approveCommand?.(task, item) ?? Promise.resolve(false) }
+        : {}),
+      ...(hooks.taskProgress
+        ? { onTurn: (turn, checks) => hooks.taskProgress?.(task, turn, checks) }
+        : {}),
     });
   } catch (error) {
-    await restoreFiles(root, backup);
-    throw new Error(`Failed to run verification for ${task.id}`, { cause: error });
+    // A workspace that moved under a proposal is a stale draw and another one fixes it. Anything
+    // else — a provider that is down, a budget spent on refusals — is not improved by asking again,
+    // so it travels on and the run names the task it could not produce.
+    if (!(error instanceof WorkspaceMovedError)) throw error;
+    return {
+      kind: "retry",
+      feedback: `The change could not be applied: ${errorMessage(error)}. Rebuild it from the supplied file contents.`,
+    };
   }
+
+  if (outcome.kind === "blocked") return { kind: "blocked", proposal: outcome.proposal };
+
+  const { proposal, files, verification } = outcome.turn;
   const result: ExecutionTaskResult = {
     task_id: task.id,
-    status: verificationSatisfied(task, policy, verification) ? "completed" : "failed",
+    status: outcome.kind === "settled" ? "completed" : "failed",
     changed_files: proposal.changes.map((change) => change.path),
     verification,
     output_hashes: proposal.changes.map((change) => ({
@@ -125,68 +130,36 @@ export async function executeTask(
     })),
     checkpoint: null,
   };
+
   if (result.status === "failed") {
-    await restoreFiles(root, backup);
-    // A task is answerable for what its change broke, not for what was already broken. Under
-    // test-first the suite is deliberately red from the moment the test task lands, so every task
-    // sharing that wave was being blamed for a failure it did not cause and could not fix.
-    const inherited =
-      stage.suiteRedByDesign === true && (await inheritedFailure(root, task, policy, verification));
-    if (inherited) {
-      const restored = await applyProposal(root, proposal);
-      return {
-        kind: "completed",
-        result: { ...result, status: "completed", verification: annotate(verification) },
-        backup: restored,
-      };
-    }
+    // Whether the failure predates the task is settled inside the loop now, against a baseline taken
+    // before anything was written; by the time we are here the task really is answerable for it.
+    await restoreFiles(root, outcome.backup);
     if (await hooks.retryAfterFailure(task, result)) {
       return { kind: "retry", feedback: failureFeedback(task, policy, result) };
     }
     return { kind: "failed", result };
   }
-  return { kind: "completed", result, backup };
+
+  // The user now approves a change that has already passed its verification, rather than approving
+  // a guess and finding out afterwards.
+  if (mode !== "trusted") {
+    const review = await hooks.review(task, proposal, renderProposal(proposal, files));
+    if (!review.accepted) {
+      await restoreFiles(root, outcome.backup);
+      return { kind: "retry", feedback: `User rejected proposal: ${review.feedback}` };
+    }
+  }
+  return { kind: "completed", result, backup: outcome.backup };
 }
 
-/**
- * Whether the verification was already failing this way before the task touched anything.
- *
- * Re-runs the same commands against the restored tree, which is why it costs nothing on the happy
- * path: it only ever runs after a failure, when the files have just been rolled back anyway. The
- * same command failing the same way on code the task never wrote is not evidence against the task.
- *
- * Deliberately strict — the command and its exit code must match — so a task that breaks the build
- * in a new way is still caught, and the caller only asks at all once this run has deliberately left
- * the suite red. A verification that fails no matter what is still a failure.
- */
-async function inheritedFailure(
-  root: string,
-  task: Task,
-  policy: Policy,
-  verification: ExecutionTaskResult["verification"],
-): Promise<boolean> {
-  const failed = verification.find((item) => item.exit_code !== 0);
-  if (!failed || failed.timed_out) return false;
-  // No approval hook: these exact commands were approved for this task moments ago.
-  const baseline = await runVerification(root, task, { policy }).catch(() => undefined);
-  const before = baseline?.find(
-    (item) => item.program === failed.program && item.args.join(" ") === failed.args.join(" "),
-  );
-  return before !== undefined && before.exit_code === failed.exit_code;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-/** Keeps the journal honest about why a failing command was not held against the task. */
-function annotate(
-  verification: ExecutionTaskResult["verification"],
-): ExecutionTaskResult["verification"] {
-  return verification.map((item) =>
-    item.exit_code === 0
-      ? item
-      : {
-          ...item,
-          output: `${item.output}\n[this command failed the same way before the task ran; not attributed to it]`,
-        },
-  );
+/** Strict mode confirms every command; anything touching the network is confirmed in every mode. */
+function shouldApproveCommands(task: Task, mode: ExecutionJournal["mode"]): boolean {
+  return mode === "strict" || task.permissions.includes("external_network");
 }
 
 /**
@@ -223,9 +196,9 @@ function failedAsATest(verification: ExecutionTaskResult["verification"]): boole
   return last.exit_code > 0 && last.exit_code < 126;
 }
 
-function blockedByUser(task: Task, proposal: ChangeProposal): ChangeProposal {
+function blockedByUser(task: Task): ChangeProposal {
   return {
-    ...proposal,
+    task_id: task.id,
     status: "blocked",
     summary: "Sensitive permission was not confirmed",
     blocker: {
@@ -233,12 +206,9 @@ function blockedByUser(task: Task, proposal: ChangeProposal): ChangeProposal {
       required_files: [...task.files.modify, ...task.files.create],
       required_decision: "Revise the plan or explicitly approve the sensitive operation",
     },
+    traceability: [],
     changes: [],
   };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** An inverted expectation fails with every command green, so it needs its own explanation. */

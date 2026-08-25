@@ -41,7 +41,12 @@ export const defaultPolicy: Policy = {
   execution: {
     default_approval_mode: "normal",
     max_changed_lines_per_task: 400,
-    max_proposal_revisions: 1,
+    // Two redraws, not one. The reasoning next to sampling.max_attempts applies here as well: the
+    // verifier is free and deterministic, so a further draw costs one model call and buys a real
+    // chance of a usable proposal — cheaper than sending the user back to replanning. A single
+    // redraw was measured to be spent before the model had corrected anything.
+    max_proposal_revisions: 2,
+    max_task_iterations: 3,
     max_task_attempts: 3,
     command_timeout_seconds: 120,
     allow_git_checkpoints: false,

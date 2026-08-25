@@ -141,6 +141,15 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         false,
       );
     },
+    taskProgress(task, turn, verification) {
+      const failed = verification.filter((item) => item.exit_code !== 0).length;
+      driver().info(
+        phrase({
+          en: `${task.id} · attempt ${turn} · ${failed === 0 ? "all commands green" : `${failed} command(s) failing`}`,
+          ru: `${task.id} · попытка ${turn} · ${failed === 0 ? "все команды зелёные" : `падает команд: ${failed}`}`,
+        }),
+      );
+    },
     async retryAfterFailure(task, result) {
       driver().document(
         `${task.id} failed and was rolled back`,

@@ -27,8 +27,8 @@ test("failed verification rolls source changes back", async () => {
       summary: "Change auth",
       blocker: null,
       traceability: [
-        { requirement_id: "R1", paths: ["src/auth.ts"] },
-        { requirement_id: "A1", paths: ["src/auth.ts"] },
+        { covers: "R1", paths: ["src/auth.ts"] },
+        { covers: "A1", paths: ["src/auth.ts"] },
       ],
       changes: [
         {
@@ -74,8 +74,8 @@ test("verified changes are kept and recorded as completed", async () => {
       summary: "Change auth",
       blocker: null,
       traceability: [
-        { requirement_id: "R1", paths: ["src/auth.ts"] },
-        { requirement_id: "A1", paths: ["src/auth.ts"] },
+        { covers: "R1", paths: ["src/auth.ts"] },
+        { covers: "A1", paths: ["src/auth.ts"] },
       ],
       changes: [
         {
@@ -167,8 +167,8 @@ test("resume skips completed tasks after validating output hashes", async () => 
       summary: "Add tests",
       blocker: null,
       traceability: [
-        { requirement_id: "R1", paths: ["src/auth.test.ts"] },
-        { requirement_id: "A1", paths: ["src/auth.test.ts"] },
+        { covers: "R1", paths: ["src/auth.test.ts"] },
+        { covers: "A1", paths: ["src/auth.test.ts"] },
       ],
       changes: [
         {
@@ -312,8 +312,8 @@ function proposal(content: string) {
     summary: "Change auth",
     blocker: null,
     traceability: [
-      { requirement_id: "R1", paths: ["src/auth.ts"] },
-      { requirement_id: "A1", paths: ["src/auth.ts"] },
+      { covers: "R1", paths: ["src/auth.ts"] },
+      { covers: "A1", paths: ["src/auth.ts"] },
     ],
     changes: [
       {

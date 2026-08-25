@@ -24,6 +24,8 @@ export type ExecutionHooks = {
   proposalBlocked?(task: Task, proposal: ChangeProposal): void;
   approveSensitive?(task: Task): Promise<boolean>;
   approveCommand?(task: Task, verification: Task["verification"][number]): Promise<boolean>;
+  /** Called after each turn of a task's agent loop, so a long task is not a silent one. */
+  taskProgress?(task: Task, turn: number, verification: ExecutionTaskResult["verification"]): void;
   retryAfterFailure(task: Task, result: ExecutionTaskResult): Promise<boolean>;
   afterTask?(task: Task, result: ExecutionTaskResult): Promise<AfterTaskAction>;
   finalReview?(journal: ExecutionJournal, revisableTaskIds: string[]): Promise<FinalReview>;

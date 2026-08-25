@@ -35,8 +35,8 @@ function proposal(id: string, path: string, requirement: string, acceptance: str
     summary: `Change ${path}`,
     blocker: null,
     traceability: [
-      { requirement_id: requirement, paths: [path] },
-      { requirement_id: acceptance, paths: [path] },
+      { covers: requirement, paths: [path] },
+      { covers: acceptance, paths: [path] },
     ],
     changes: [
       { path, operation: "modify", expected_sha256: sha256("old\n"), content: `new ${id}\n` },

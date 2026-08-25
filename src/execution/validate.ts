@@ -106,9 +106,7 @@ export function validateProposal(
   }
   const omitted = [...modify, ...create].find((path) => !seen.has(path));
   if (omitted) throw new Error(`${task.id} omits planned change: ${omitted}`);
-  const traced = new Map(
-    proposal.traceability.map((item) => [item.requirement_id, new Set(item.paths)]),
-  );
+  const traced = new Map(proposal.traceability.map((item) => [item.covers, new Set(item.paths)]));
   const changed = [...seen].join(", ");
   for (const criterion of [...task.requirements, ...task.acceptance]) {
     const paths = traced.get(criterion);

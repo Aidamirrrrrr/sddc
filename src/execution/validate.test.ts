@@ -20,8 +20,8 @@ test("proposal accepts only approved task writes with current hashes", () => {
         summary: "Update auth",
         blocker: null,
         traceability: [
-          { requirement_id: "R1", paths: ["src/auth.ts"] },
-          { requirement_id: "A1", paths: ["src/auth.ts"] },
+          { covers: "R1", paths: ["src/auth.ts"] },
+          { covers: "A1", paths: ["src/auth.ts"] },
         ],
         changes: [
           {
@@ -45,8 +45,8 @@ test("proposal accepts only approved task writes with current hashes", () => {
         summary: "Escape scope",
         blocker: null,
         traceability: [
-          { requirement_id: "R1", paths: [".env"] },
-          { requirement_id: "A1", paths: [".env"] },
+          { covers: "R1", paths: [".env"] },
+          { covers: "A1", paths: [".env"] },
         ],
         changes: [
           { path: ".env", operation: "modify", expected_sha256: sha256(content), content: "x" },
@@ -70,8 +70,8 @@ test("proposal must implement every planned file within the size limit", () => {
     summary: "Incomplete",
     blocker: null,
     traceability: [
-      { requirement_id: "R1", paths: ["src/auth.ts"] },
-      { requirement_id: "A1", paths: ["src/auth.ts"] },
+      { covers: "R1", paths: ["src/auth.ts"] },
+      { covers: "A1", paths: ["src/auth.ts"] },
     ],
     changes: [
       {
@@ -223,8 +223,8 @@ test("tracing a criterion to a file the proposal only reads is explained, not ju
     blocker: null,
     // The commonest wrong guess: point at the source under test rather than the file changed.
     traceability: [
-      { requirement_id: "R1", paths: ["src/store.test.ts"] },
-      { requirement_id: "A1", paths: ["src/store.ts"] },
+      { covers: "R1", paths: ["src/store.test.ts"] },
+      { covers: "A1", paths: ["src/store.ts"] },
     ],
     changes: [
       {
@@ -249,7 +249,7 @@ test("a missing traceability entry says which criterion and what to point at", (
     status: "ready",
     summary: "Add tag tests",
     blocker: null,
-    traceability: [{ requirement_id: "R1", paths: ["src/store.test.ts"] }],
+    traceability: [{ covers: "R1", paths: ["src/store.test.ts"] }],
     changes: [
       {
         path: "src/store.test.ts",
