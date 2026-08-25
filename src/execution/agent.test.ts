@@ -44,7 +44,6 @@ function scriptedClient(write: (turn: number, feedback: string) => string, seen:
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       if (system !== executionPrompts.implement) {
         return {
-          decision: "pass",
           checks: Array.from({ length: 7 }, (_, index) => ({
             id: `E${index + 1}`,
             passed: true,
@@ -213,7 +212,6 @@ test("a review rejection becomes the next turn's instruction, not a wasted draw"
         // Passes only once the second version is in front of it.
         const good = JSON.stringify(context.proposal).includes("revised");
         return {
-          decision: good ? "pass" : "reject",
           checks: Array.from({ length: 7 }, (_, index) => ({
             id: `E${index + 1}`,
             passed: good || index !== 4,
@@ -266,7 +264,6 @@ test("the reviewer only ever sees a change that already passed its commands", as
       if (system !== executionPrompts.implement) {
         order.push("review");
         return {
-          decision: "pass",
           checks: Array.from({ length: 7 }, (_, index) => ({
             id: `E${index + 1}`,
             passed: true,
@@ -303,4 +300,53 @@ test("the reviewer only ever sees a change that already passed its commands", as
 
   // The first attempt failed its command and was corrected without ever costing a review call.
   expect(order).toEqual(["implement", "implement", "review"]);
+});
+
+test("a turn that cannot be drawn falls back to work that already came out right", async () => {
+  const root = await workspace();
+  let implementCalls = 0;
+  const client = {
+    async generateObject<T>(system: string, prompt: string): Promise<T> {
+      const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
+      if (system !== executionPrompts.implement) {
+        // Always objects, so the loop always asks for another turn.
+        return {
+          checks: Array.from({ length: 7 }, (_, index) => ({
+            id: `E${index + 1}`,
+            passed: index !== 0,
+            finding: "The criterion is not fully covered",
+          })),
+          findings: ["Cover the criterion properly"],
+        } as T;
+      }
+      implementCalls += 1;
+      // The second turn has nothing left to change, so every draw is refused by the validator.
+      if (implementCalls > 1) throw new Error("Failed execution-implement");
+      const path = context.task.files.modify[0] as string;
+      const file = (context.files as Array<{ path: string; sha256: string }>).find(
+        (item) => item.path === path,
+      );
+      return {
+        task_id: context.task.id,
+        status: "ready",
+        summary: "Change auth",
+        blocker: null,
+        traceability: [{ covers: "R1", paths: [path] }],
+        changes: [
+          { path, operation: "modify", expected_sha256: file?.sha256, content: "correct\n" },
+        ],
+      } as T;
+    },
+  };
+
+  const outcome = await runTaskAgent(options(root, client as never, 3));
+
+  // The good turn used to be thrown away here, leaving a failed task whose transcript was green.
+  expect(outcome.kind).toBe("exhausted");
+  if (outcome.kind !== "exhausted") throw new Error("expected exhausted");
+  expect(outcome.turn.proposal.changes[0]?.content).toBe("correct\n");
+  const note = outcome.turn.verification.at(-1);
+  expect(note?.program).toBe("sddc");
+  expect(note?.output).toContain("the code review refused");
+  expect(note?.output).toContain("Cover the criterion properly");
 });

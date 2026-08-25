@@ -6,7 +6,6 @@ import type { ExecutionReview } from "./schemas";
 
 test("execution review requires every quality check", () => {
   const review: ExecutionReview = {
-    decision: "pass",
     checks: Array.from({ length: 7 }, (_, index) => ({
       id: `E${index + 1}` as ExecutionReview["checks"][number]["id"],
       passed: true,
@@ -28,7 +27,6 @@ test("the reviewer is given what declares a decision, not only the specification
       async generateObject<T>(_instruction: string, prompt: string): Promise<T> {
         captured = JSON.parse(prompt);
         return {
-          decision: "pass",
           checks: Array.from({ length: 7 }, (_, index) => ({
             id: `E${index + 1}`,
             passed: true,
@@ -85,7 +83,6 @@ function task() {
 
 function review(overrides: Partial<ExecutionReview> = {}): ExecutionReview {
   return {
-    decision: "pass",
     checks: Array.from({ length: 7 }, (_, index) => ({
       id: `E${index + 1}` as ExecutionReview["checks"][number]["id"],
       passed: true,
@@ -114,10 +111,14 @@ test("a rejection names the check that refused, not only the prose", () => {
   );
 });
 
-test("a reject decision with every check passed is reported as the contradiction it is", () => {
-  expect(() => validateExecutionReview(review({ decision: "reject" }))).toThrow(
-    "decision is reject with every check passed",
-  );
+test("a review that passes every check is a pass, whatever its notes say", () => {
+  // A live run was refused by a review that had marked all seven passed and written "No issues
+  // found" in its own findings, because a separate decision field said otherwise. The checks are
+  // the verdict now, so there is nothing left to contradict them.
+  const noted = review();
+  noted.findings = ["No issues found. The change is correct and within scope."];
+
+  expect(() => validateExecutionReview(noted)).not.toThrow();
 });
 
 test("a check the reviewer never returned is still named", () => {

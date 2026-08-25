@@ -19,7 +19,6 @@ function failingClient() {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       if (system !== executionPrompts.implement) {
         return {
-          decision: "pass",
           checks: Array.from({ length: 7 }, (_, index) => ({
             id: `E${index + 1}`,
             passed: true,
@@ -172,7 +171,6 @@ function movingClient(root: string) {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       if (system !== executionPrompts.implement) {
         return {
-          decision: "pass",
           checks: Array.from({ length: 7 }, (_, index) => ({
             id: `E${index + 1}`,
             passed: true,

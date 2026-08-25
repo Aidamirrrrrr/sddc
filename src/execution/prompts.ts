@@ -54,6 +54,10 @@ E7 no undeclared product or architecture decision is introduced. A new export, t
 required by a requirement, an acceptance criterion, or a plan decision is the work, not a decision to
 flag. Reserve E7 for choices nothing upstream asked for.
 
-Reject when any check fails. Findings must be concrete, must not invent missing facts, and must be
-written in outputLanguage.`,
+The checks are the verdict: a proposal is refused when, and only when, a check is marked failed. A
+concern therefore has to be attached to the check it belongs to — that is what makes it actionable.
+Never mark one check failed to carry a comment about another. Anything that fails nothing belongs in
+findings, which is a notes field and never by itself a refusal.
+
+Findings must be concrete, must not invent missing facts, and must be written in outputLanguage.`,
 };

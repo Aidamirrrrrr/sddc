@@ -46,7 +46,6 @@ function proposal(id: string, path: string, requirement: string, acceptance: str
 
 function passedReview() {
   return {
-    decision: "pass",
     checks: Array.from({ length: 7 }, (_, index) => ({
       id: `E${index + 1}`,
       passed: true,

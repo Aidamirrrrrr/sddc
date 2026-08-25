@@ -33,7 +33,6 @@ function capturingClient(onContext: (context: Record<string, unknown>) => void) 
         } as T;
       }
       return {
-        decision: "pass",
         checks: Array.from({ length: 7 }, (_, index) => ({
           id: `E${index + 1}`,
           passed: true,

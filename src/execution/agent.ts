@@ -93,6 +93,10 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
   let backup: FileBackup = new Map();
   let feedback = options.feedback;
   let last: AgentTurn | undefined;
+  /** The best turn seen: one whose commands came out the way the host requires. */
+  let satisfied: AgentTurn | undefined;
+  /** Why the reviewer refused that turn, when it did. */
+  let refusal: string | undefined;
   let approved: boolean | undefined;
 
   for (let turn = 1; turn <= turns; turn += 1) {
@@ -117,7 +121,7 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
         await restoreFiles(root, backup);
         throw error;
       }
-      return { kind: "exhausted", turn: last, backup, turns: turn - 1 };
+      return exhausted(turn - 1);
     }
 
     if (proposal.status === "blocked") {
@@ -147,9 +151,12 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
     options.onTurn?.(turn, verification);
 
     if (verificationSatisfied(task, policy, verification)) {
+      // Remembered before the reviewer is consulted, so a later turn that cannot be drawn at all
+      // falls back to work that did come out right instead of discarding it.
+      satisfied = last;
       // The commands agree; now the read-only reviewer looks at what actually ran. A rejection here
       // is not a wasted draw, it is the next turn's instruction.
-      const objection = await reviewObjection(client, proposal, {
+      refusal = await reviewObjection(client, proposal, {
         spec,
         plan,
         task,
@@ -158,18 +165,13 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
         stage,
         files,
       });
-      if (!objection) return { kind: "settled", turn: last, backup, turns: turn };
-      if (turn === turns) {
-        // Say so in the journal: the commands passed, and it was the reviewer that refused. Reading
-        // a green transcript under a failed task is otherwise impossible to explain.
-        return {
-          kind: "exhausted",
-          turn: { ...last, verification: noteReviewRefusal(verification, objection) },
-          backup,
-          turns: turn,
-        };
-      }
-      feedback = `Your change was applied and its verification came out as required, but the code review rejected it:\n\n${objection}\n\nCorrect it within the same approved scope.`;
+      if (!refusal) return { kind: "settled", turn: last, backup, turns: turn };
+      if (turn === turns) return exhausted(turn);
+      feedback =
+        "Your change was applied and its verification came out as required, but the code review " +
+        `rejected it:\n\n${refusal}\n\nCorrect exactly that, within the same approved scope. If ` +
+        "you are certain the review is mistaken and the change is already right, say so in summary " +
+        "and return the change otherwise unaltered.";
       continue;
     }
     if (inherited(baseline, verification)) {
@@ -183,8 +185,29 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
     feedback = turnFeedback(verification, turn, turns);
   }
 
-  if (!last) throw new Error(`Task ${task.id} produced no proposal`);
-  return { kind: "exhausted", turn: last, backup, turns };
+  return exhausted(turns);
+
+  /**
+   * Ends the loop on the best evidence it has.
+   *
+   * A turn whose commands came out as required is a real result, and it used to be discarded
+   * whenever a later turn failed to produce anything at all — the task was reported as failed while
+   * its own journal carried a transcript showing exactly the outcome that had been asked for. When
+   * the reviewer is what refused, that is recorded too: a green transcript under a failed task is
+   * otherwise impossible to explain.
+   */
+  function exhausted(turnCount: number): AgentOutcome {
+    const best = satisfied ?? last;
+    if (!best) throw new Error(`Task ${task.id} produced no proposal`);
+    return {
+      kind: "exhausted",
+      turn: refusal
+        ? { ...best, verification: noteReviewRefusal(best.verification, refusal) }
+        : best,
+      backup,
+      turns: turnCount,
+    };
+  }
 }
 
 /** Runs the reviewer and returns its objection, or nothing when it passed. */

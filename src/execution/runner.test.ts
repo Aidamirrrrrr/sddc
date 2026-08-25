@@ -336,7 +336,6 @@ function stub(responses: unknown[]) {
 
 function passedReview() {
   return {
-    decision: "pass",
     checks: Array.from({ length: 7 }, (_, index) => ({
       id: `E${index + 1}`,
       passed: true,

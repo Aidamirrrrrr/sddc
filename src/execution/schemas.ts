@@ -35,8 +35,18 @@ export const changeProposalSchema = z.object({
   ),
 });
 
+/**
+ * The reviewer's verdict is the checks, and only the checks.
+ *
+ * There used to be a `decision` field beside them. It was redundant — the verdict is a function of
+ * seven booleans — and being redundant it could disagree: a live run was refused by a review that
+ * had marked every check passed and written "No issues found" in its own findings. A second source
+ * of truth for something already determined is not a safeguard, it is a way to be wrong.
+ *
+ * A reviewer with a concern now has to name the check it belongs to, which is the actionable form
+ * anyway; anything that fails nothing goes in findings as a note.
+ */
 export const executionReviewSchema = z.object({
-  decision: z.enum(["pass", "reject"]),
   checks: z.array(
     z.object({
       id: z.enum(["E1", "E2", "E3", "E4", "E5", "E6", "E7"]),
