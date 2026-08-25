@@ -1,0 +1,147 @@
+context: 
+  files: 
+    - src/store.ts
+    - src/store.test.ts
+    - evals/add-note-tag/spec.yaml
+    - evals/add-note-tag/discovery.yaml
+    - evals/add-note-tag/plan.yaml
+    - evals/add-note-tag/tasks.yaml
+    - evals/add-note-tag/policy.yaml
+    - .sddc/policy.yaml
+    - .sddc/constitution.md
+    - package.json
+    - README.md
+    - progress.log
+  user_context: ""
+summary: "The repository is a minimal TypeScript module for an in-memory note store. It defines a Note type with id, text, and createdAt, and provides functions to add, list, and get notes. Tests are written with bun:test. The package.json defines a test script using bun test. The README describes the basic functionality. The repository also contains specification and planning artifacts under evals/add-note-tag/ and policy files under .sddc/."
+technologies: 
+  - name: TypeScript
+    purpose: Language for the source code
+    evidence: 
+      - src/store.ts
+      - src/store.test.ts
+  - name: Bun
+    purpose: Runtime and test runner
+    evidence: 
+      - package.json
+      - src/store.test.ts
+structure: 
+  - area: Source
+    purpose: Contains the note store implementation
+    evidence: 
+      - src/store.ts
+  - area: Tests
+    purpose: Contains tests for the note store
+    evidence: 
+      - src/store.test.ts
+  - area: Project root
+    purpose: Contains package.json and README
+    evidence: 
+      - package.json
+      - README.md
+  - area: Specification and planning artifacts
+    purpose: "Contains specification, discovery, plan, tasks, and policy files for the add-note-tag feature"
+    evidence: 
+      - evals/add-note-tag/spec.yaml
+      - evals/add-note-tag/discovery.yaml
+      - evals/add-note-tag/plan.yaml
+      - evals/add-note-tag/tasks.yaml
+      - evals/add-note-tag/policy.yaml
+  - area: Project policy
+    purpose: Contains project-specific policy and constitution
+    evidence: 
+      - .sddc/policy.yaml
+      - .sddc/constitution.md
+relevant_files: 
+  - path: src/store.ts
+    purpose: "Defines the Note type and the store functions (addNote, listNotes, getNote)."
+    symbols: 
+      - Note
+      - addNote
+      - listNotes
+      - getNote
+  - path: src/store.test.ts
+    purpose: Contains a test for adding and reading back a note.
+    symbols: 
+      - addNote
+      - getNote
+      - listNotes
+      - resetNotes
+  - path: package.json
+    purpose: "Defines the project name, module type, and test script."
+    symbols: 
+      []
+  - path: README.md
+    purpose: Provides a brief description of the note store.
+    symbols: 
+      []
+  - path: evals/add-note-tag/spec.yaml
+    purpose: Contains the product specification for the add-note-tag feature.
+    symbols: 
+      []
+  - path: evals/add-note-tag/discovery.yaml
+    purpose: Contains the discovery report for the add-note-tag feature.
+    symbols: 
+      []
+  - path: evals/add-note-tag/plan.yaml
+    purpose: Contains the implementation plan for the add-note-tag feature.
+    symbols: 
+      []
+  - path: evals/add-note-tag/tasks.yaml
+    purpose: Contains the task graph for the add-note-tag feature.
+    symbols: 
+      []
+  - path: evals/add-note-tag/policy.yaml
+    purpose: Contains the policy for the add-note-tag feature.
+    symbols: 
+      []
+  - path: .sddc/policy.yaml
+    purpose: Contains project-level policy overrides.
+    symbols: 
+      []
+  - path: .sddc/constitution.md
+    purpose: Contains project principles.
+    symbols: 
+      []
+conventions: 
+  - statement: "The project uses ES modules (type: module)."
+    evidence: 
+      - package.json
+  - statement: Tests are run with bun test.
+    evidence: 
+      - package.json
+  - statement: The source code is written in TypeScript.
+    evidence: 
+      - src/store.ts
+      - src/store.test.ts
+  - statement: The store is the single source of truth for notes; nothing else keeps its own copy.
+    evidence: 
+      - .sddc/constitution.md
+  - statement: "Public functions keep backward-compatible signatures: new parameters are optional."
+    evidence: 
+      - .sddc/constitution.md
+  - statement: Every behavioural change is covered by a test in the sibling *.test.ts file.
+    evidence: 
+      - .sddc/constitution.md
+testing: 
+  - statement: Tests are written using bun:test.
+    evidence: 
+      - src/store.test.ts
+  - statement: The test verifies that a note can be added and read back.
+    evidence: 
+      - src/store.test.ts
+  - statement: The project policy requires tests before implementation.
+    evidence: 
+      - .sddc/policy.yaml
+constraints: 
+  - statement: "The note store is in-memory, as indicated by the use of a Map and no persistence."
+    evidence: 
+      - src/store.ts
+  - statement: The policy forbids certain paths and limits file changes.
+    evidence: 
+      - evals/add-note-tag/policy.yaml
+unknowns: 
+  - No information about how tags might be represented or stored.
+  - No information about filtering mechanisms.
+  - No information about the expected API for filtering by tag.
+  - No information about whether the Note type should be extended or if a separate structure is needed.

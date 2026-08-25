@@ -1,0 +1,146 @@
+context: 
+  files: 
+    - src/store.ts
+    - src/store.test.ts
+    - README.md
+    - package.json
+    - progress.log
+    - run.log
+    - .sddc/constitution.md
+    - .sddc/policy.yaml
+    - evals/add-note-tag/spec.yaml
+    - evals/add-note-tag/tasks.yaml
+    - evals/add-tag-to-note/spec.yaml
+  user_context: ""
+summary: "The repository is a small TypeScript project using Bun as the runtime and test runner. The core is an in-memory note store in src/store.ts with functions to add, list, and get notes. Tests are in src/store.test.ts. The project follows a specification-driven development process with a constitution and policy, and there are existing evaluation artifacts for a similar feature (adding tags). The specification for archiving notes is ready, and the implementation should follow the established patterns."
+technologies: 
+  - name: TypeScript
+    purpose: "The source code is written in TypeScript, as seen in src/store.ts and src/store.test.ts."
+    evidence: 
+      - src/store.ts
+      - src/store.test.ts
+  - name: Bun
+    purpose: "Bun is used as the runtime and test runner, as indicated by the package.json script and the test file's import from 'bun:test'."
+    evidence: 
+      - package.json
+      - src/store.test.ts
+structure: 
+  - area: Source
+    purpose: Contains the main store implementation.
+    evidence: 
+      - src/store.ts
+  - area: Tests
+    purpose: Contains tests for the store.
+    evidence: 
+      - src/store.test.ts
+  - area: Project configuration
+    purpose: Defines project metadata and scripts.
+    evidence: 
+      - package.json
+  - area: Documentation
+    purpose: Provides an overview of the project.
+    evidence: 
+      - README.md
+  - area: Process artifacts
+    purpose: Contains logs and policy/constitution files that guide the development process.
+    evidence: 
+      - progress.log
+      - run.log
+      - .sddc/constitution.md
+      - .sddc/policy.yaml
+  - area: Evaluation artifacts
+    purpose: "Contains specifications and task graphs for previous features, which can serve as templates."
+    evidence: 
+      - evals/add-note-tag/spec.yaml
+      - evals/add-note-tag/tasks.yaml
+      - evals/add-tag-to-note/spec.yaml
+relevant_files: 
+  - path: src/store.ts
+    purpose: "Contains the Note type and the store functions (addNote, listNotes, getNote) that will need to be extended to support archiving."
+    symbols: 
+      - Note
+      - addNote
+      - listNotes
+      - getNote
+      - resetNotes
+  - path: src/store.test.ts
+    purpose: Contains tests for the store; new tests for archiving should be added here.
+    symbols: 
+      - addNote
+      - getNote
+      - listNotes
+      - resetNotes
+  - path: README.md
+    purpose: Documents the current behavior; may need to be updated to mention archiving.
+    symbols: 
+      []
+  - path: package.json
+    purpose: Defines the test script; used to run tests.
+    symbols: 
+      []
+  - path: .sddc/constitution.md
+    purpose: "Defines project principles that must be followed, such as the store being the single source of truth and requiring tests for behavioral changes."
+    symbols: 
+      []
+  - path: .sddc/policy.yaml
+    purpose: Defines policy requiring tests before implementation.
+    symbols: 
+      []
+  - path: evals/add-note-tag/spec.yaml
+    purpose: "Provides a template for the specification format, which is similar to the current archive-note spec."
+    symbols: 
+      []
+  - path: evals/add-note-tag/tasks.yaml
+    purpose: "Provides a template for the task graph structure, which can be adapted for the archive feature."
+    symbols: 
+      []
+  - path: evals/add-tag-to-note/spec.yaml
+    purpose: Another example of a specification for a similar feature.
+    symbols: 
+      []
+conventions: 
+  - statement: The store is the single source of truth for notes; nothing else keeps its own copy.
+    evidence: 
+      - .sddc/constitution.md
+  - statement: "Public functions keep backward-compatible signatures: new parameters are optional."
+    evidence: 
+      - .sddc/constitution.md
+  - statement: "Every behavioural change is covered by a test in the sibling `*.test.ts` file."
+    evidence: 
+      - .sddc/constitution.md
+  - statement: Tests must be written before implementation.
+    evidence: 
+      - .sddc/policy.yaml
+  - statement: "The test suite is run with `bun test`."
+    evidence: 
+      - package.json
+testing: 
+  - statement: "Tests are written using Bun's test runner, as seen in src/store.test.ts."
+    evidence: 
+      - src/store.test.ts
+  - statement: "The test file imports from 'bun:test' and uses `beforeEach` to reset the store."
+    evidence: 
+      - src/store.test.ts
+  - statement: "The test suite is run with `bun test`."
+    evidence: 
+      - package.json
+constraints: 
+  - statement: The store is the single source of truth for notes; nothing else keeps its own copy.
+    evidence: 
+      - .sddc/constitution.md
+  - statement: "Public functions keep backward-compatible signatures: new parameters are optional."
+    evidence: 
+      - .sddc/constitution.md
+  - statement: "Every behavioural change is covered by a test in the sibling `*.test.ts` file."
+    evidence: 
+      - .sddc/constitution.md
+  - statement: Tests must be written before implementation.
+    evidence: 
+      - .sddc/policy.yaml
+unknowns: 
+  - The exact format for the archived flag is not specified; it could be a boolean field or a timestamp.
+  - Whether there is a need to list archived notes separately is not specified.
+  - Whether the archive operation should be reversible (unarchive) is not specified.
+  - "The exact behavior of `listNotes` regarding archived notes is not specified beyond hiding them."
+  - "Whether the `getNote` function should return archived notes is not specified."
+  - The exact naming and signature of the archive function is not specified.

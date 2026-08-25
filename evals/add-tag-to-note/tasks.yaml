@@ -1,0 +1,141 @@
+status: ready
+feature: add-tag-to-note
+summary: "Executable task graph for adding an optional tag to notes and filtering by tag, with test-first ordering and dependency management to avoid concurrent modifications to src/store.ts."
+tasks: 
+  - id: T1
+    title: Write tests for tag behavior
+    goal: "Add tests covering adding a note with a tag, adding a note without a tag, and filtering by tag."
+    requirements: 
+      - R1
+      - R2
+    acceptance: 
+      - A1
+      - A2
+      - A3
+    depends_on: 
+      []
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.test.ts
+      modify: 
+        - src/store.test.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to confirm the new tests fail (since the implementation is not yet updated).
+    done_when: 
+      - Tests exist for adding a note with a tag and verifying the tag is stored.
+      - Tests exist for adding a note without a tag and verifying no tag is present.
+      - Tests exist for filtering notes by tag and verifying only matching notes are returned.
+      - "The new tests fail when run, because the implementation does not yet support tags."
+    risks: 
+      - "The tests may need to be adjusted if the implementation details change, but the plan is fixed."
+    wave: 1
+    parallel: true
+  - id: T2
+    title: Update Note type and addNote function
+    goal: Extend the Note type with an optional tag field and update addNote to accept an optional tag parameter.
+    requirements: 
+      - R1
+    acceptance: 
+      []
+    depends_on: 
+      - T1
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.ts
+        - src/store.test.ts
+      modify: 
+        - src/store.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure the new tests pass and existing tests still pass.
+    done_when: 
+      - The Note type includes an optional tag field of type string.
+      - The addNote function accepts an optional second parameter for the tag and stores it on the note.
+      - All tests in src/store.test.ts pass.
+    risks: 
+      - The type change is backward compatible and should not break existing code.
+      - The function signature change is backward compatible because the parameter is optional.
+    wave: 2
+    parallel: false
+  - id: T3
+    title: Add filterNotesByTag function
+    goal: "Add a new function filterNotesByTag that returns notes with the given tag, sorted by createdAt descending."
+    requirements: 
+      - R2
+    acceptance: 
+      []
+    depends_on: 
+      - T2
+    permissions: 
+      []
+    files: 
+      read: 
+        - src/store.ts
+        - src/store.test.ts
+      modify: 
+        - src/store.ts
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure the new function works and all tests pass.
+    done_when: 
+      - The filterNotesByTag function is exported from src/store.ts.
+      - "The function returns only notes with the given tag, sorted by createdAt descending."
+      - All tests in src/store.test.ts pass.
+    risks: 
+      - "The function may need to handle notes without a tag gracefully, but since it filters by a specific tag, notes without a tag will not match."
+    wave: 3
+    parallel: false
+  - id: T4
+    title: Update README documentation
+    goal: Update README.md to document the optional tag and the filtering function.
+    requirements: 
+      - R1
+      - R2
+    acceptance: 
+      []
+    depends_on: 
+      []
+    permissions: 
+      []
+    files: 
+      read: 
+        - README.md
+      modify: 
+        - README.md
+      create: 
+        []
+    verification: 
+      - command: 
+          program: bun
+          args: 
+            - test
+        purpose: Run the test suite to ensure nothing is broken (though README changes do not affect tests).
+    done_when: 
+      - README.md mentions that notes can have an optional tag.
+      - README.md documents the filterNotesByTag function.
+    risks: 
+      - No significant risks; documentation only.
+    wave: 1
+    parallel: true
+questions: 
+  []

@@ -1,0 +1,68 @@
+status: ready
+feature: archive-note
+summary: "Implement archiving of notes by adding an optional archived flag to the Note type, an archiveNote function, and filtering archived notes from listNotes. Tests will be added to cover the new behavior."
+decisions: 
+  - statement: Represent archived state as a boolean field on the Note type.
+    rationale: The specification does not require a timestamp or other metadata; a boolean is the simplest representation that satisfies the acceptance criteria.
+    evidence: 
+      - src/store.ts
+  - statement: "Add a new exported function archiveNote(id: string): Note | undefined."
+    rationale: "This provides a clear public API for archiving a note, consistent with existing functions like addNote and getNote."
+    evidence: 
+      - src/store.ts
+  - statement: Modify listNotes to filter out archived notes.
+    rationale: "This directly implements requirement R2 without changing the function signature, maintaining backward compatibility."
+    evidence: 
+      - src/store.ts
+  - statement: getNote will still return archived notes.
+    rationale: "The specification does not require hiding archived notes from getNote, and keeping it unchanged preserves existing behavior."
+    evidence: 
+      - src/store.ts
+approach: 
+  - id: S1
+    statement: Update the Note type in src/store.ts to include an optional archived boolean field.
+    requirements: 
+      - R1
+    touches: 
+      - src/store.ts
+  - id: S2
+    statement: Add an archiveNote function that sets the archived flag to true for a given note id.
+    requirements: 
+      - R1
+    touches: 
+      - src/store.ts
+  - id: S3
+    statement: Modify listNotes to filter out notes where archived is true.
+    requirements: 
+      - R2
+    touches: 
+      - src/store.ts
+  - id: S4
+    statement: Add tests in src/store.test.ts covering archiving a note and verifying it is hidden from listNotes.
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - src/store.test.ts
+  - id: S5
+    statement: Update README.md to document the archiving feature.
+    requirements: 
+      - R1
+      - R2
+    touches: 
+      - README.md
+contracts: 
+  - name: archiveNote
+    kind: module
+    surface: "export function archiveNote(id: string): Note | undefined"
+    change: new
+data_model: 
+  - entity: Note
+    fields: 
+      - "id: string"
+      - "text: string"
+      - "createdAt: number"
+      - "archived?: boolean"
+    change: extended
+questions: 
+  []

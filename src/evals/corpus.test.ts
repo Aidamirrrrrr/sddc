@@ -3,60 +3,62 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discovery, readyPlan, readySpec } from "../planning/test-fixtures";
-import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
-import { loadCorpus, recordCase } from "./corpus";
+import { loadCase, recordCase } from "./corpus";
 
-async function storedFeature(): Promise<string> {
+async function feature(overrides: { spec?: unknown; tasks?: unknown } = {}): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "sddc-corpus-"));
   const directory = join(root, ".specs", "registration");
   await mkdir(directory, { recursive: true });
-  const write = async (name: string, value: unknown) =>
-    Bun.write(join(directory, name), Bun.YAML.stringify(value, null, 2));
-  await write("spec.yaml", readySpec());
-  await write("discovery.yaml", discovery());
-  await write("plan.yaml", readyPlan());
-  await write("tasks.yaml", readyTasks());
-  await write("policy.yaml", defaultPolicy);
+  await Bun.write(join(directory, "spec.yaml"), Bun.YAML.stringify(overrides.spec ?? readySpec()));
+  await Bun.write(
+    join(directory, "tasks.yaml"),
+    Bun.YAML.stringify(overrides.tasks ?? readyTasks()),
+  );
+  await Bun.write(join(directory, "plan.yaml"), Bun.YAML.stringify(readyPlan()));
+  await Bun.write(join(directory, "discovery.yaml"), Bun.YAML.stringify(discovery()));
   return root;
 }
 
-test("a stored feature becomes a case without transformation", async () => {
-  const root = await storedFeature();
+test("a finished feature is recorded as it stands", async () => {
+  const root = await feature();
 
   await recordCase(root, "registration");
-  const corpus = await loadCorpus(root);
+  const recorded = await loadCase(root, "registration");
 
-  expect(corpus).toHaveLength(1);
-  const item = corpus[0];
-  if (!item) throw new Error("Expected a recorded case");
-  expect(item.name).toBe("registration");
-  expect(item.spec.feature).toBe("registration");
-  expect(item.plan?.approach).toHaveLength(1);
-  expect(item.tasks?.tasks).toHaveLength(2);
+  expect(recorded?.spec.feature).toBe(readySpec().feature);
+  expect(recorded?.tasks?.tasks.length).toBeGreaterThan(0);
 });
 
-test("recording a feature with no artifacts is an error, not an empty case", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sddc-corpus-"));
+test("a torn snapshot is refused rather than recorded as a permanent failing case", async () => {
+  // A feature directory is written phase by phase, so a run stopped mid-phase — or a second run over
+  // the top of the first — leaves a spec from one attempt beside tasks from another.
+  const narrowed = { ...readySpec(), acceptance: [] };
+  const root = await feature({ spec: narrowed });
 
-  expect(recordCase(root, "missing")).rejects.toThrow(
-    'No artifacts to record for feature "missing"',
+  expect(recordCase(root, "registration")).rejects.toThrow("which spec.yaml does not define");
+});
+
+test("a feature with nothing stored is refused too", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sddc-corpus-empty-"));
+
+  expect(recordCase(root, "registration")).rejects.toThrow("No artifacts to record");
+});
+
+test("a policy recorded before the schema grew still loads", async () => {
+  const root = await feature();
+  await mkdir(join(root, ".specs", "registration"), { recursive: true });
+  // Written by an older version that had no budget section at all.
+  await Bun.write(
+    join(root, ".specs", "registration", "policy.yaml"),
+    "version: 1\nchanges:\n  require_test_before_implementation: true\n",
   );
-});
 
-test("an empty corpus loads as no cases rather than failing", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sddc-corpus-"));
-
-  expect(await loadCorpus(root)).toEqual([]);
-});
-
-test("a case without a specification is skipped rather than half-loaded", async () => {
-  const root = await storedFeature();
   await recordCase(root, "registration");
-  await mkdir(join(root, "evals", "partial"), { recursive: true });
-  await Bun.write(join(root, "evals", "partial", "plan.yaml"), Bun.YAML.stringify(readyPlan()));
+  const recorded = await loadCase(root, "registration");
 
-  const corpus = await loadCorpus(root);
-
-  expect(corpus.map((item) => item.name)).toEqual(["registration"]);
+  // The recorded half is honoured and the rest comes from today's defaults, exactly as a project's
+  // own partial policy is read.
+  expect(recorded?.policy.changes.require_test_before_implementation).toBe(true);
+  expect(recorded?.policy.budget.max_model_calls).toBeGreaterThan(0);
 });
