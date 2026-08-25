@@ -32,6 +32,12 @@ test("rate limits and gateway errors are transient", () => {
   expect(isTransient(new Error("connect ECONNRESET"))).toBe(true);
 });
 
+test("a handshake that dies mid-session is retried, verification untouched", () => {
+  // Seen against a real endpoint: many calls succeed, then the link drops the TLS handshake.
+  expect(isTransient(new Error("unknown certificate verification error"))).toBe(true);
+  expect(isTransient(new Error("write EPROTO ... unexpected eof while reading"))).toBe(true);
+});
+
 test("a rejected request is not transient and must not be repeated", () => {
   expect(isTransient(apiError(400))).toBe(false);
   expect(isTransient(apiError(401))).toBe(false);

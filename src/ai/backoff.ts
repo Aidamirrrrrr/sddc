@@ -27,7 +27,10 @@ export function isTransient(error: unknown): boolean {
     return status === 408 || status === 409 || status === 429 || (status ?? 0) >= 500;
   }
   const message = error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : "";
-  return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|fetch failed|network|socket hang up/i.test(
+  // A TLS handshake that dies mid-session is usually a flaky link rather than a bad certificate.
+  // Retrying re-runs the handshake with verification fully intact — a genuinely untrusted
+  // certificate keeps failing and still surfaces, so this trades nothing away for security.
+  return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ECONNABORTED|EAI_AGAIN|EPROTO|fetch failed|network|socket hang up|certificate verification|unexpected eof|tls handshake/i.test(
     message,
   );
 }
