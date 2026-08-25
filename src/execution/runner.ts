@@ -1,4 +1,4 @@
-import { rethrowIfExhausted } from "../ai/budget";
+import { rethrowIfFatal } from "../ai/budget";
 import type { ModelClient } from "../ai/model-client";
 import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
@@ -240,7 +240,7 @@ export async function executePlan(
     } catch (error) {
       // An exhausted budget ends the run rather than one task: recording it as a task failure would
       // read as though this task were the problem, and the next run would start by retrying it.
-      rethrowIfExhausted(error);
+      rethrowIfFatal(error);
       journal.status = "failed";
       journal.tasks.push(unproducible(task, describe(error)));
       await writeExecutionJournal(root, journal);

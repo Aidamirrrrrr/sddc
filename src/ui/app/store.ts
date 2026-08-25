@@ -50,6 +50,8 @@ export type AppState = {
   blocks: Block[];
   phases: Phase[];
   stage?: string;
+  /** When the current stage began, so the frame can say how long *this* wait has lasted. */
+  stageStartedAt?: number;
   pending?: Pending;
   startedAt: number;
   finished?: string;

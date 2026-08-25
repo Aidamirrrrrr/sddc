@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { rethrowIfExhausted } from "../ai/budget";
+import { rethrowIfFatal } from "../ai/budget";
 import type { ModelClient } from "../ai/model-client";
 import { sampleUntilValid } from "../ai/sample";
 import type { PlanningRepositoryContext } from "../planning/pipeline";
@@ -190,7 +190,7 @@ function pretty(value: unknown): string {
  */
 async function advisoryStage<T>(operation: () => Promise<T>): Promise<T | undefined> {
   return operation().catch((error) => {
-    rethrowIfExhausted(error);
+    rethrowIfFatal(error);
     return undefined;
   });
 }

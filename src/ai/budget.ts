@@ -1,3 +1,5 @@
+import { InterruptedError } from "./interrupt";
+
 /**
  * One bound on how much work a single run may ask a model for.
  *
@@ -61,13 +63,13 @@ export function resetBudget(): void {
 }
 
 /**
- * Lets a deliberately forgiving catch stay forgiving without swallowing the ceiling.
+ * Lets a deliberately forgiving catch stay forgiving without swallowing the reasons to stop.
  *
  * Several places absorb any failure on purpose — an advisory stage that returns nothing, a prefetch
- * that will be redone inline, a reviewer whose objection is just feedback. Each of them would turn
- * an exhausted budget into a shrug and carry on spending, which is the one thing a budget must not
- * permit. Call this first in any catch that would otherwise continue.
+ * that will be redone inline, a reviewer whose objection is just feedback, a sampler that draws
+ * again. Each would otherwise turn "the run is over" into a shrug and carry on spending, which is
+ * the one thing those two failures must never permit. Call this first in any catch that continues.
  */
-export function rethrowIfExhausted(error: unknown): void {
-  if (error instanceof BudgetExhaustedError) throw error;
+export function rethrowIfFatal(error: unknown): void {
+  if (error instanceof BudgetExhaustedError || error instanceof InterruptedError) throw error;
 }

@@ -1,5 +1,8 @@
 import { Box, Static, type SuspendTerminal, Text, useApp, useInput, useStdin } from "ink";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { budgetState } from "../../ai/budget";
+import { requestInterrupt } from "../../ai/interrupt";
+import { sessionUsage } from "../../ai/usage";
 import { theme } from "../theme";
 import { Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
 import { Panel, PanelBody } from "./Panel";
@@ -34,6 +37,10 @@ export function App({
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const { exit, suspendTerminal } = useApp();
+  // Read every repaint rather than mirrored into the store: these are counters the model client
+  // owns, and duplicating them here would give the frame a second version of the truth to drift from.
+  const usage = sessionUsage();
+  const budget = budgetState();
   const { isRawModeSupported } = useStdin();
   const [tick, setTick] = useState(0);
 
@@ -56,6 +63,12 @@ export function App({
         exit();
         process.exit(0);
       }
+      // Only while work is in flight: outside a stage there is nothing to interrupt, and escape is
+      // the key people press to dismiss things.
+      if (key.escape && state.stage && !state.pending) {
+        requestInterrupt();
+        store.push({ kind: "line", tone: "warn", text: "Interrupting after the current request…" });
+      }
     },
     // Ink only honours the guard when it is strictly `false`, so coerce rather than pass through.
     { isActive: isRawModeSupported === true },
@@ -77,9 +90,24 @@ export function App({
         <Box flexDirection="column" marginTop={1}>
           <Header heading={state.heading} subtitle={subtitle} />
           <PhaseRail phases={state.phases} />
-          {state.stage ? <StageIndicator label={state.stage} tick={tick} /> : null}
+          {state.stage ? (
+            <StageIndicator
+              label={state.stage}
+              tick={tick}
+              elapsedMs={Date.now() - (state.stageStartedAt ?? state.startedAt)}
+              calls={usage.calls}
+              budget={budget}
+            />
+          ) : null}
           {state.pending ? <PendingPrompt store={store} /> : null}
-          {state.pending ? null : <StatusBar state={state} tick={tick} />}
+          {state.pending ? null : (
+            <StatusBar
+              state={state}
+              tick={tick}
+              calls={usage.calls}
+              hint={state.stage ? "esc to interrupt · ctrl+c to exit" : "ctrl+c to exit"}
+            />
+          )}
         </Box>
       )}
     </Box>

@@ -31,6 +31,7 @@ import { writeImplementationPlan } from "../planning/storage";
 import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
 import { writeTaskList } from "../tasks/storage";
+import { detectTheme, setTheme } from "../ui/theme";
 import { reportConsistency, runAnalyze } from "../workflows/analyze";
 import type { DialogueContext } from "../workflows/context";
 import { createApprovedDiscovery } from "../workflows/discovery";
@@ -72,6 +73,9 @@ export async function runCli(arguments_: string[]): Promise<void> {
   // Loaded before the language is settled: SDDC_LANG lives in the user config, and reading it after
   // the prompt would mean asking a question the user has already answered.
   await loadUserEnvironment();
+  // Chosen before anything is drawn: a palette applied mid-run would repaint the live frame while
+  // leaving everything already committed to the scrollback in the previous one.
+  setTheme(detectTheme());
   if (!cli.stage) begin();
   if (interactive && !cli.stage) await chooseUiLanguage(cli.language);
   else setUiLanguage(cli.language ?? (/^ru/i.test(process.env.LANG ?? "") ? "ru" : "en"));

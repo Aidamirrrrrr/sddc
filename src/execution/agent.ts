@@ -1,4 +1,4 @@
-import { rethrowIfExhausted } from "../ai/budget";
+import { rethrowIfFatal } from "../ai/budget";
 import type { ModelClient } from "../ai/model-client";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
@@ -234,7 +234,7 @@ async function reviewObjection(
     return undefined;
   } catch (error) {
     // An exhausted budget is not an objection to the code.
-    rethrowIfExhausted(error);
+    rethrowIfFatal(error);
     return error instanceof Error ? error.message : String(error);
   }
 }

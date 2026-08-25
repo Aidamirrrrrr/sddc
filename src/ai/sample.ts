@@ -1,4 +1,4 @@
-import { rethrowIfExhausted } from "./budget";
+import { rethrowIfFatal } from "./budget";
 
 /**
  * Draws candidates until one satisfies the verifier.
@@ -27,7 +27,7 @@ export async function sampleUntilValid<T>(
     } catch (error) {
       // Drawing again cannot help once the run is out of budget, and each further draw would spend
       // what is no longer there.
-      rethrowIfExhausted(error);
+      rethrowIfFatal(error);
       lastError = error;
       rejection = error instanceof Error ? error.message : String(error);
     }

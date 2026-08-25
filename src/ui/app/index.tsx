@@ -52,14 +52,16 @@ export function startApp(root = process.cwd()): Driver {
       store.update((state) => applyStep(state, current, total, label)),
     document: (title, body) => store.push({ kind: "panel", title, body }),
     async stage(labels, operation) {
-      store.update((state) => ({ ...state, stage: labels.progress }));
+      store.update((state) => ({ ...state, stage: labels.progress, stageStartedAt: Date.now() }));
       try {
         const result = await operation();
-        store.update((state) => ({ ...state, stage: undefined }));
+        store.update((state) => ({ ...state, stage: undefined, stageStartedAt: undefined }));
         store.push({ kind: "line", tone: "success", text: labels.complete });
         return result;
       } catch (error) {
-        store.update((state) => markCurrentPhase({ ...state, stage: undefined }, "failed"));
+        store.update((state) =>
+          markCurrentPhase({ ...state, stage: undefined, stageStartedAt: undefined }, "failed"),
+        );
         store.push({ kind: "line", tone: "danger", text: labels.failed });
         throw error;
       }

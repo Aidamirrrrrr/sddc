@@ -5,9 +5,10 @@ import {
   chargeCall,
   onBudgetWarning,
   resetBudget,
-  rethrowIfExhausted,
+  rethrowIfFatal,
   setBudget,
 } from "./budget";
+import { InterruptedError } from "./interrupt";
 
 afterEach(resetBudget);
 
@@ -44,9 +45,8 @@ test("the run says so before the ceiling, once", () => {
   expect(warnings).toEqual([[3, 4]]);
 });
 
-test("a forgiving catch stays forgiving except for the ceiling", () => {
-  expect(() => rethrowIfExhausted(new Error("audit returned nothing"))).not.toThrow();
-  expect(() => rethrowIfExhausted(new BudgetExhaustedError(400, 400))).toThrow(
-    BudgetExhaustedError,
-  );
+test("a forgiving catch stays forgiving except for the reasons to stop", () => {
+  expect(() => rethrowIfFatal(new Error("audit returned nothing"))).not.toThrow();
+  expect(() => rethrowIfFatal(new BudgetExhaustedError(400, 400))).toThrow(BudgetExhaustedError);
+  expect(() => rethrowIfFatal(new InterruptedError())).toThrow(InterruptedError);
 });

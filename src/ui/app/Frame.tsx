@@ -48,28 +48,75 @@ function PhaseRow({ index, phase }: { index: number; phase: Phase }) {
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-export function StageIndicator({ label, tick }: { label: string; tick: number }) {
+/** Seconds as a person reads them. */
+export function clock(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+/**
+ * What the run is spending, while it spends it.
+ *
+ * A stage can take two minutes with nothing to show, and a spinner alone cannot tell "thinking" from
+ * "wedged". Elapsed time, calls made and the share of the budget they came from are the three facts
+ * that separate those, and all three are already being tracked — they were simply never displayed
+ * until the run was over.
+ */
+export function StageIndicator({
+  label,
+  tick,
+  elapsedMs,
+  calls,
+  budget,
+}: {
+  label: string;
+  tick: number;
+  elapsedMs: number;
+  calls: number;
+  budget?: { used: number; limit: number };
+}) {
+  const parts = [clock(elapsedMs), `${calls} calls`];
+  if (budget) parts.push(`${budget.used}/${budget.limit} budget`);
   return (
     <Box marginBottom={1}>
       <Text color={theme.accent}>{`  ${FRAMES[tick % FRAMES.length]}  `}</Text>
       <Text color={theme.text}>{label}</Text>
+      <Text color={theme.muted} dimColor>
+        {`  (${parts.join(" · ")} · esc to interrupt)`}
+      </Text>
     </Box>
   );
 }
 
-export function StatusBar({ state, tick }: { state: AppState; tick: number }) {
-  const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
-  const minutes = Math.floor(elapsed / 60);
-  const clock = minutes > 0 ? `${minutes}m ${elapsed % 60}s` : `${elapsed}s`;
+export function StatusBar({
+  state,
+  tick,
+  calls,
+  hint,
+}: {
+  state: AppState;
+  tick: number;
+  calls: number;
+  hint: string;
+}) {
+  // "N events" counted repaints, which is a fact about the renderer and not about the work. What a
+  // person wants from a status bar is how long this has taken and what it has cost.
+  const done = state.phases.filter((phase) => phase.state === "done").length;
+  const summary = [
+    clock(Date.now() - state.startedAt),
+    state.phases.length > 0 ? `phase ${done}/${state.phases.length}` : undefined,
+    `${calls} model calls`,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
   return (
     <Box>
       <Text backgroundColor={theme.surfaceRaised} color={theme.muted}>
-        {`  ${state.stage ? FRAMES[tick % FRAMES.length] : "·"}  ${clock}  ·  ${
-          state.blocks.length
-        } events  `}
+        {`  ${state.stage ? FRAMES[tick % FRAMES.length] : "·"}  ${summary}  `}
       </Text>
       <Text color={theme.muted} dimColor>
-        {"   ctrl+c to exit"}
+        {`   ${hint}`}
       </Text>
     </Box>
   );

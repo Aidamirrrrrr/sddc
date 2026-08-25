@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { rethrowIfExhausted } from "../ai/budget";
+import { rethrowIfFatal } from "../ai/budget";
 import type { ModelClient } from "../ai/model-client";
 import { sampleUntilValid } from "../ai/sample";
 import { defaultPolicy } from "../policy/load";
@@ -71,7 +71,7 @@ export async function buildImplementationPlan(
         const audit = await client
           .generateObject(planningPrompts.audit, pretty({ ...context, draft }), planAuditSchema)
           .catch((error) => {
-            rethrowIfExhausted(error);
+            rethrowIfFatal(error);
             return undefined;
           });
         const review = await stage("planning-review", () =>
