@@ -1,5 +1,6 @@
 import type { ModelClient } from "../ai/model-client";
 import type { ImplementationPlan } from "../planning/schemas";
+import { writesOnlyTests } from "../policy/paths";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
@@ -85,7 +86,7 @@ export async function executeTask(
   }
   const result: ExecutionTaskResult = {
     task_id: task.id,
-    status: verification.every((item) => item.exit_code === 0) ? "completed" : "failed",
+    status: verificationSatisfied(task, policy, verification) ? "completed" : "failed",
     changed_files: proposal.changes.map((change) => change.path),
     verification,
     output_hashes: proposal.changes.map((change) => ({
@@ -97,14 +98,30 @@ export async function executeTask(
   if (result.status === "failed") {
     await restoreFiles(root, backup);
     if (await hooks.retryAfterFailure(task, result)) {
-      return {
-        kind: "retry",
-        feedback: `Verification failed and all changes were rolled back:\n${formatFailure(result)}`,
-      };
+      return { kind: "retry", feedback: failureFeedback(task, policy, result) };
     }
     return { kind: "failed", result };
   }
   return { kind: "completed", result, backup };
+}
+
+/**
+ * Whether verification came out the way this task's verification is supposed to come out.
+ *
+ * Under test-first a task that writes only tests runs before its implementation exists, so a green
+ * suite is the failure: a test that passes without the code it covers asserts nothing. Rather than
+ * exempting such a task from verification — an exemption is a hole — the expectation is inverted,
+ * which makes red-green discipline something the host enforces instead of something it tolerates.
+ */
+export function verificationSatisfied(
+  task: Task,
+  policy: Policy,
+  verification: ExecutionTaskResult["verification"],
+): boolean {
+  const green = verification.every((item) => item.exit_code === 0);
+  const expectsRed =
+    policy.changes.require_test_before_implementation && writesOnlyTests(task.files);
+  return expectsRed ? !green : green;
 }
 
 function blockedByUser(task: Task, proposal: ChangeProposal): ChangeProposal {
@@ -119,6 +136,17 @@ function blockedByUser(task: Task, proposal: ChangeProposal): ChangeProposal {
     },
     changes: [],
   };
+}
+
+/** An inverted expectation fails with every command green, so it needs its own explanation. */
+function failureFeedback(task: Task, policy: Policy, result: ExecutionTaskResult): string {
+  if (policy.changes.require_test_before_implementation && writesOnlyTests(task.files)) {
+    return (
+      `The new test passed before its implementation exists, so it asserts nothing. ` +
+      `Write a test that fails until ${task.requirements.join(", ")} is implemented.`
+    );
+  }
+  return `Verification failed and all changes were rolled back:\n${formatFailure(result)}`;
 }
 
 function formatFailure(result: ExecutionTaskResult): string {

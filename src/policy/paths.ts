@@ -20,3 +20,14 @@ const NON_BEHAVIOURAL =
 export function isBehaviouralSource(path: string): boolean {
   return !isTestPath(path) && !NON_BEHAVIOURAL.test(path);
 }
+
+/**
+ * A task that writes tests and nothing else.
+ *
+ * Derived from the task's own file list rather than declared, so a model cannot label a task this
+ * way to change how its verification is judged.
+ */
+export function writesOnlyTests(files: { modify: string[]; create: string[] }): boolean {
+  const written = [...files.modify, ...files.create];
+  return written.length > 0 && written.every(isTestPath);
+}

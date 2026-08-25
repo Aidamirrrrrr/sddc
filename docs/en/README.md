@@ -255,6 +255,23 @@ criterion, the tasks covering it and the commands that prove it. It has no YAML
 twin because nothing parses it — every fact is derived from `spec.yaml` and
 `tasks.yaml`, and asking a model for it would only add a way to disagree with them.
 
+## Acceptance ownership
+
+An acceptance criterion belongs to **exactly one** task. A requirement may be served
+by several.
+
+The reason is simple: a criterion is a test, and a test has one home. If a criterion
+is split across four tasks then none of them implements it, and the per-task check
+"all claimed criteria are implemented" becomes impossible to satisfy. Splitting also
+destroys credit assignment: a failing criterion no longer names a task.
+
+Coverage becomes a **partition** rather than a cover, which is exactly what makes it
+checkable by code.
+
+A task that serves a requirement without completing a criterion leaves `acceptance`
+empty, which is legitimate. Under test-first the criterion belongs to the task that
+writes the test verifying it, and the implementation serves requirements.
+
 ## Test before implementation
 
 SDD Article III — no implementation before its test — is marked non-negotiable.
@@ -273,6 +290,11 @@ article is about.
 Configuration, documentation and lockfiles need no test behind them — they carry no
 behaviour to assert, and demanding one would only teach people to switch the rule
 off.
+
+A task that writes **only** tests must leave verification red. A test that passes
+before its implementation exists asserts nothing, so a green result is the failure for
+such a task. The expectation is derived from the task's file list rather than declared
+by the model — it cannot be faked, any more than a wave can.
 
 The rule is checked on the graph, before anything runs, and is **off** by default.
 Turning it on before the eval corpus shows models reliably produce conforming

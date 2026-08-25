@@ -3,7 +3,10 @@ export const taskPrompts = {
 the technical approach, contracts, and data model; do not revisit those decisions and do not write code
 or patches. Each task implements part of the accepted approach, has one focused goal, cites requirement
 and acceptance IDs from the specification, and lists explicit read/modify/create paths, dependencies,
-verification commands, completion conditions, and concrete risks. Existing read and modify paths must
+verification commands, completion conditions, and concrete risks. Every acceptance criterion belongs to exactly one task: the task that completes it. A criterion is a test, and a
+test has one home, so never list the same acceptance ID on two tasks. Group criteria that touch the same files into
+one task rather than splitting a criterion across several. A task that serves a requirement without completing a
+criterion leaves acceptance empty. Requirements may be served by several tasks. Existing read and modify paths must
 come from discovery.context.files. New paths may appear only in create. Declare a dependency only when
 a task truly needs the output of another one: independent tasks are executed as one parallel wave, so
 every unnecessary dependency makes the graph slower. Two tasks that write the same file must be
@@ -11,7 +14,8 @@ ordered by a dependency. Use only commands supported by repository evidence, rep
 and an argument array, never as a shell string. Every file argument must already exist or be created
 by that task or a dependency. When policy.changes.require_test_before_implementation is true, a task that changes
 behavioural source must depend on a separate earlier task that writes the test covering it; writing the test in the
-same task does not satisfy the rule. Follow the supplied policy, and the constitution principles when one is supplied. Declare
+same task does not satisfy the rule. The test task owns the acceptance criteria it covers, and its test is expected to
+fail until the implementation lands, so the implementation task serves requirements and leaves acceptance empty. Follow the supplied policy, and the constitution principles when one is supplied. Declare
 permissions only when a task genuinely needs them; a permission is visible to the user and is not a way to bypass a forbidden
 policy. Ask at most three neutral questions, and only when the plan left a user-owned decision
 genuinely open. Write all prose in outputLanguage and return JSON only.`,

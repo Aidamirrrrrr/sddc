@@ -122,6 +122,7 @@ export function validateTaskList(
   if (list.status === "ready") {
     assertCoverage(requirements, coveredRequirements, "requirements");
     assertCoverage(acceptance, coveredAcceptance, "acceptance criteria");
+    assertExclusiveAcceptance(list.tasks);
   }
   assertAcyclic(list.tasks);
 }
@@ -157,6 +158,29 @@ function validateReferences(
 ): void {
   const invalid = values.find((value) => !allowed.has(value));
   if (invalid) throw new Error(`${taskId} references unknown ${label}: ${invalid}`);
+}
+
+/**
+ * An acceptance criterion belongs to exactly one task.
+ *
+ * A criterion is a test, and a test has one home. Letting several tasks claim the same one makes the
+ * per-task review impossible to satisfy — no single task implements a criterion the graph split
+ * between four — and it destroys credit assignment: a failing criterion no longer names a task.
+ *
+ * Coverage becomes a partition rather than a cover, which is what makes it checkable here.
+ */
+function assertExclusiveAcceptance(tasks: Task[]): void {
+  const owners = new Map<string, string[]>();
+  for (const task of tasks) {
+    for (const id of task.acceptance) {
+      owners.set(id, [...(owners.get(id) ?? []), task.id]);
+    }
+  }
+  const shared = [...owners.entries()].filter(([, claimants]) => claimants.length > 1);
+  if (shared.length > 0) {
+    const detail = shared.map(([id, claimants]) => `${id} by ${claimants.join(", ")}`).join("; ");
+    throw new Error(`Acceptance criteria must be owned by exactly one task: ${detail}`);
+  }
 }
 
 function assertCoverage(expected: Set<string>, actual: Set<string>, label: string): void {
