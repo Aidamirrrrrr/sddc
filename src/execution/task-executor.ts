@@ -17,6 +17,30 @@ export type TaskOutcome =
   | { kind: "failed"; result: ExecutionTaskResult }
   | { kind: "blocked"; proposal: ChangeProposal };
 
+/** Everything a task needs before anything is written: the current files and the model's proposal. */
+export type TaskPreparation = {
+  files: Awaited<ReturnType<typeof readTaskFiles>>;
+  proposal: ChangeProposal;
+};
+
+/**
+ * The read-only half of executing a task. Split out so independent tasks in one wave can have their
+ * proposals generated concurrently while the writes that follow stay strictly ordered.
+ */
+export async function prepareTask(
+  client: Pick<ModelClient, "generateObject">,
+  root: string,
+  spec: Spec,
+  plan: ImplementationPlan,
+  task: Task,
+  feedback: string,
+  policy: Policy,
+): Promise<TaskPreparation> {
+  const files = await readTaskFiles(root, task);
+  const proposal = await buildTaskProposal(client, root, spec, plan, task, feedback, policy);
+  return { files, proposal };
+}
+
 export async function executeTask(
   client: Pick<ModelClient, "generateObject">,
   root: string,
@@ -27,9 +51,10 @@ export async function executeTask(
   policy: Policy,
   mode: ExecutionJournal["mode"],
   feedback: string,
+  prepared?: TaskPreparation,
 ): Promise<TaskOutcome> {
-  const files = await readTaskFiles(root, task);
-  const proposal = await buildTaskProposal(client, root, spec, plan, task, feedback, policy);
+  const { files, proposal } =
+    prepared ?? (await prepareTask(client, root, spec, plan, task, feedback, policy));
   if (proposal.status === "blocked") return { kind: "blocked", proposal };
   if (
     task.permissions.length > 0 &&

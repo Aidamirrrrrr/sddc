@@ -15,6 +15,12 @@ export const policySchema = z.object({
     allowed_programs: z.array(z.string()).min(1),
     allow_external_network: z.boolean(),
   }),
+  dialogue: z.object({
+    /** Caps how many times one phase may come back asking the user for a decision. */
+    max_clarification_rounds: z.number().int().positive(),
+    /** Caps how many times the user may reject an artifact and ask for another version. */
+    max_revision_rounds: z.number().int().positive(),
+  }),
   execution: z.object({
     default_approval_mode: z.enum(["strict", "normal", "trusted"]),
     max_changed_lines_per_task: z.number().int().positive(),

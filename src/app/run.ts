@@ -1,4 +1,5 @@
 import { ModelClient } from "../ai/model-client";
+import { formatUsage, sessionUsage } from "../ai/usage";
 import { parseCli } from "../cli/args";
 import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
@@ -13,7 +14,12 @@ import {
   step,
   success,
 } from "../cli/ui";
-import { initializeUserConfig, loadModelConfig, loadUserEnvironment } from "../config/env";
+import {
+  initializeUserConfig,
+  loadInputPrice,
+  loadModelConfig,
+  loadUserEnvironment,
+} from "../config/env";
 import { PRODUCT_NAME, VERSION } from "../config/product";
 import { classifyRequest } from "../intake/classify";
 import { preparePlanningContext } from "../planning/pipeline";
@@ -21,23 +27,36 @@ import { writeImplementationPlan } from "../planning/storage";
 import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
 import { writeTaskList } from "../tasks/storage";
+import { runAnalyze } from "../workflows/analyze";
+import type { DialogueContext } from "../workflows/context";
 import { createApprovedDiscovery } from "../workflows/discovery";
 import { runApprovedExecution } from "../workflows/execution";
 import { persistGovernance } from "../workflows/governance";
 import { runRepositoryInquiry } from "../workflows/inquiry";
 import { createApprovedPlan } from "../workflows/planning";
+import { recordPlanProvenance, recordTaskProvenance } from "../workflows/provenance";
 import { runRecompile } from "../workflows/recompile";
 import { createRequestContext } from "../workflows/request-context";
+import { clearSession, hasRecordedAnswers, loadSession } from "../workflows/session";
 import { createApprovedSpecification } from "../workflows/specification";
 import { createApprovedTaskList } from "../workflows/tasks";
 import { runDiagnosticStage } from "./stages";
 
 export async function runCli(arguments_: string[]): Promise<void> {
   const cli = parseCli(arguments_);
-  setOutputMode(
-    cli.json ? "json" : cli.plain || cli.noInput || !process.stdin.isTTY ? "plain" : "interactive",
-  );
   const interactive = process.stdin.isTTY && !cli.noInput;
+  // Help, version, init and the diagnostic stages print plain text; mounting the app over them would
+  // only take the terminal away from output the user asked to read.
+  const chrome = interactive && !cli.help && !cli.version && !cli.init && !cli.stage;
+  setOutputMode(
+    cli.json
+      ? "json"
+      : cli.plain || cli.noInput || !process.stdin.isTTY
+        ? "plain"
+        : chrome
+          ? "app"
+          : "interactive",
+  );
   if (cli.help) return console.log(helpText());
   if (cli.version) return console.log(`${PRODUCT_NAME} ${VERSION}`);
   if (cli.init) {
@@ -57,6 +76,10 @@ export async function runCli(arguments_: string[]): Promise<void> {
     if (result === undefined) throw new Error(`Unknown stage "${cli.stage}"`);
     console.log(JSON.stringify(result, null, cli.json ? undefined : 2));
     return;
+  }
+
+  if (cli.analyze) {
+    return runAnalyze(process.cwd(), cli.input.join(" ").trim());
   }
 
   if (cli.recompile) {
@@ -96,21 +119,46 @@ export async function runCli(arguments_: string[]): Promise<void> {
     return;
   }
   const root = process.cwd();
+  const policy = await loadPolicy(root);
+  const session = await loadSession(root, request);
+  if (interactive && hasRecordedAnswers(session)) {
+    info({
+      en: "Resuming with the answers recorded for this request",
+      ru: "Продолжаю с ответами, записанными для этого запроса",
+    });
+  }
+  const context: DialogueContext = { root, request, session };
+
   step(1, 5, { en: "Choose source access", ru: "Выбор доступа к коду" });
   const requestContext = interactive
     ? await createRequestContext(client, request, root)
     : undefined;
   step(2, 5, { en: "Agree on requirements", ru: "Согласование требований" });
-  const spec = await createApprovedSpecification(client, request, requestContext, interactive);
+  const spec = await createApprovedSpecification(
+    client,
+    request,
+    requestContext,
+    interactive,
+    policy,
+    context,
+  );
   if (spec?.status !== "ready") return;
 
   step(3, 5, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
   const discovery = await createApprovedDiscovery(client, spec, root, requestContext);
-  const policy = await loadPolicy(root);
   const constitution = await loadConstitution(root);
   const repository = await preparePlanningContext(root, discovery);
-  const plan = await createApprovedPlan(client, spec, discovery, policy, repository, constitution);
+  const plan = await createApprovedPlan(
+    client,
+    spec,
+    discovery,
+    policy,
+    repository,
+    constitution,
+    context,
+  );
   const planPath = await writeImplementationPlan(plan);
+  await recordPlanProvenance(root, spec.feature);
   success({ en: `Technical plan saved to ${planPath}`, ru: `План сохранён: ${planPath}` });
 
   step(4, 5, { en: "Derive the task graph", ru: "Граф задач" });
@@ -122,11 +170,16 @@ export async function runCli(arguments_: string[]): Promise<void> {
     policy,
     repository,
     constitution,
+    context,
   );
   const tasksPath = await writeTaskList(tasks, root);
+  await recordTaskProvenance(root, spec.feature);
   success({ en: `Task graph saved to ${tasksPath}`, ru: `Граф задач сохранён: ${tasksPath}` });
   await persistGovernance(root, spec, discovery, plan, tasks, policy);
+  // Every recorded answer now lives in a saved artifact, so the conversation no longer needs replay.
+  await clearSession(root);
   if (cli.dryRun) {
+    reportUsage();
     finish({
       en: "Dry run complete; no source files were changed",
       ru: "Пробный запуск завершён; исходные файлы не изменены",
@@ -135,4 +188,13 @@ export async function runCli(arguments_: string[]): Promise<void> {
   }
   step(5, 5, { en: "Controlled implementation", ru: "Контролируемая реализация" });
   await runApprovedExecution(client, root, spec, plan, tasks, policy);
+  reportUsage();
+}
+
+/** Closes the run with what it cost, including how much of the input the provider served from cache. */
+function reportUsage(): void {
+  const usage = sessionUsage();
+  if (usage.calls === 0) return;
+  const summary = formatUsage(usage, loadInputPrice());
+  info({ en: summary, ru: summary });
 }

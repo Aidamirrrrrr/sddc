@@ -6,14 +6,35 @@ export type ModelConfig = {
   apiUrl: string;
   apiToken: string;
   model: string;
+  maxOutputTokens: number;
 };
+
+/**
+ * Audit and review stages carry the whole upstream context, and reasoning tokens are billed against
+ * this same budget, so it has to leave room for the structured answer after the model has thought.
+ */
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+const MINIMUM_MAX_OUTPUT_TOKENS = 1_024;
 
 export function loadModelConfig(): ModelConfig {
   return {
     apiUrl: requiredEnv("AI_API_URL").replace(/\/+$/, ""),
     apiToken: requiredEnv("AI_API_TOKEN"),
     model: requiredEnv("AI_MODEL"),
+    maxOutputTokens: loadMaxOutputTokens(),
   };
+}
+
+export function loadMaxOutputTokens(): number {
+  const value = Bun.env.AI_MAX_OUTPUT_TOKENS?.trim();
+  if (!value) return DEFAULT_MAX_OUTPUT_TOKENS;
+  const tokens = Number(value);
+  if (!Number.isInteger(tokens) || tokens < MINIMUM_MAX_OUTPUT_TOKENS) {
+    throw new Error(
+      `AI_MAX_OUTPUT_TOKENS must be an integer of at least ${MINIMUM_MAX_OUTPUT_TOKENS}`,
+    );
+  }
+  return tokens;
 }
 
 export function userConfigPath(): string {
@@ -36,7 +57,14 @@ export async function initializeUserConfig(): Promise<{ path: string; created: b
   await mkdir(dirname(path), { recursive: true });
   await Bun.write(
     path,
-    ["AI_API_TOKEN=", "AI_API_URL=", "AI_MODEL=", "AI_INPUT_USD_PER_MILLION=", ""].join("\n"),
+    [
+      "AI_API_TOKEN=",
+      "AI_API_URL=",
+      "AI_MODEL=",
+      "AI_INPUT_USD_PER_MILLION=",
+      "AI_MAX_OUTPUT_TOKENS=",
+      "",
+    ].join("\n"),
   );
   await chmod(path, 0o600);
   return { path, created: true };

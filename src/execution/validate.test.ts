@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
 import { sha256 } from "./context";
 import { validateProposal } from "./validate";
@@ -85,24 +86,8 @@ test("proposal must implement every planned file within the size limit", () => {
   );
   expect(() =>
     validateProposal(proposal, task, files, {
-      version: 1,
-      changes: {
-        max_files_per_task: 6,
-        max_created_files_per_task: 3,
-        max_generated_file_bytes: 2,
-        forbid_paths: [],
-        require_dependency_permission: true,
-        require_configuration_permission: true,
-        require_migration_permission: true,
-      },
-      commands: { allowed_programs: ["bun"], allow_external_network: false },
-      execution: {
-        default_approval_mode: "normal",
-        max_changed_lines_per_task: 400,
-        max_proposal_revisions: 1,
-        command_timeout_seconds: 120,
-        allow_git_checkpoints: false,
-      },
+      ...defaultPolicy,
+      changes: { ...defaultPolicy.changes, max_generated_file_bytes: 2, forbid_paths: [] },
     }),
   ).toThrow("generates an oversized file: src/auth.ts");
 });

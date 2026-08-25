@@ -151,6 +151,92 @@ sddc --recompile execute -- registration  # implement the stored task graph
 
 The feature name may be omitted when `.specs` holds exactly one feature.
 
+## Interface
+
+In an interactive terminal the agent runs as an application: a persistent phase
+rail across the top carrying each phase's state, the live region of the current
+stage below it, and a status line at the bottom. Finished documents, answers and
+events scroll into the terminal's own scrollback, so history stays selectable with
+the mouse and survives the session.
+
+All output goes through a single driver (`src/ui/`), which keeps the modes
+consistent:
+
+- interactive TTY — the Ink application;
+- `--plain` — stable lines;
+- `--json` — one event per line;
+- non-TTY or `--no-input` — line output that never prompts.
+
+No pipeline stage writes to stdout directly, so the interface can change without
+touching a workflow.
+
+## Cost and prefix caching
+
+Within a phase every stage appends its predecessor's output to the same context
+object, so everything before that appendix repeats verbatim. To let a provider use
+that, requests are composed **context first, instruction last**: the system message
+is constant across stages and the stage instruction trails the user message. Had
+the instruction stayed in the system message, the prefix would diverge at token
+zero and nothing would ever be cached.
+
+This pays off on providers with automatic prefix caching (OpenAI, DeepSeek, most
+vLLM deployments). Providers that require explicit cache breakpoints cannot express
+them through an OpenAI-compatible API.
+
+A run ends with a summary: model calls, input and output tokens, and the share of
+input the provider served from cache. The share appears only when the provider
+reports it, and it is what tells you whether caching is actually working.
+
+## Parallel waves
+
+Tasks in a wave are independent by construction, and model latency dominates a run.
+So proposals for the siblings of the current task are generated concurrently while
+it waits for review. Writing, verifying and approving stay strictly ordered — the
+terminal must never host two conversations at once.
+
+Not every task in a wave is prefetched. Policy forbids two tasks writing the same
+file without ordering, but **reading another task's write is not forbidden**. A task
+that reads a file a wave sibling modifies or creates is prepared in the normal
+order, because generating it early would build its proposal from content that is
+about to change.
+
+`strict` mode never prefetches at all. It exists so the user authorizes each task
+before any work happens on it, and spending a model call ahead of that approval
+would defeat the mode.
+
+## Consistency analysis
+
+Stored artifacts are meant to be edited, so the agent records which version of its
+input each derived artifact came from (`provenance.yaml`). One command reports the
+drift without changing anything:
+
+```bash
+sddc --analyze -- registration
+```
+
+It reports two kinds of problem. **stale** means an artifact was derived from an
+input version that no longer exists on disk — `spec.yaml` was edited while
+`plan.yaml` still answers the previous requirements. **gap** means a requirement or
+acceptance criterion that no plan step or task claims to serve. The per-phase
+validators cannot see either one, because each of them only ever looks at a single
+phase.
+
+## Dialogue and limits
+
+Answers to clarifying questions are written to `.specs/session.yaml` as soon as they
+are typed. When a stage fails, rerunning the same request continues from the answers
+already given instead of restarting the conversation. A session is keyed by the
+request text, so answers are never replayed into a different request. Once the task
+graph is stored the session is cleared, because every answer now lives in an artifact.
+
+Round counts are bounded by policy so the model cannot loop the dialogue:
+
+```yaml
+dialogue:
+  max_clarification_rounds: 3
+  max_revision_rounds: 5
+```
+
 ## Policy And Decisions
 
 Planning is constrained by a deterministic policy, not by model judgment alone.
@@ -271,7 +357,14 @@ AI_API_TOKEN=your-token
 AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
+AI_MAX_OUTPUT_TOKENS=optional-output-budget
 ```
+
+`AI_MAX_OUTPUT_TOKENS` sets the output budget of a single model call (default
+16384, minimum 1024). On reasoning models the thinking tokens are billed against
+that same budget, so a value that is too small yields an empty response on heavy
+stages such as `tasks-audit`. When a response does come back empty, the agent
+retries once with reasoning degraded so the whole budget goes to the answer.
 
 Process environment variables take precedence over the user configuration.
 To install a development build from this repository, run

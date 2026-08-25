@@ -6,11 +6,12 @@ import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
 import { orderTasks } from "../tasks/validate";
 import { createGitCheckpoint } from "./checkpoint";
+import { groupByWave, prefetchable } from "./concurrency";
 import { type FileBackup, restoreFiles } from "./files";
 import { validateResume } from "./resume";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
 import { loadExecutionJournal, writeExecutionJournal } from "./storage";
-import { executeTask } from "./task-executor";
+import { executeTask, prepareTask, type TaskPreparation } from "./task-executor";
 
 type ReviewResult = { accepted: true } | { accepted: false; feedback: string };
 type FinalReview = { accepted: true } | { accepted: false; taskId: string; feedback: string };
@@ -28,6 +29,52 @@ export type ExecutionHooks = {
   resumeExisting?(journal: ExecutionJournal): Promise<boolean>;
   taskCompleted?(result: ExecutionTaskResult): void;
 };
+
+/**
+ * Generates proposals for independent tasks of a wave while the current one is being reviewed.
+ *
+ * Model latency dominates a run, and the tasks of a wave are independent by construction. Only the
+ * generation is shared out: writing, verifying and approving stay strictly ordered, so the terminal
+ * never has to host two conversations at once.
+ *
+ * Strict mode never prefetches — it exists so the user authorizes each task before any work happens
+ * on it, and spending a model call ahead of that approval would defeat the mode.
+ */
+function createPrefetcher(
+  client: Pick<ModelClient, "generateObject">,
+  root: string,
+  spec: Spec,
+  plan: ImplementationPlan,
+  ordered: Task[],
+  policy: Policy,
+  mode: ExecutionJournal["mode"],
+) {
+  const pending = new Map<string, Promise<TaskPreparation>>();
+  const released = new Set<number>();
+  const waves = groupByWave(ordered);
+
+  return {
+    schedule(wave: number): void {
+      if (mode === "strict" || released.has(wave)) return;
+      released.add(wave);
+      const group = waves.find((tasks) => tasks[0]?.wave === wave) ?? [];
+      // The first task of the wave is about to run inline; only its siblings are worth prefetching.
+      for (const task of prefetchable(group).slice(1)) {
+        const work = prepareTask(client, root, spec, plan, task, "", policy);
+        // A prefetch that fails must surface when the task is reached, not as an unhandled rejection.
+        work.catch(() => undefined);
+        pending.set(task.id, work);
+      }
+    },
+    async take(taskId: string): Promise<TaskPreparation | undefined> {
+      const work = pending.get(taskId);
+      if (!work) return undefined;
+      pending.delete(taskId);
+      // A failed prefetch is not a failed task: fall back to generating it inline.
+      return work.catch(() => undefined);
+    },
+  };
+}
 
 export async function executePlan(
   client: Pick<ModelClient, "generateObject">,
@@ -69,6 +116,7 @@ export async function executePlan(
   );
   const backups = new Map<string, FileBackup>();
   const feedback = new Map<string, string>();
+  const prefetch = createPrefetcher(client, root, spec, plan, ordered, policy, mode);
   if (journal.pending_feedback) {
     feedback.set(journal.pending_feedback.task_id, journal.pending_feedback.feedback);
     journal.pending_feedback = null;
@@ -88,6 +136,10 @@ export async function executePlan(
       return journal;
     }
 
+    const pending = feedback.get(task.id) ?? "";
+    // Arriving at a task is what releases its wave: everything before it has already been written,
+    // so the files its siblings read are settled.
+    prefetch.schedule(task.wave);
     const outcome = await executeTask(
       client,
       root,
@@ -97,7 +149,9 @@ export async function executePlan(
       hooks,
       policy,
       mode,
-      feedback.get(task.id) ?? "",
+      pending,
+      // A retry carries new feedback, so the proposal generated before it is no longer the answer.
+      pending ? undefined : await prefetch.take(task.id),
     );
     if (outcome.kind === "blocked") {
       hooks.proposalBlocked?.(task, outcome.proposal);

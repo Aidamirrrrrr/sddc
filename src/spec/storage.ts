@@ -26,7 +26,7 @@ function specDirectory(feature: string): string {
   return join(process.cwd(), ".specs", featureSlug(feature));
 }
 
-function featureSlug(value: string): string {
+export function featureSlug(value: string): string {
   const slug = value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

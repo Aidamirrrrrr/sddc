@@ -30,6 +30,10 @@ export const defaultPolicy: Policy = {
     ],
     allow_external_network: false,
   },
+  dialogue: {
+    max_clarification_rounds: 3,
+    max_revision_rounds: 5,
+  },
   execution: {
     default_approval_mode: "normal",
     max_changed_lines_per_task: 400,
@@ -50,6 +54,7 @@ export async function loadPolicy(root: string): Promise<Policy> {
       ...override,
       changes: { ...defaultPolicy.changes, ...override.changes },
       commands: { ...defaultPolicy.commands, ...override.commands },
+      dialogue: { ...defaultPolicy.dialogue, ...override.dialogue },
       execution: { ...defaultPolicy.execution, ...override.execution },
     });
   } catch (error) {

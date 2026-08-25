@@ -1,6 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
 import { taskDocument, taskSummary } from "../cli/presentation";
-import { document, required, reviewDocument, withSpinner } from "../cli/ui";
 import type { PlanningRepositoryContext } from "../planning/pipeline";
 import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
@@ -8,6 +7,8 @@ import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import { buildTaskList } from "../tasks/pipeline";
 import type { TaskList } from "../tasks/schemas";
+import { type DialogueContext, initialState } from "./context";
+import { converge } from "./dialogue";
 
 export async function createApprovedTaskList(
   client: ModelClient,
@@ -17,42 +18,28 @@ export async function createApprovedTaskList(
   policy: Policy,
   repository: PlanningRepositoryContext,
   constitution = "",
+  context: DialogueContext,
 ): Promise<TaskList> {
-  let userInput = "";
-  while (true) {
-    const list = await withSpinner(
-      { en: "Deriving the task graph", ru: "Собираю граф задач" },
-      { en: "Task graph is ready for review", ru: "Граф задач готов к проверке" },
-      () =>
-        buildTaskList(client, spec, plan, discovery, userInput, repository, policy, constitution),
-    );
-    if (list.status === "needs_clarification") {
-      userInput += "\n\nUser task clarifications:\n";
-      for (const question of list.questions) {
-        document(
-          { en: `Decision needed · ${question.id}`, ru: `Нужно решение · ${question.id}` },
-          `${question.question}\n\n${question.reason}`,
-        );
-        userInput += `${question.id}: ${await required({ en: "Your answer", ru: "Ваш ответ" })}\n`;
-      }
-      continue;
-    }
-
-    const rendered = Bun.YAML.stringify(list, null, 2).trimEnd();
-    if (
-      (await reviewDocument(
-        { en: "Accept this task graph?", ru: "Принять этот граф задач?" },
-        { en: "Tasks", ru: "Задачи" },
-        taskSummary(list),
-        taskDocument(list),
-      )) === "accept"
-    ) {
-      return list;
-    }
-    const feedback = await required({
+  return converge({
+    phase: "tasks",
+    root: context.root,
+    request: context.request,
+    policy,
+    initial: initialState(context, "tasks"),
+    build: (input) =>
+      buildTaskList(client, spec, plan, discovery, input, repository, policy, constitution),
+    progress: { en: "Deriving the task graph", ru: "Собираю граф задач" },
+    complete: { en: "Task graph is ready for review", ru: "Граф задач готов к проверке" },
+    title: { en: "Tasks", ru: "Задачи" },
+    reviewPrompt: { en: "Accept this task graph?", ru: "Принять этот граф задач?" },
+    revisePrompt: {
       en: "What should be changed in the tasks?",
       ru: "Что нужно изменить в задачах?",
-    });
-    userInput += `\n\nRejected task graph:\n${rendered}\n\nUser review feedback:\n${feedback}\n`;
-  }
+    },
+    summary: taskSummary,
+    details: taskDocument,
+    render: (list) => Bun.YAML.stringify(list, null, 2).trimEnd(),
+    clarificationHeading: "User task clarifications:",
+    rejectionHeading: "Rejected task graph:",
+  });
 }

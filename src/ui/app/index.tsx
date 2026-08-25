@@ -1,0 +1,107 @@
+import { basename } from "node:path";
+import { render } from "ink";
+import type { Driver } from "../driver";
+import { App } from "./App";
+import { applyStep, createStore, markCurrentPhase, type Pending } from "./store";
+
+let instance: { unmount: () => void } | undefined;
+
+/**
+ * Mounts the application surface and returns a driver that speaks to it.
+ *
+ * Ink owns stdout while mounted, so nothing else may write there: every surface the pipeline uses
+ * has to go through this driver or the live frame is corrupted.
+ */
+export function startApp(root = process.cwd()): Driver {
+  const store = createStore();
+  instance = render(<App store={store} subtitle={basename(root)} />, { exitOnCtrlC: false });
+
+  /** Parks a promise on the store until the rendered prompt resolves it. */
+  const ask = <T,>(build: (resolve: (value: T) => void) => Pending): Promise<T> =>
+    new Promise<T>((resolve) => {
+      const pending = build((value) => {
+        store.update((state) => ({ ...state, pending: undefined }));
+        resolve(value);
+      });
+      store.update((state) => ({ ...state, pending }));
+    });
+
+  const remember = (question: string, answer: string): void => {
+    store.push({ kind: "answer", question, answer });
+  };
+
+  return {
+    begin: (title) => store.update((state) => ({ ...state, heading: title })),
+    // Nothing announces the end of the last phase, so completing the run closes it.
+    finish: (message) =>
+      store.update((state) => ({ ...markCurrentPhase(state, "done"), finished: message })),
+    info: (text) => store.push({ kind: "line", tone: "info", text }),
+    success: (text) => store.push({ kind: "line", tone: "success", text }),
+    warn: (text) => store.push({ kind: "line", tone: "warn", text }),
+    step: (current, total, label) =>
+      store.update((state) => applyStep(state, current, total, label)),
+    document: (title, body) => store.push({ kind: "panel", title, body }),
+    async stage(labels, operation) {
+      store.update((state) => ({ ...state, stage: labels.progress }));
+      try {
+        const result = await operation();
+        store.update((state) => ({ ...state, stage: undefined }));
+        store.push({ kind: "line", tone: "success", text: labels.complete });
+        return result;
+      } catch (error) {
+        store.update((state) => markCurrentPhase({ ...state, stage: undefined }, "failed"));
+        store.push({ kind: "line", tone: "danger", text: labels.failed });
+        throw error;
+      }
+    },
+    async select(message, choices, initial) {
+      const value = await ask<string>((resolve) => ({
+        kind: "select",
+        message,
+        choices,
+        initial,
+        resolve,
+      }));
+      const chosen = choices.find((choice) => choice.value === value);
+      remember(message, chosen?.label ?? value);
+      return value as never;
+    },
+    async multiselect(message, choices, initial) {
+      const values = await ask<string[]>((resolve) => ({
+        kind: "multiselect",
+        message,
+        choices,
+        initial,
+        resolve,
+      }));
+      remember(message, `${values.length} selected`);
+      return values as never;
+    },
+    async confirm(message, initial) {
+      const value = await ask<boolean>((resolve) => ({
+        kind: "confirm",
+        message,
+        initial,
+        resolve,
+      }));
+      remember(message, value ? "yes" : "no");
+      return value;
+    },
+    async text(message, options = {}) {
+      const value = await ask<string>((resolve) => ({ kind: "text", message, options, resolve }));
+      remember(message, value);
+      return value;
+    },
+    cancel(message) {
+      store.update((state) => ({ ...state, pending: undefined, finished: message }));
+      stopApp();
+      process.exit(0);
+    },
+  };
+}
+
+/** Releases stdout so errors and trailing output are not swallowed by the live frame. */
+export function stopApp(): void {
+  instance?.unmount();
+  instance = undefined;
+}

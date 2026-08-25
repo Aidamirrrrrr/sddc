@@ -7,6 +7,7 @@ Usage:
   sddc [options] -- "Describe the task"
   sddc [options] < task.txt
   sddc --recompile tasks -- <feature>
+  sddc --analyze -- <feature>
 
 Options:
   -h, --help            Show help
@@ -15,6 +16,7 @@ Options:
   --thinking on|off     Enable or disable model reasoning
   --lang en|ru          Choose the interface language
   --recompile <phase>   Rebuild a stored feature from plan|tasks|execute
+  --analyze             Report drift between spec, plan, and tasks
   --stage <name>        Run one diagnostic model stage
   -n, --dry-run         Stop after the accepted task graph
   --no-input            Never prompt; write a draft when approval is required

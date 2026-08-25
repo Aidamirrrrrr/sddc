@@ -2,10 +2,14 @@
 
 import { runCli } from "./app/run";
 import { presentError } from "./cli/errors";
+import { teardownUi } from "./cli/ui";
 
 try {
   await runCli(Bun.argv.slice(2));
+  teardownUi();
 } catch (error) {
+  // Hand the terminal back before writing, or the live frame overwrites the error.
+  teardownUi();
   const { message, hint } = presentError(error);
   const json = Bun.argv.includes("--json");
   console.error(
