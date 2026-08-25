@@ -204,6 +204,29 @@ about to change.
 before any work happens on it, and spending a model call ahead of that approval
 would defeat the mode.
 
+## Test before implementation
+
+SDD Article III — no implementation before its test — is marked non-negotiable.
+Here it is expressed as policy rather than as a request in a prompt:
+
+```yaml
+changes:
+  require_test_before_implementation: true
+```
+
+With the rule on, a task that changes **behavioural** source must depend on a
+separate earlier task that writes the test. Writing the test in the same task does
+not count: "before" would then mean nothing, and the ordering is exactly what the
+article is about.
+
+Configuration, documentation and lockfiles need no test behind them — they carry no
+behaviour to assert, and demanding one would only teach people to switch the rule
+off.
+
+The rule is checked on the graph, before anything runs, and is **off** by default.
+Turning it on before the eval corpus shows models reliably produce conforming
+graphs would fail every run.
+
 ## Evaluating quality
 
 Editing a prompt or trimming context changes what the model produces, and without
@@ -288,6 +311,7 @@ changes:
   max_files_per_task: 4
   max_generated_file_bytes: 131072
   require_dependency_permission: true
+  require_test_before_implementation: false
 execution:
   default_approval_mode: normal
   max_changed_lines_per_task: 400

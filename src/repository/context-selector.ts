@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { accent, phrase } from "../cli/ui";
+import { isTestPath } from "../policy/paths";
 import { driver } from "../ui/driver";
 import type { ContextSelector, RepositoryContext } from "./pipeline";
 import { listContextProfiles, writeContextProfile } from "./profiles";
@@ -270,7 +271,7 @@ function showEstimate(
 
 function category(path: string, recommended: boolean): string {
   if (recommended) return "recommended";
-  if (/(^|\/)(__tests__|tests?|specs?)(\/|\.|$)|\.(test|spec)\.[^.]+$/i.test(path)) return "tests";
+  if (isTestPath(path)) return "tests";
   if (/(^|\/)(package\.json|bun\.lock|tsconfig[^/]*|biome\.json|\.github)(\/|$)/i.test(path))
     return "config";
   return "project";

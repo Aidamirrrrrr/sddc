@@ -8,6 +8,9 @@ export const defaultPolicy: Policy = {
     max_created_files_per_task: 3,
     max_generated_file_bytes: 128 * 1024,
     forbid_paths: [".git", ".specs", ".env", "credentials"],
+    // Off by default until the eval corpus shows models produce conforming graphs reliably;
+    // a rule that fails every run would only teach users to switch it off.
+    require_test_before_implementation: false,
     require_dependency_permission: true,
     require_configuration_permission: true,
     require_migration_permission: true,

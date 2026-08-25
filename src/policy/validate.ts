@@ -1,4 +1,5 @@
 import type { Task } from "../tasks/schemas";
+import { isBehaviouralSource, isTestPath } from "./paths";
 import type { Policy } from "./schemas";
 
 const DEPENDENCY_FILES = new Set([
@@ -51,6 +52,7 @@ export function validateTaskPolicy(tasks: Task[], policy: Policy): void {
     }
   }
   validateWriteOrdering(tasks);
+  if (policy.changes.require_test_before_implementation) validateTestFirst(tasks);
 }
 
 function usesExternalNetwork(program: string, args: string[]): boolean {
@@ -90,6 +92,32 @@ function validateChangedPath(task: Task, path: string, policy: Policy): void {
     !task.permissions.includes("migration")
   ) {
     throw new Error(`${task.id} changes migration without permission: ${path}`);
+  }
+}
+
+/**
+ * SDD Article III, enforced on the graph rather than asked for in a prompt.
+ *
+ * A task that changes behavioural source must depend — directly or transitively — on a task that
+ * writes a test. Writing the test in the same task is deliberately not enough: "first" would then
+ * mean nothing, and the ordering is exactly what the article is about.
+ */
+function validateTestFirst(tasks: Task[]): void {
+  const writesTest = (task: Task): boolean =>
+    [...task.files.modify, ...task.files.create].some(isTestPath);
+
+  for (const task of tasks) {
+    const source = [...task.files.modify, ...task.files.create].filter(isBehaviouralSource);
+    if (source.length === 0) continue;
+    const covered = tasks.some(
+      (other) =>
+        other.id !== task.id && writesTest(other) && dependsTransitively(task.id, other.id, tasks),
+    );
+    if (!covered) {
+      throw new Error(
+        `${task.id} changes ${source.join(", ")} without depending on a task that writes a test`,
+      );
+    }
   }
 }
 

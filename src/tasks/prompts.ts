@@ -9,7 +9,9 @@ a task truly needs the output of another one: independent tasks are executed as 
 every unnecessary dependency makes the graph slower. Two tasks that write the same file must be
 ordered by a dependency. Use only commands supported by repository evidence, represented as a program
 and an argument array, never as a shell string. Every file argument must already exist or be created
-by that task or a dependency. Follow the supplied policy, and the constitution principles when one is supplied. Declare
+by that task or a dependency. When policy.changes.require_test_before_implementation is true, a task that changes
+behavioural source must depend on a separate earlier task that writes the test covering it; writing the test in the
+same task does not satisfy the rule. Follow the supplied policy, and the constitution principles when one is supplied. Declare
 permissions only when a task genuinely needs them; a permission is visible to the user and is not a way to bypass a forbidden
 policy. Ask at most three neutral questions, and only when the plan left a user-owned decision
 genuinely open. Write all prose in outputLanguage and return JSON only.`,

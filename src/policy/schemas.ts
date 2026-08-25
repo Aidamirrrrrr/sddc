@@ -7,6 +7,12 @@ export const policySchema = z.object({
     max_created_files_per_task: z.number().int().nonnegative(),
     max_generated_file_bytes: z.number().int().positive(),
     forbid_paths: z.array(z.string()),
+    /**
+     * SDD Article III: no implementation before its test. When on, a task that changes behavioural
+     * source must depend on a task that writes a test — the same task is not enough, or "first"
+     * would mean nothing.
+     */
+    require_test_before_implementation: z.boolean(),
     require_dependency_permission: z.boolean(),
     require_configuration_permission: z.boolean(),
     require_migration_permission: z.boolean(),
