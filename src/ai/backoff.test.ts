@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { APICallError } from "@ai-sdk/provider";
 import { isTransient, withBackoff } from "./backoff";
+import { requestInterrupt, resetInterrupt } from "./interrupt";
 
 function apiError(statusCode: number, isRetryable = false): APICallError {
   return new APICallError({
@@ -97,4 +98,22 @@ test("retries stop at the attempt limit and surface the last error", async () =>
 
   expect(attempt).rejects.toThrow("HTTP 503");
   expect(calls).toBe(3);
+});
+
+test("a request that went quiet is retried; a cancelled one is not", () => {
+  const timedOut = new Error("The operation timed out.");
+  timedOut.name = "TimeoutError";
+
+  // A connection that opens and stays silent is exactly what repeating fixes.
+  expect(isTransient(timedOut)).toBe(true);
+
+  requestInterrupt();
+  try {
+    // Once somebody has asked to stop, an abort looks the same from here as a lost connection —
+    // only the interrupt state separates them, and retrying would argue with the person.
+    expect(isTransient(timedOut)).toBe(false);
+    expect(isTransient(new Error("fetch failed"))).toBe(false);
+  } finally {
+    resetInterrupt();
+  }
 });

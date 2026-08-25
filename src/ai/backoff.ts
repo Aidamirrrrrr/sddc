@@ -1,4 +1,5 @@
 import { APICallError } from "@ai-sdk/provider";
+import { isInterrupted } from "./interrupt";
 
 /**
  * Retries transport failures, which are a different problem from a bad response.
@@ -20,6 +21,13 @@ const DEFAULT_ATTEMPTS = 3;
 const DEFAULT_BASE_DELAY_MS = 500;
 
 export function isTransient(error: unknown): boolean {
+  // Somebody asked for this. Retrying their cancellation would be the tool arguing with them, and
+  // the abort looks exactly like a lost connection from here — only the interrupt state tells them
+  // apart.
+  if (isInterrupted()) return false;
+  // A request that opened and went quiet is the case a timeout exists for, and repeating it is the
+  // fix: the connection is what failed, not the prompt.
+  if (error instanceof Error && error.name === "TimeoutError") return true;
   // The provider already classifies its own failures; trust that before guessing from text.
   if (APICallError.isInstance(error)) {
     if (error.isRetryable) return true;
@@ -30,7 +38,7 @@ export function isTransient(error: unknown): boolean {
   // A TLS handshake that dies mid-session is usually a flaky link rather than a bad certificate.
   // Retrying re-runs the handshake with verification fully intact — a genuinely untrusted
   // certificate keeps failing and still surfaces, so this trades nothing away for security.
-  return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ECONNABORTED|EAI_AGAIN|EPROTO|fetch failed|network|socket hang up|certificate verification|unexpected eof|tls handshake/i.test(
+  return /ETIMEDOUT|ECONNRESET|timed out|timeout|ECONNREFUSED|ECONNABORTED|EAI_AGAIN|EPROTO|fetch failed|network|socket hang up|certificate verification|unexpected eof|tls handshake/i.test(
     message,
   );
 }

@@ -8,6 +8,8 @@ export type ModelConfig = {
   model: string;
   /** Undefined sends no cap at all, leaving the model's own maximum in force. */
   maxOutputTokens: number | undefined;
+  /** How long one request may stay open before it is treated as lost. */
+  requestTimeoutMs: number;
 };
 
 /**
@@ -31,7 +33,28 @@ export function loadModelConfig(): ModelConfig {
     apiToken: requiredEnv("AI_API_TOKEN"),
     model: requiredEnv("AI_MODEL"),
     maxOutputTokens: loadMaxOutputTokens(),
+    requestTimeoutMs: loadRequestTimeout(),
   };
+}
+
+/**
+ * How long to wait for a response that may never come.
+ *
+ * A connection that opens and then goes quiet is indistinguishable from a slow model, and nothing
+ * below this line can tell them apart — so an unattended run sat on one for seven minutes and would
+ * have sat on it forever. Generous, because a reasoning stage on a long context genuinely takes
+ * minutes; the point is a bound, not a tight one.
+ */
+const DEFAULT_REQUEST_TIMEOUT_SECONDS = 300;
+
+export function loadRequestTimeout(): number {
+  const value = Bun.env.AI_REQUEST_TIMEOUT_SECONDS?.trim();
+  if (!value) return DEFAULT_REQUEST_TIMEOUT_SECONDS * 1_000;
+  const seconds = Number(value);
+  if (!Number.isInteger(seconds) || seconds < 10) {
+    throw new Error("AI_REQUEST_TIMEOUT_SECONDS must be an integer of at least 10");
+  }
+  return seconds * 1_000;
 }
 
 export function loadMaxOutputTokens(): number | undefined {
@@ -73,6 +96,7 @@ export async function initializeUserConfig(): Promise<{ path: string; created: b
       "AI_MODEL=",
       "AI_INPUT_USD_PER_MILLION=",
       "AI_MAX_OUTPUT_TOKENS=",
+      "AI_REQUEST_TIMEOUT_SECONDS=",
       "SDDC_LANG=",
       "SDDC_THEME=",
       "",

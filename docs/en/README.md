@@ -519,6 +519,11 @@ budget, so a value that is too small yields an empty response on heavy stages
 such as `tasks-audit`. When a response does come back empty, the agent retries
 once with reasoning degraded so the whole budget goes to the answer.
 
+`AI_REQUEST_TIMEOUT_SECONDS` bounds how long one request may stay open (default 300, minimum
+10). A connection that opens and then goes quiet is indistinguishable from a slow model, so without
+a bound an unattended run waits on it forever. A timed-out request is retried; one you cancelled is
+not.
+
 Set `AI_MAX_OUTPUT_TOKENS=off` to send no cap at all and leave the model's own
 maximum in force. That is the right setting when the endpoint is a flat-rate or
 self-hosted one; against a per-token endpoint the default is a deliberate bound

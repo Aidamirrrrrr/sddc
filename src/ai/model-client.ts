@@ -34,6 +34,7 @@ export class ModelClient {
   private readonly model: LanguageModel;
   private readonly thinking: boolean;
   private readonly maxOutputTokens: number | undefined;
+  private readonly requestTimeoutMs: number;
 
   constructor(config: ModelConfig, thinking: boolean) {
     const provider = createOpenAICompatible({
@@ -45,6 +46,7 @@ export class ModelClient {
     this.model = provider.chatModel(config.model);
     this.thinking = thinking;
     this.maxOutputTokens = config.maxOutputTokens;
+    this.requestTimeoutMs = config.requestTimeoutMs;
   }
 
   /** `instruction` identifies the stage; `context` is the accumulated pipeline state. */
@@ -65,8 +67,12 @@ export class ModelClient {
             system: PREAMBLE,
             prompt: currentPrompt,
             temperature: 0,
-            // Cuts a request already in flight, so stopping costs at most one open response.
-            abortSignal: interruptSignal(),
+            // Two ways a request ends without an answer: somebody stops it, or it goes quiet. The
+            // first must not be retried and the second must be, so they stay distinguishable.
+            abortSignal: AbortSignal.any([
+              interruptSignal(),
+              AbortSignal.timeout(this.requestTimeoutMs),
+            ]),
             // Omitted entirely when unset, so the model's own maximum applies rather than ours.
             ...(this.maxOutputTokens === undefined
               ? {}

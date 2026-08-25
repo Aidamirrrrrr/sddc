@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   initializeUserConfig,
   loadMaxOutputTokens,
+  loadRequestTimeout,
   loadUserEnvironment,
   saveUserSetting,
   userConfigPath,
@@ -111,5 +112,24 @@ test("a setting is written once and then found on the next run", async () => {
   } finally {
     if (previous === undefined) delete Bun.env.XDG_CONFIG_HOME;
     else Bun.env.XDG_CONFIG_HOME = previous;
+  }
+});
+
+test("the request timeout is bounded, and refuses a value too small to be one", () => {
+  const previous = Bun.env.AI_REQUEST_TIMEOUT_SECONDS;
+  try {
+    Bun.env.AI_REQUEST_TIMEOUT_SECONDS = "";
+    expect(loadRequestTimeout()).toBe(300_000);
+
+    Bun.env.AI_REQUEST_TIMEOUT_SECONDS = "600";
+    expect(loadRequestTimeout()).toBe(600_000);
+
+    // A reasoning stage on a long context genuinely takes minutes; a two-second ceiling would only
+    // turn every heavy stage into a retry storm.
+    Bun.env.AI_REQUEST_TIMEOUT_SECONDS = "2";
+    expect(() => loadRequestTimeout()).toThrow("at least 10");
+  } finally {
+    if (previous === undefined) delete Bun.env.AI_REQUEST_TIMEOUT_SECONDS;
+    else Bun.env.AI_REQUEST_TIMEOUT_SECONDS = previous;
   }
 });
