@@ -60,7 +60,7 @@ function createPrefetcher(
       const group = waves.find((tasks) => tasks[0]?.wave === wave) ?? [];
       // The first task of the wave is about to run inline; only its siblings are worth prefetching.
       for (const task of prefetchable(group).slice(1)) {
-        const work = prepareTask(client, root, spec, plan, task, "", policy);
+        const work = prepareTask(client, root, spec, plan, task, "", policy, ordered);
         // A prefetch that fails must surface when the task is reached, not as an unhandled rejection.
         work.catch(() => undefined);
         pending.set(task.id, work);
@@ -152,6 +152,7 @@ export async function executePlan(
       pending,
       // A retry carries new feedback, so the proposal generated before it is no longer the answer.
       pending ? undefined : await prefetch.take(task.id),
+      ordered,
     );
     if (outcome.kind === "blocked") {
       hooks.proposalBlocked?.(task, outcome.proposal);

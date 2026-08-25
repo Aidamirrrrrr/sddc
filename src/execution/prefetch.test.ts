@@ -60,7 +60,10 @@ function passedReview() {
 function keyedClient(record: (event: string) => void) {
   return {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
-      const id = prompt.includes('"task_id": "T2"') || /"id": "T2"/.test(prompt) ? "T2" : "T1";
+      // Parse the context rather than grepping it: a task's context now names its siblings too, so a
+      // substring match would read T1's call as T2's.
+      const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
+      const id = context.task?.id ?? context.proposal?.task_id ?? "T1";
       if (system === executionPrompts.implement) {
         record(`generate:${id}`);
         const path = id === "T1" ? "src/a.ts" : "src/b.ts";

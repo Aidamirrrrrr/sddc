@@ -1,4 +1,5 @@
 import type { ModelClient } from "../ai/model-client";
+import { sampleUntilValid } from "../ai/sample";
 import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
@@ -28,6 +29,27 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * What the rest of the graph is doing, read-only.
+ *
+ * Without this a task sees only itself and reasons as though it were the whole change, so it blocks
+ * whenever its own slice leaves the code incoherent — refusing to add a type because the function
+ * using it does not exist yet, when a sibling task is about to add exactly that. Permissions are
+ * unaffected: writing is still governed solely by the task's own files.
+ */
+function graphOutline(graph: Task[], current: Task) {
+  return graph
+    .filter((task) => task.id !== current.id)
+    .map((task) => ({
+      id: task.id,
+      title: task.title,
+      wave: task.wave,
+      depends_on: task.depends_on,
+      writes: [...task.files.modify, ...task.files.create],
+      covers: [...task.requirements, ...task.acceptance],
+    }));
+}
+
 export async function buildTaskProposal(
   client: ObjectGenerator,
   root: string,
@@ -36,43 +58,46 @@ export async function buildTaskProposal(
   task: Task,
   feedback = "",
   policy: Policy = defaultPolicy,
+  graph: Task[] = [task],
 ): Promise<ChangeProposal> {
   const files = await readTaskFiles(root, task);
-  const context = { specification: spec, plan_summary: plan.summary, task, files, feedback };
-  let revisions = 0;
-  let proposal = await generate(client, context);
-  try {
-    validateProposal(proposal, task, files, policy);
-  } catch (error) {
-    if (revisions >= policy.execution.max_proposal_revisions) throw error;
-    revisions += 1;
-    proposal = await generate(client, {
-      ...context,
-      // A rejected blocker's stated reason is wrong by definition, and echoing it back was measured
-      // to re-anchor the model on it. Only the fact that it was refused travels forward.
-      rejected_proposal: proposal.status === "blocked" ? { status: "blocked" } : proposal,
-      validation_error: errorMessage(error),
-      instruction: repairInstruction(proposal.status === "blocked"),
-    });
-    validateProposal(proposal, task, files, policy);
-  }
-  if (proposal.status === "blocked") return proposal;
-  try {
-    await reviewProposal(client, spec, task, files, proposal);
-  } catch (error) {
-    if (revisions >= policy.execution.max_proposal_revisions) throw error;
-    revisions += 1;
-    proposal = await generate(client, {
-      ...context,
-      rejected_proposal: proposal,
-      review_error: errorMessage(error),
-      instruction: "Correct the reviewed proposal once without expanding the approved scope.",
-    });
-    validateProposal(proposal, task, files, policy);
-    if (proposal.status === "blocked") return proposal;
-    await reviewProposal(client, spec, task, files, proposal);
-  }
-  return proposal;
+  const context = {
+    specification: spec,
+    plan_summary: plan.summary,
+    task,
+    otherTasks: graphOutline(graph, task),
+    files,
+    feedback,
+  };
+  // One loop for both gates: a proposal has to survive deterministic validation and the read-only
+  // reviewer, and a rejection from either is what the next draw is told about.
+  let previous: ChangeProposal | undefined;
+  return sampleUntilValid(
+    policy.execution.max_proposal_revisions + 1,
+    async (rejection) => {
+      const proposal = await generate(
+        client,
+        rejection === undefined || !previous
+          ? context
+          : {
+              ...context,
+              // A rejected blocker's stated reason is wrong by definition, and echoing it back was
+              // measured to re-anchor the model on it. Only the refusal itself travels forward.
+              rejected_proposal: previous.status === "blocked" ? { status: "blocked" } : previous,
+              validation_error: rejection,
+              instruction: repairInstruction(previous.status === "blocked"),
+            },
+      );
+      previous = proposal;
+      return proposal;
+    },
+    async (proposal) => {
+      validateProposal(proposal, task, files, policy);
+      // A blocker that survived validation is a real one: it is an answer, not a bad draw.
+      if (proposal.status === "blocked") return;
+      await reviewProposal(client, spec, task, files, proposal);
+    },
+  );
 }
 
 export async function runExecutionStage(

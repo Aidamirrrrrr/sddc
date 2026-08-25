@@ -12,6 +12,8 @@ Rules:
 - Satisfy only the listed requirements, acceptance criteria, done_when conditions, and verification expectations.
 - Treat previous verification output as diagnostics, not as permission to expand scope.
 - Trace every task requirement and acceptance criterion to at least one changed file.
+- otherTasks lists the rest of the graph read-only. Code your task does not touch may be missing or incomplete because a sibling task owns it: that is the plan working, not a blocker. Implement your slice and leave theirs alone.
+- Only block when no task in the graph covers what is missing, or when a decision is genuinely absent. A file already in your files.modify or files.create is yours to change — never block asking for it.
 - If the task cannot be completed within its approved files, return status blocked, no changes, and an exact blocker. Never work around missing scope.`,
   review: `You are a read-only code change reviewer. Do not rewrite code.
 

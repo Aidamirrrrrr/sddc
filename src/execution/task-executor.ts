@@ -36,9 +36,10 @@ export async function prepareTask(
   task: Task,
   feedback: string,
   policy: Policy,
+  graph: Task[] = [task],
 ): Promise<TaskPreparation> {
   const files = await readTaskFiles(root, task);
-  const proposal = await buildTaskProposal(client, root, spec, plan, task, feedback, policy);
+  const proposal = await buildTaskProposal(client, root, spec, plan, task, feedback, policy, graph);
   return { files, proposal };
 }
 
@@ -53,9 +54,10 @@ export async function executeTask(
   mode: ExecutionJournal["mode"],
   feedback: string,
   prepared?: TaskPreparation,
+  graph: Task[] = [task],
 ): Promise<TaskOutcome> {
   const { files, proposal } =
-    prepared ?? (await prepareTask(client, root, spec, plan, task, feedback, policy));
+    prepared ?? (await prepareTask(client, root, spec, plan, task, feedback, policy, graph));
   if (proposal.status === "blocked") return { kind: "blocked", proposal };
   if (
     task.permissions.length > 0 &&
