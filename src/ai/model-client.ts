@@ -2,6 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, type LanguageModel, Output } from "ai";
 import type { z } from "zod";
 import type { ModelConfig } from "../config/env";
+import { withBackoff } from "./backoff";
 import { withOneRepair } from "./repair";
 import { recordUsage } from "./usage";
 
@@ -49,24 +50,28 @@ export class ModelClient {
     return withOneRepair(
       composePrompt(instruction, context),
       async (currentPrompt, { degraded }) => {
-        const result = await generateText({
-          model: this.model,
-          system: PREAMBLE,
-          prompt: currentPrompt,
-          temperature: 0,
-          maxOutputTokens: this.maxOutputTokens,
-          maxRetries: 0,
-          output: Output.object({
-            name: "stage_output",
-            schema,
-          }),
-          providerOptions: {
-            modelApi: {
-              strictJsonSchema: true,
-              ...(this.thinking && !degraded ? { reasoningEffort: "high" } : {}),
+        // Two different failures, two different answers: transport trouble is retried verbatim
+        // here, while a malformed response goes back out to withOneRepair with the error attached.
+        const result = await withBackoff(() =>
+          generateText({
+            model: this.model,
+            system: PREAMBLE,
+            prompt: currentPrompt,
+            temperature: 0,
+            maxOutputTokens: this.maxOutputTokens,
+            maxRetries: 0,
+            output: Output.object({
+              name: "stage_output",
+              schema,
+            }),
+            providerOptions: {
+              modelApi: {
+                strictJsonSchema: true,
+                ...(this.thinking && !degraded ? { reasoningEffort: "high" } : {}),
+              },
             },
-          },
-        });
+          }),
+        );
         recordUsage(result.usage);
         return result.output;
       },

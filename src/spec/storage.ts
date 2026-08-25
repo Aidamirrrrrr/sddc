@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { discoveryMarkdown, specMarkdown } from "../artifacts/markdown";
 import { type RepositoryDiscovery, repositoryDiscoverySchema } from "../repository/schemas";
 import { type Spec, specSchema } from "./schemas";
 
@@ -8,6 +9,7 @@ export async function writeSpec(spec: Spec, approved = true): Promise<string> {
   await mkdir(directory, { recursive: true });
   const path = join(directory, approved ? "spec.yaml" : "spec.draft.yaml");
   await Bun.write(path, Bun.YAML.stringify(spec, null, 2));
+  await Bun.write(join(directory, approved ? "spec.md" : "spec.draft.md"), specMarkdown(spec));
   return path;
 }
 
@@ -19,6 +21,7 @@ export async function writeRepositoryDiscovery(
   await mkdir(directory, { recursive: true });
   const path = join(directory, "discovery.yaml");
   await Bun.write(path, Bun.YAML.stringify(discovery, null, 2));
+  await Bun.write(join(directory, "discovery.md"), discoveryMarkdown(discovery));
   return path;
 }
 

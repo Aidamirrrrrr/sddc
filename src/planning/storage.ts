@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { planMarkdown } from "../artifacts/markdown";
 import { readArtifact } from "../spec/storage";
 import { type ImplementationPlan, implementationPlanSchema } from "./schemas";
 
@@ -8,6 +9,8 @@ export async function writeImplementationPlan(plan: ImplementationPlan): Promise
   await mkdir(directory, { recursive: true });
   const path = join(directory, "plan.yaml");
   await Bun.write(path, Bun.YAML.stringify(plan, null, 2));
+  // The Markdown twin is written for review only; nothing ever reads it back.
+  await Bun.write(join(directory, "plan.md"), planMarkdown(plan));
   return path;
 }
 

@@ -204,6 +204,16 @@ about to change.
 before any work happens on it, and spending a model call ahead of that approval
 would defeat the mode.
 
+## Artifact format
+
+Every artifact is written twice. YAML is the machine format — it is what the
+pipeline parses and validates. The Markdown beside it (`spec.md`, `plan.md`,
+`tasks.md`, `discovery.md`) exists for review: an artifact is the thing a person
+is asked to approve, and a YAML diff is a poor place to do that.
+
+The Markdown is one-way: nothing reads it back, so it can never disagree with the
+YAML about what was accepted.
+
 ## Test before implementation
 
 SDD Article III — no implementation before its test — is marked non-negotiable.
