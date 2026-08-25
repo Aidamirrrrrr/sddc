@@ -86,3 +86,58 @@ test("adding a test for behaviour that already exists needs no dependency", () =
 
   expect(() => validateTaskList(list, readySpec(), discovery())).not.toThrow();
 });
+
+/** A graph shaped like a real one: T1 changes the source, T2 updates the test that covers it. */
+function sourceAndTestGraph(visibleToT1: string[]) {
+  const list = readyTasks();
+  const [first, second] = list.tasks;
+  if (!first || !second) throw new Error("Fixture must contain two tasks");
+  first.files = { read: visibleToT1, modify: ["src/auth.ts"], create: [] };
+  second.files = { read: ["src/auth.ts"], modify: ["src/auth.test.ts"], create: [] };
+  return list;
+}
+
+/** Discovery that approved the covering test, so a task is permitted to reference it. */
+function discoveryWithTest() {
+  const value = discovery();
+  value.context.files = ["src/auth.ts", "src/auth.test.ts"];
+  return value;
+}
+
+const repositoryWithTest = ["src/auth.ts", "src/auth.test.ts"];
+
+test("a task changing source must bring the test that already covers it", () => {
+  // T1 changes src/auth.ts but cannot see src/auth.test.ts, which exists and is approved.
+  const list = sourceAndTestGraph(["src/auth.ts"]);
+
+  expect(() =>
+    validateTaskList(list, readySpec(), discoveryWithTest(), repositoryWithTest),
+  ).toThrow("T1 changes src/auth.ts without src/auth.test.ts in scope");
+});
+
+test("reading the covering test is enough; the task need not modify it", () => {
+  const list = sourceAndTestGraph(["src/auth.ts", "src/auth.test.ts"]);
+
+  expect(() =>
+    validateTaskList(list, readySpec(), discoveryWithTest(), repositoryWithTest),
+  ).not.toThrow();
+});
+
+test("a test discovery never approved is not demanded, or no graph could satisfy both rules", () => {
+  // Read paths must come from approved context, so a test outside it can never be brought in.
+  const list = readyTasks();
+  const [first] = list.tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  first.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+
+  expect(() => validateTaskList(list, readySpec(), discovery(), ["src/auth.ts"])).not.toThrow();
+});
+
+test("a project without a sibling test is not constrained by guesswork", () => {
+  const list = readyTasks();
+  const [first] = list.tasks;
+  if (!first) throw new Error("Fixture must contain a task");
+  first.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+
+  expect(() => validateTaskList(list, readySpec(), discovery(), ["src/auth.ts"])).not.toThrow();
+});

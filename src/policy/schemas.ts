@@ -21,6 +21,15 @@ export const policySchema = z.object({
     allowed_programs: z.array(z.string()).min(1),
     allow_external_network: z.boolean(),
   }),
+  sampling: z.object({
+    /**
+     * How many candidates a phase may draw before giving up.
+     *
+     * The verifier is free and deterministic, so an extra draw costs one model call and buys a real
+     * chance of a valid artifact — cheaper than sending the user back to replanning.
+     */
+    max_attempts: z.number().int().positive(),
+  }),
   dialogue: z.object({
     /** Caps how many times one phase may come back asking the user for a decision. */
     max_clarification_rounds: z.number().int().positive(),

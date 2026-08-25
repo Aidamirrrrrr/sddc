@@ -1,4 +1,4 @@
-import { isBehaviouralSource, writesOnlyTests } from "../policy/paths";
+import { conventionalTestPaths, isBehaviouralSource, writesOnlyTests } from "../policy/paths";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task, TaskList, TaskListDraft, TaskListReview } from "./schemas";
@@ -125,6 +125,7 @@ export function validateTaskList(
     assertCoverage(acceptance, coveredAcceptance, "acceptance criteria");
     assertExclusiveAcceptance(list.tasks);
     assertOwnersCanProve(list.tasks);
+    assertTestsInScope(list.tasks, existingFiles, approvedFiles);
   }
   assertAcyclic(list.tasks);
 }
@@ -208,6 +209,39 @@ function assertOwnersCanProve(tasks: Task[]): void {
       `${task.id} owns ${task.acceptance.join(", ")} but only writes tests and depends on nothing, ` +
         "so it runs before the code under test exists",
     );
+  }
+}
+
+/**
+ * A task changing source must bring the tests that already cover it.
+ *
+ * Otherwise the task either breaks them silently or, as happened in a real run, refuses to proceed
+ * because it cannot tell whether its change breaks a file it was never allowed to look at. Reading
+ * is enough — the task only has to be able to check.
+ *
+ * Only conventional siblings that genuinely exist are required, so an unconventional layout is
+ * never constrained by guesswork.
+ */
+function assertTestsInScope(
+  tasks: Task[],
+  existingFiles: Set<string>,
+  approvedFiles: Set<string>,
+): void {
+  for (const task of tasks) {
+    const visible = new Set([...task.files.read, ...task.files.modify, ...task.files.create]);
+    for (const source of task.files.modify.filter(isBehaviouralSource)) {
+      // Only tests the task is actually allowed to reference: read paths must come from approved
+      // discovery context, so demanding an unapproved file would make the graph unsatisfiable.
+      const covering = conventionalTestPaths(source).filter(
+        (path) => existingFiles.has(path) && approvedFiles.has(path),
+      );
+      const missing = covering.find((path) => !visible.has(path));
+      if (missing) {
+        throw new Error(
+          `${task.id} changes ${source} without ${missing} in scope, so it cannot tell whether the change breaks it`,
+        );
+      }
+    }
   }
 }
 

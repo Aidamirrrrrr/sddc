@@ -255,6 +255,25 @@ criterion, the tasks covering it and the commands that prove it. It has no YAML
 twin because nothing parses it — every fact is derived from `spec.yaml` and
 `tasks.yaml`, and asking a model for it would only add a way to disagree with them.
 
+## Instability and sampling
+
+`temperature: 0` does not make a served model deterministic: the same input yields a
+different task graph from one run to the next. Wording cannot fix that — the spread
+comes from inference, not from the prompt.
+
+So the goal is not a stable graph but a narrow one: constrain the set of acceptable
+graphs until **any** sample that passes is executable. The spread then stops being a
+problem and becomes a resource — the wider it is, the likelier some sample passes.
+
+The task phase draws up to `sampling.max_attempts` candidates (3 by default) and
+takes the first that satisfies the validators. The first draw runs the full
+draft/audit/review chain; later ones repair against the rejection, which is cheaper
+and better informed than starting over.
+
+The verifier here is free and deterministic, so an extra draw costs one model call
+and buys a real chance of a valid artifact. It is also the rejection-sampling
+mechanism a distilled model would need for training.
+
 ## Acceptance ownership
 
 An acceptance criterion belongs to **exactly one** task. A requirement may be served

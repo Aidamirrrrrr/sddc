@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { ModelClient } from "../ai/model-client";
+import { sampleUntilValid } from "../ai/sample";
 import type { PlanningRepositoryContext } from "../planning/pipeline";
 import type { ImplementationPlan } from "../planning/schemas";
 import { defaultPolicy } from "../policy/load";
@@ -11,6 +12,7 @@ import type { Spec } from "../spec/schemas";
 import { taskPrompts } from "./prompts";
 import {
   type TaskList,
+  type TaskListReview,
   taskAuditSchema,
   taskListDraftSchema,
   taskListReviewSchema,
@@ -41,46 +43,55 @@ export async function buildTaskList(
     policy,
     userInput: userInput || undefined,
   };
-  const draft = await stage("tasks-draft", () =>
-    client.generateObject(taskPrompts.draft, pretty(context), taskListDraftSchema),
-  );
-  const audit = await stage("tasks-audit", () =>
-    client.generateObject(taskPrompts.audit, pretty({ ...context, draft }), taskAuditSchema),
-  );
-  const review = await stage("tasks-review", () =>
-    client.generateObject(
-      taskPrompts.review,
-      pretty({ ...context, draft, audit }),
-      taskListReviewSchema,
-    ),
-  );
-  let list = normalizeTaskList(review.tasks, spec.feature);
-  if (list.status === "needs_clarification") {
-    list = await filterTaskQuestions(client, list, context, spec, discovery, repository.paths);
-  }
-  try {
-    if (list.status === "ready") validateTaskListReview(review);
-    validateTaskList(list, spec, discovery, repository.paths);
-    validateTaskPolicy(list.tasks, policy);
-    return list;
-  } catch (error) {
-    list = normalizeTaskList(
-      await stage("tasks-repair", () =>
-        client.generateObject(
-          taskPrompts.repair,
-          pretty({ ...context, rejectedTasks: list, validationError: errorMessage(error) }),
-          taskListDraftSchema,
-        ),
-      ),
-      spec.feature,
-    );
-    if (list.status === "needs_clarification") {
-      list = await filterTaskQuestions(client, list, context, spec, discovery, repository.paths);
-    }
-    validateTaskList(list, spec, discovery, repository.paths);
-    validateTaskPolicy(list.tasks, policy);
-    return list;
-  }
+  // The first draw runs the full draft/audit/review chain; a rejection is repaired instead, which is
+  // both cheaper and better informed than starting over.
+  let previous: TaskList | undefined;
+  return sampleUntilValid(
+    policy.sampling.max_attempts,
+    async (rejection) => {
+      let list: TaskList;
+      let review: TaskListReview | undefined;
+      if (rejection === undefined || !previous) {
+        const draft = await stage("tasks-draft", () =>
+          client.generateObject(taskPrompts.draft, pretty(context), taskListDraftSchema),
+        );
+        const audit = await stage("tasks-audit", () =>
+          client.generateObject(taskPrompts.audit, pretty({ ...context, draft }), taskAuditSchema),
+        );
+        review = await stage("tasks-review", () =>
+          client.generateObject(
+            taskPrompts.review,
+            pretty({ ...context, draft, audit }),
+            taskListReviewSchema,
+          ),
+        );
+        list = normalizeTaskList(review.tasks, spec.feature);
+      } else {
+        list = normalizeTaskList(
+          await stage("tasks-repair", () =>
+            client.generateObject(
+              taskPrompts.repair,
+              pretty({ ...context, rejectedTasks: previous, validationError: rejection }),
+              taskListDraftSchema,
+            ),
+          ),
+          spec.feature,
+        );
+      }
+      if (list.status === "needs_clarification") {
+        list = await filterTaskQuestions(client, list, context, spec, discovery, repository.paths);
+      }
+      previous = list;
+      return { list, review };
+    },
+    ({ list, review }) => {
+      // A graph still asking questions is not a rejected draw: the user has to answer first.
+      if (list.status !== "ready") return;
+      if (review) validateTaskListReview(review);
+      validateTaskList(list, spec, discovery, repository.paths);
+      validateTaskPolicy(list.tasks, policy);
+    },
+  ).then(({ list }) => list);
 }
 
 export async function runTaskStage(

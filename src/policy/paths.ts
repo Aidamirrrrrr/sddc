@@ -31,3 +31,24 @@ export function writesOnlyTests(files: { modify: string[]; create: string[] }): 
   const written = [...files.modify, ...files.create];
   return written.length > 0 && written.every(isTestPath);
 }
+
+/**
+ * Test files that, by the project's own naming, cover a given source file.
+ *
+ * Only conventional siblings, and only ever used to check against paths that actually exist in the
+ * repository — so a project with a different layout is simply never constrained by this.
+ */
+export function conventionalTestPaths(source: string): string[] {
+  const match = /^(.*?)([^/]+)\.([^./]+)$/.exec(source);
+  if (!match) return [];
+  const [, directory, name, extension] = match;
+  if (name === undefined || extension === undefined) return [];
+  const base = `${directory ?? ""}${name}`;
+  return [
+    `${base}.test.${extension}`,
+    `${base}.spec.${extension}`,
+    `${base}_test.${extension}`,
+    `${directory ?? ""}__tests__/${name}.test.${extension}`,
+    `${directory ?? ""}__tests__/${name}.${extension}`,
+  ];
+}
