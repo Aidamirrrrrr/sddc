@@ -6,7 +6,8 @@ import type { Policy } from "../policy/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import { buildTaskList } from "../tasks/pipeline";
-import type { TaskList } from "../tasks/schemas";
+import { type TaskList, taskListDraftSchema } from "../tasks/schemas";
+import { normalizeTaskList } from "../tasks/validate";
 import { type DialogueContext, initialState } from "./context";
 import { converge } from "./dialogue";
 
@@ -39,6 +40,9 @@ export async function createApprovedTaskList(
     summary: taskSummary,
     details: taskDocument,
     render: (list) => Bun.YAML.stringify(list, null, 2).trimEnd(),
+    // Waves are derived, never edited: normalizing re-derives them from whatever graph came back.
+    parse: (text) =>
+      normalizeTaskList(taskListDraftSchema.parse(Bun.YAML.parse(text)), spec.feature),
     clarificationHeading: "User task clarifications:",
     rejectionHeading: "Rejected task graph:",
   });

@@ -1,4 +1,13 @@
-import { type Copy, document, required, reviewDocument, withSpinner } from "../cli/ui";
+import { editText } from "../cli/editor";
+import {
+  type ArtifactAction,
+  type Copy,
+  document,
+  required,
+  reviewDocument,
+  warn,
+  withSpinner,
+} from "../cli/ui";
 import type { Policy } from "../policy/schemas";
 import { type DialoguePhase, type PhaseState, phaseState, saveSession } from "./session";
 
@@ -29,6 +38,11 @@ export type ConvergeOptions<T extends Clarifiable> = {
   rejectionHeading: string;
   /** Lets a phase stop on a terminal status it handles itself, such as decomposition. */
   settled?: (value: T) => boolean;
+  /**
+   * Reads an edited artifact back. Supplying it enables direct editing; a phase that cannot safely
+   * round-trip its artifact simply omits it and the action is not offered.
+   */
+  parse?: (text: string) => T;
 };
 
 /**
@@ -45,7 +59,7 @@ export async function converge<T extends Clarifiable>(options: ConvergeOptions<T
   const persist = async (): Promise<void> => saveSession(root, request, phase, state);
 
   while (true) {
-    const value = await withSpinner(options.progress, options.complete, () =>
+    let value = await withSpinner(options.progress, options.complete, () =>
       options.build(state.input),
     );
 
@@ -73,12 +87,14 @@ export async function converge<T extends Clarifiable>(options: ConvergeOptions<T
 
     if (options.settled?.(value)) return value;
 
-    const decision = await reviewDocument(
-      options.reviewPrompt,
-      options.title,
-      options.summary(value),
-      options.details(value),
-    );
+    // The review menu stays open until the user either accepts or asks for another build; editing
+    // and inspecting decisions change nothing upstream, so neither spends a revision round.
+    let decision = await review(options, value);
+    while (decision === "edit" || decision === "decisions") {
+      if (decision === "decisions") showDecisions(state.input);
+      else value = (await edit(options, value)) ?? value;
+      decision = await review(options, value);
+    }
     if (decision === "accept") return value;
 
     if (state.revision_rounds >= policy.dialogue.max_revision_rounds) {
@@ -89,6 +105,57 @@ export async function converge<T extends Clarifiable>(options: ConvergeOptions<T
     state.input += `\n\n${options.rejectionHeading}\n${options.render(value)}\n\nUser review feedback:\n${feedback}\n`;
     await persist();
   }
+}
+
+async function review<T extends Clarifiable>(
+  options: ConvergeOptions<T>,
+  value: T,
+): Promise<ArtifactAction> {
+  const action = await reviewDocument(
+    options.reviewPrompt,
+    options.title,
+    options.summary(value),
+    options.details(value),
+  );
+  // Offering an edit the phase cannot read back would lose the user's work silently.
+  if (action === "edit" && !options.parse) {
+    warn({
+      en: "This artifact cannot be edited directly",
+      ru: "Этот артефакт нельзя отредактировать напрямую",
+    });
+    return review(options, value);
+  }
+  return action;
+}
+
+/** Returns the edited artifact, or nothing when the edit was abandoned or rejected. */
+async function edit<T extends Clarifiable>(
+  options: ConvergeOptions<T>,
+  value: T,
+): Promise<T | undefined> {
+  const parse = options.parse;
+  if (!parse) return undefined;
+  try {
+    return parse(await editText(options.render(value)));
+  } catch (error) {
+    // A rejected edit leaves the previous artifact standing rather than dropping the run.
+    warn({
+      en: `Edit rejected: ${errorText(error)}`,
+      ru: `Правка отклонена: ${errorText(error)}`,
+    });
+    return undefined;
+  }
+}
+
+function showDecisions(input: string): void {
+  document(
+    { en: "Decisions so far", ru: "Принятые решения" },
+    input.trim() || "Nothing has been decided in this phase yet.",
+  );
+}
+
+function errorText(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).slice(0, 300);
 }
 
 export { phaseState };

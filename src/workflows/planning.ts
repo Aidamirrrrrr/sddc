@@ -2,7 +2,7 @@ import type { ModelClient } from "../ai/model-client";
 import { planDocument, planSummary } from "../cli/presentation";
 import type { PlanningRepositoryContext } from "../planning/pipeline";
 import { buildImplementationPlan } from "../planning/pipeline";
-import type { ImplementationPlan } from "../planning/schemas";
+import { type ImplementationPlan, implementationPlanSchema } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
@@ -43,6 +43,7 @@ export async function createApprovedPlan(
     summary: planSummary,
     details: planDocument,
     render: (plan) => Bun.YAML.stringify(plan, null, 2).trimEnd(),
+    parse: (text) => implementationPlanSchema.parse(Bun.YAML.parse(text)),
     clarificationHeading: "User planning clarifications:",
     rejectionHeading: "Rejected implementation plan:",
   });

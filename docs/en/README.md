@@ -204,6 +204,27 @@ about to change.
 before any work happens on it, and spending a model call ahead of that approval
 would defeat the mode.
 
+## Working with an artifact under review
+
+While an artifact waits for a decision, five actions are available:
+
+- **Accept** — continue to the next phase;
+- **View full document** — expand the summary;
+- **Edit directly** — open the YAML in `$EDITOR` and change it by hand;
+- **Ask for a revision** — describe what is wrong and rebuild;
+- **Decisions so far** — show everything already answered in this phase.
+
+Editing directly removes the model from a decision it was never needed for:
+describing in prose a change you could simply write is a lossy round trip. Edited
+YAML is validated against the schema; if it does not parse, the edit is rejected
+and the previous artifact stands. Task waves are re-derived rather than taken from
+the file — they are computed, never authored.
+
+Editing and inspecting decisions do not spend a revision round, because neither
+changes anything upstream.
+
+Going back to an earlier phase happens between runs, with `--recompile`.
+
 ## Artifact format
 
 Every artifact is written twice. YAML is the machine format — it is what the

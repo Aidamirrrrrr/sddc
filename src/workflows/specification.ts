@@ -5,7 +5,7 @@ import { document, success } from "../cli/ui";
 import type { Policy } from "../policy/schemas";
 import type { RequestRepositoryContext } from "../repository/request-context";
 import { buildSpec } from "../spec/pipeline";
-import type { Spec } from "../spec/schemas";
+import { type Spec, specSchema } from "../spec/schemas";
 import { writeSpec } from "../spec/storage";
 import { type DialogueContext, initialState } from "./context";
 import { converge } from "./dialogue";
@@ -41,6 +41,7 @@ export async function createApprovedSpecification(
     summary: specSummary,
     details: specDocument,
     render: formatSpec,
+    parse: (text) => specSchema.parse(Bun.YAML.parse(text)),
     clarificationHeading: "User clarifications:",
     rejectionHeading: "Rejected specification:",
   });

@@ -38,7 +38,20 @@ export type Driver = {
   text(message: string, options?: TextOptions): Promise<string>;
   /** Ends the session on an explicit user cancellation. Never returns. */
   cancel(message: string): never;
+  /**
+   * Hands the terminal to a child process and takes it back afterwards.
+   *
+   * Only the application surface needs this: it holds the screen, so spawning an editor over it
+   * would corrupt the frame. Line-oriented surfaces leave it undefined and the operation just runs.
+   */
+  suspend?<T>(operation: () => Promise<T>): Promise<T>;
 };
+
+/** Runs an operation with the terminal released, whether or not the surface needs releasing. */
+export async function withSuspendedUi<T>(operation: () => Promise<T>): Promise<T> {
+  const active = driver();
+  return active.suspend ? active.suspend(operation) : operation();
+}
 
 export type StageLabels = { progress: string; complete: string; failed: string };
 

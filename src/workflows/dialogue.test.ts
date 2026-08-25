@@ -112,6 +112,40 @@ test("repeated rejection is stopped by the revision limit", async () => {
   expect(attempt).rejects.toThrow("revised 5 times without approval");
 });
 
+test("editing and inspecting decisions do not spend a revision round", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sddc-dialogue-"));
+  process.env.EDITOR = "true"; // a no-op editor: the file comes back unchanged
+  setDriver(scriptedDriver([], ["decisions", "edit", "accept"]));
+  let builds = 0;
+
+  await converge({
+    ...options(root, async () => {
+      builds += 1;
+      return { status: "ready", questions: [] };
+    }),
+    parse: () => ({ status: "ready", questions: [] }),
+  });
+
+  // Neither action rebuilt the artifact, and neither counted against the revision limit.
+  expect(builds).toBe(1);
+  expect(phaseState(await loadSession(root, "add registration"), "tasks").revision_rounds).toBe(0);
+});
+
+test("an unreadable edit leaves the previous artifact standing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sddc-dialogue-"));
+  process.env.EDITOR = "true";
+  setDriver(scriptedDriver([], ["edit", "accept"]));
+
+  const result = await converge({
+    ...options(root, async () => ({ status: "ready", questions: [] })),
+    parse: () => {
+      throw new Error("not valid YAML");
+    },
+  });
+
+  expect(result.status).toBe("ready");
+});
+
 test("an accepted artifact is returned without touching the limits", async () => {
   const root = await mkdtemp(join(tmpdir(), "sddc-dialogue-"));
   setDriver(scriptedDriver([], ["accept"]));

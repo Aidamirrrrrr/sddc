@@ -150,12 +150,15 @@ export async function review(message: Copy): Promise<ReviewDecision> {
   ]);
 }
 
+/** What the user can do with an artifact that is waiting for approval. */
+export type ArtifactAction = "accept" | "revise" | "edit" | "decisions";
+
 export async function reviewDocument(
   message: Copy,
   title: Copy,
   summary: string,
   content: string,
-): Promise<ReviewDecision> {
+): Promise<ArtifactAction> {
   document(title, summary);
   while (true) {
     const action = await driver().select(phrase(message), [
@@ -169,9 +172,18 @@ export async function reviewDocument(
         label: phrase({ en: "View full document", ru: "Показать документ полностью" }),
       },
       {
+        value: "edit" as const,
+        label: phrase({ en: "Edit directly", ru: "Отредактировать самому" }),
+        hint: phrase({ en: "open in $EDITOR", ru: "открыть в $EDITOR" }),
+      },
+      {
         value: "revise" as const,
-        label: phrase({ en: "Revise", ru: "Исправить" }),
+        label: phrase({ en: "Ask for a revision", ru: "Попросить исправить" }),
         hint: phrase({ en: "describe what should change", ru: "описать, что нужно изменить" }),
+      },
+      {
+        value: "decisions" as const,
+        label: phrase({ en: "Decisions so far", ru: "Принятые решения" }),
       },
     ]);
     if (action === "details") {

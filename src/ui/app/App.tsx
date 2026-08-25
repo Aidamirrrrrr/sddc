@@ -1,4 +1,4 @@
-import { Box, Static, Text, useApp, useInput, useStdin } from "ink";
+import { Box, Static, type SuspendTerminal, Text, useApp, useInput, useStdin } from "ink";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { theme } from "../theme";
 import { Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
@@ -22,11 +22,24 @@ const toneGlyph: Record<Tone, string> = {
   accent: "◆",
 };
 
-export function App({ store, subtitle }: { store: Store; subtitle: string }) {
+export function App({
+  store,
+  subtitle,
+  onReady,
+}: {
+  store: Store;
+  subtitle: string;
+  /** Hands the driver capabilities that only exist inside the React tree. */
+  onReady?: (capabilities: { suspend: SuspendTerminal }) => void;
+}) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const { exit } = useApp();
+  const { exit, suspendTerminal } = useApp();
   const { isRawModeSupported } = useStdin();
   const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    onReady?.({ suspend: suspendTerminal });
+  }, [onReady, suspendTerminal]);
 
   // One timer drives every animated element, so the live frame repaints at a single steady rate.
   useEffect(() => {

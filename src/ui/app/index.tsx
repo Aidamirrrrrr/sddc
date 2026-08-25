@@ -14,7 +14,17 @@ let instance: { unmount: () => void } | undefined;
  */
 export function startApp(root = process.cwd()): Driver {
   const store = createStore();
-  instance = render(<App store={store} subtitle={basename(root)} />, { exitOnCtrlC: false });
+  let suspendTerminal: ((operation: () => Promise<unknown>) => Promise<unknown>) | undefined;
+  instance = render(
+    <App
+      store={store}
+      subtitle={basename(root)}
+      onReady={({ suspend }) => {
+        suspendTerminal = suspend;
+      }}
+    />,
+    { exitOnCtrlC: false },
+  );
 
   /** Parks a promise on the store until the rendered prompt resolves it. */
   const ask = <T,>(build: (resolve: (value: T) => void) => Pending): Promise<T> =>
@@ -96,6 +106,11 @@ export function startApp(root = process.cwd()): Driver {
       store.update((state) => ({ ...state, pending: undefined, finished: message }));
       stopApp();
       process.exit(0);
+    },
+    async suspend<T>(operation: () => Promise<T>): Promise<T> {
+      // Before the tree has mounted there is nothing holding the screen, so just run it.
+      if (!suspendTerminal) return operation();
+      return (await suspendTerminal(operation as () => Promise<unknown>)) as T;
     },
   };
 }
