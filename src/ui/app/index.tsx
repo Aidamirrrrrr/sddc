@@ -107,6 +107,7 @@ export function startApp(root = process.cwd()): Driver {
       remember(message, value);
       return value;
     },
+    offerPaths: (paths) => store.update((state) => ({ ...state, paths })),
     nextRequest() {
       return new Promise<string>((resolve) => {
         store.update((state) => ({

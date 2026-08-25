@@ -79,6 +79,8 @@ export type AppState = {
    * prose typed mid-run has nowhere to go. The presence of this resolver is what tells them apart.
    */
   awaitingRequest?: (request: string) => void;
+  /** Repository paths offered after an `@`; empty until the index has been walked. */
+  paths?: string[];
   startedAt: number;
   finished?: string;
 };

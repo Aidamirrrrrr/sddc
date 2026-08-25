@@ -58,6 +58,13 @@ export type Driver = {
    * per invocation and the caller falls back to reading its input once.
    */
   nextRequest?(): Promise<string>;
+  /**
+   * Hands the surface the repository paths it may complete after an `@`.
+   *
+   * Pushed in rather than read out, so the layer that draws never has to know how a project is
+   * walked — and so a surface with no completion simply ignores it.
+   */
+  offerPaths?(paths: string[]): void;
   /** Ends the session on an explicit user cancellation. Never returns. */
   cancel(message: string): never;
   /**

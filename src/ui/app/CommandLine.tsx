@@ -2,7 +2,15 @@ import { Box, Text } from "ink";
 import { useMemo, useState } from "react";
 import { t } from "../language";
 import { theme } from "../theme";
-import { type Command, matchCommands } from "./commands";
+import { matchCommands } from "./commands";
+import {
+  breakLine,
+  continuesLine,
+  matchPaths,
+  mentionQuery,
+  pasteAction,
+  replaceToken,
+} from "./input-text";
 import { useKeys } from "./keys";
 
 /** How many completions are offered before the list is cut. */
@@ -23,18 +31,33 @@ export function CommandLine({
   onCommand,
   onPlainText,
   busy,
+  paths = [],
 }: {
   onCommand: (input: string) => void;
   onPlainText: (input: string) => void;
   busy: boolean;
+  /** Repository paths offered after an `@`; empty until the index has been read. */
+  paths?: string[];
 }) {
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [history, setHistory] = useState<string[]>([]);
   const [, setRecall] = useState<number | undefined>(undefined);
 
-  const completions = useMemo(() => matchCommands(value), [value]);
-  const active = completions.length > 0 && value.startsWith("/");
+  const mention = mentionQuery(value);
+  const files = useMemo(
+    () => (mention === undefined ? [] : matchPaths(paths, mention)),
+    [paths, mention],
+  );
+  const completions = useMemo(
+    () => (mention === undefined ? matchCommands(value) : []),
+    [value, mention],
+  );
+  const suggestions: Suggestion[] =
+    mention === undefined
+      ? completions.map((command) => ({ label: `/${command.name}`, hint: command.summary() }))
+      : files.map((path) => ({ label: `@${path}`, hint: "" }));
+  const active = suggestions.length > 0;
 
   const submit = (text: string): void => {
     const trimmed = text.trim();
@@ -49,14 +72,21 @@ export function CommandLine({
 
   useKeys((input, key) => {
     if (key.return) {
+      // A trailing backslash is the continuation people already know from shells, and unlike
+      // shift+enter it survives every terminal.
+      if (continuesLine(value)) {
+        setValue(breakLine(value));
+        return;
+      }
       // Tab completes; enter on a half-typed name should not guess which one was meant.
-      submit(active && completions.length === 1 ? `/${completions[0]?.name} ` : value);
+      const only = suggestions.length === 1 ? suggestions[0] : undefined;
+      submit(active && only ? replaceToken(value, `${only.label} `) : value);
       return;
     }
     if (key.tab && active) {
-      const chosen = completions[Math.min(cursor, completions.length - 1)];
+      const chosen = suggestions[Math.min(cursor, suggestions.length - 1)];
       if (chosen) {
-        setValue(`/${chosen.name} `);
+        setValue(replaceToken(value, `${chosen.label} `));
         setCursor(0);
       }
       return;
@@ -77,7 +107,7 @@ export function CommandLine({
     }
     if (key.downArrow) {
       if (active) {
-        setCursor((current) => Math.min(completions.length - 1, current + 1));
+        setCursor((current) => Math.min(suggestions.length - 1, current + 1));
         return;
       }
       setRecall((current) => {
@@ -97,53 +127,75 @@ export function CommandLine({
       return;
     }
     if (input && !key.ctrl && !key.meta && !key.escape) {
-      // A paste arrives as one chunk, so a newline inside it never raises key.return.
-      const [typed = "", ...rest] = input.split(/\r|\n/);
-      if (rest.length > 0) {
-        submit(value + typed);
-        return;
-      }
-      setValue((current) => current + typed);
+      const action = pasteAction(input);
+      if (action.kind === "submit") submit(value + action.text);
+      else setValue((current) => current + action.text);
       setCursor(0);
     }
   });
 
   return (
     <Box flexDirection="column">
-      {active ? <Completions items={completions} cursor={cursor} /> : null}
-      <Box borderStyle="round" borderColor={busy ? theme.accentDim : theme.accent} paddingX={1}>
-        <Text color={theme.accent}>{"> "}</Text>
+      {active ? <Completions items={suggestions} cursor={cursor} /> : null}
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={busy ? theme.accentDim : theme.accent}
+        paddingX={1}
+      >
         {value ? (
-          <Text color={theme.text}>{value}</Text>
+          // Every line after the first is indented to the width of the marker, so a pasted block
+          // keeps its own shape instead of being re-flowed around the prompt.
+          value.split("\n").map((line, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a line *is* its position in the input
+            <Box key={index}>
+              <Text color={theme.accent}>{index === 0 ? "> " : "  "}</Text>
+              <Text color={theme.text}>{line}</Text>
+              {index === value.split("\n").length - 1 ? <Text color={theme.accent}>▏</Text> : null}
+            </Box>
+          ))
         ) : (
-          <Text color={theme.muted} dimColor>
-            {busy
-              ? t({ en: "working — /status, /stop, /help", ru: "работаю — /status, /stop, /help" })
-              : t({ en: "what should I build? · /help", ru: "что построить? · /help" })}
-          </Text>
+          <Box>
+            <Text color={theme.accent}>{"> "}</Text>
+            <Text color={theme.muted} dimColor>
+              {busy
+                ? t({
+                    en: "working — /status, /stop, /help",
+                    ru: "работаю — /status, /stop, /help",
+                  })
+                : t({
+                    en: "what should I build? · / commands · @ files · \\ newline",
+                    ru: "что построить? · / команды · @ файлы · \\ перенос",
+                  })}
+            </Text>
+            <Text color={theme.accent}>▏</Text>
+          </Box>
         )}
-        <Text color={theme.accent}>▏</Text>
       </Box>
     </Box>
   );
 }
 
-function Completions({ items, cursor }: { items: Command[]; cursor: number }) {
+/** A completion offer, whether it came from the command registry or the repository index. */
+type Suggestion = { label: string; hint: string };
+
+function Completions({ items, cursor }: { items: Suggestion[]; cursor: number }) {
   const shown = items.slice(0, VISIBLE);
+  const width = Math.min(32, Math.max(...items.map((item) => item.label.length)));
   return (
     <Box flexDirection="column">
-      {shown.map((command, index) => {
+      {shown.map((item, index) => {
         const selected = index === Math.min(cursor, items.length - 1);
         return (
-          <Box key={command.name}>
+          <Box key={item.label}>
             <Text color={selected ? theme.accent : theme.surfaceRaised}>
               {selected ? "  ▌ " : "    "}
             </Text>
             <Text color={selected ? theme.accent : theme.text} bold={selected}>
-              {`/${command.name}`.padEnd(12)}
+              {item.hint ? item.label.padEnd(width + 1) : item.label}
             </Text>
             <Text color={theme.muted} dimColor>
-              {command.summary()}
+              {item.hint}
             </Text>
           </Box>
         );

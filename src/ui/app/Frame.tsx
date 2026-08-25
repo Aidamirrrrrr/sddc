@@ -122,34 +122,56 @@ export function StageIndicator({
   elapsedMs,
   calls,
   budget,
+  tip,
 }: {
   label: string;
   tick: number;
   elapsedMs: number;
   calls: number;
   budget?: { used: number; limit: number };
+  /** Shown only once a wait is long enough to be worth reading through. */
+  tip?: string;
 }) {
   const parts = [clock(elapsedMs), t({ en: `${calls} calls`, ru: `вызовов: ${calls}` })];
   if (budget) parts.push(`${budget.used}/${budget.limit}`);
   parts.push(t({ en: "esc to interrupt", ru: "esc — прервать" }));
   const counters = `(${parts.join(" · ")})`;
   return (
-    <Box marginBottom={1}>
-      <Box marginLeft={2} marginRight={2}>
-        <Text color={theme.accent}>{FRAMES[tick % FRAMES.length]}</Text>
-      </Box>
-      {/* The label yields, not the counters: a stage name that wraps pushes the numbers off the
+    <Box flexDirection="column" marginBottom={1}>
+      <Box>
+        <Box marginLeft={2} marginRight={2}>
+          <Text color={theme.accent}>{FRAMES[tick % FRAMES.length]}</Text>
+        </Box>
+        {/* The label yields, not the counters: a stage name that wraps pushes the numbers off the
           line and leaves the reader with neither half. */}
-      <Box flexGrow={1} flexShrink={1} minWidth={0}>
-        <Text color={theme.text} wrap="truncate-end">
-          {label}
-        </Text>
+        <Box flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text color={theme.text} wrap="truncate-end">
+            {label}
+          </Text>
+        </Box>
+        <Box marginLeft={2} flexShrink={0}>
+          <Text color={theme.muted} dimColor wrap="truncate-end">
+            {counters}
+          </Text>
+        </Box>
       </Box>
-      <Box marginLeft={2} flexShrink={0}>
-        <Text color={theme.muted} dimColor wrap="truncate-end">
-          {counters}
-        </Text>
-      </Box>
+      {tip ? <StageTip tip={tip} /> : null}
+    </Box>
+  );
+}
+
+/**
+ * A wait long enough to read something in.
+ *
+ * Held back for the first few seconds so a quick stage does not flash a sentence nobody had time to
+ * finish, and so the tips land on the waits that actually need explaining.
+ */
+export function StageTip({ tip }: { tip: string }) {
+  return (
+    <Box marginBottom={1} marginLeft={5}>
+      <Text color={theme.muted} dimColor wrap="truncate-end">
+        {tip}
+      </Text>
     </Box>
   );
 }

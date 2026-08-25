@@ -35,6 +35,7 @@ import { preparePlanningContext } from "../planning/pipeline";
 import { writeImplementationPlan } from "../planning/storage";
 import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
+import { indexRepository } from "../repository/scan";
 import { writeTaskList } from "../tasks/storage";
 import { driver } from "../ui/driver";
 import { detectTheme, setTheme } from "../ui/theme";
@@ -123,6 +124,12 @@ export async function runCli(arguments_: string[]): Promise<void> {
       ],
     });
   }
+
+  // Walked in the background: the prompt is usable immediately and gains `@` completion when the
+  // index arrives. A project too large or unreadable to walk simply never offers them.
+  void indexRepository(process.cwd())
+    .then((files) => driver().offerPaths?.(files.map((file) => file.path)))
+    .catch(() => undefined);
 
   if (cli.analyze) {
     return runAnalyze(process.cwd(), cli.input.join(" ").trim());

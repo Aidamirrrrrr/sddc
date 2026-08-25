@@ -5,6 +5,7 @@ import { requestInterrupt } from "../../ai/interrupt";
 import { sessionUsage } from "../../ai/usage";
 import { t } from "../language";
 import { theme } from "../theme";
+import { nextTip } from "../tips";
 import { CommandLine } from "./CommandLine";
 import { runCommand } from "./commands";
 import { Banner, Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
@@ -12,6 +13,10 @@ import { useKeys } from "./keys";
 import { Panel, PanelBody } from "./Panel";
 import { ConfirmPrompt, MultiSelectPrompt, SelectPrompt, TextPrompt } from "./prompts";
 import type { AppState, Block, Store, Tone } from "./store";
+
+/** How long a wait has to last before it is worth putting something to read in it. */
+const TIP_AFTER_MS = 6_000;
+const TIP_EVERY_MS = 14_000;
 
 const toneColor: Record<Tone, string> = {
   info: theme.text,
@@ -46,6 +51,7 @@ export function App({
   const usage = sessionUsage();
   const budget = budgetState();
   const [tick, setTick] = useState(0);
+  const [tip, setTip] = useState("");
 
   useEffect(() => {
     onReady?.({ suspend: suspendTerminal });
@@ -56,6 +62,21 @@ export function App({
     if (!state.stage) return;
     const timer = setInterval(() => setTick((current) => current + 1), 90);
     return () => clearInterval(timer);
+  }, [state.stage]);
+
+  // A tip appears once a wait is long enough to read one in, and changes every so often after that.
+  // Held back at the start so a quick stage does not flash a sentence nobody had time to finish.
+  useEffect(() => {
+    if (!state.stage) {
+      setTip("");
+      return;
+    }
+    const appear = setTimeout(() => setTip(nextTip()), TIP_AFTER_MS);
+    const rotate = setInterval(() => setTip(nextTip()), TIP_EVERY_MS);
+    return () => {
+      clearTimeout(appear);
+      clearInterval(rotate);
+    };
   }, [state.stage]);
 
   useKeys((input, key) => {
@@ -94,12 +115,14 @@ export function App({
               elapsedMs={Date.now() - (state.stageStartedAt ?? state.startedAt)}
               calls={usage.calls}
               budget={budget}
+              {...(tip ? { tip } : {})}
             />
           ) : null}
           {state.pending ? (
             <PendingPrompt store={store} />
           ) : (
             <CommandLine
+              paths={state.paths ?? []}
               busy={Boolean(state.stage) || !state.awaitingRequest}
               onCommand={(input) => handleCommand(input, state, store, exit)}
               onPlainText={(input) => {
