@@ -74,11 +74,38 @@ export async function initializeUserConfig(): Promise<{ path: string; created: b
       "AI_INPUT_USD_PER_MILLION=",
       "AI_MAX_OUTPUT_TOKENS=",
       "SDDC_LANG=",
+      "SDDC_THEME=",
       "",
     ].join("\n"),
   );
   await chmod(path, 0o600);
   return { path, created: true };
+}
+
+/**
+ * Writes one setting back to the user's configuration.
+ *
+ * A preference that is asked for and then forgotten is not a preference — the language prompt
+ * appeared on every single start because nothing ever recorded the answer. Rewrites the one line
+ * and leaves every other byte alone, so a hand-edited file survives being written to.
+ */
+export async function saveUserSetting(name: string, value: string): Promise<void> {
+  const path = userConfigPath();
+  const file = Bun.file(path);
+  const existing = (await file.exists()) ? await file.text() : "";
+  const line = `${name}=${value}`;
+  const lines = existing.split(/\r?\n/);
+  const index = lines.findIndex((item) => item.trim().startsWith(`${name}=`));
+  if (index >= 0) lines[index] = line;
+  else {
+    // Keep the trailing blank line at the end rather than in the middle of the file.
+    const insertAt = lines.at(-1)?.trim() === "" ? lines.length - 1 : lines.length;
+    lines.splice(insertAt, 0, line);
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await Bun.write(path, lines.join("\n"));
+  await chmod(path, 0o600);
+  Bun.env[name] = value;
 }
 
 export function loadInputPrice(): number | undefined {

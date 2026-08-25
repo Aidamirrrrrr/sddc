@@ -51,6 +51,13 @@ export type Driver = {
   multiselect<T extends string>(message: string, choices: Choice<T>[], initial: T[]): Promise<T[]>;
   confirm(message: string, initial: boolean): Promise<boolean>;
   text(message: string, options?: TextOptions): Promise<string>;
+  /**
+   * Waits at the prompt for the next thing to work on.
+   *
+   * Only a surface with a prompt that outlives a run can offer this; the others answer one request
+   * per invocation and the caller falls back to reading its input once.
+   */
+  nextRequest?(): Promise<string>;
   /** Ends the session on an explicit user cancellation. Never returns. */
   cancel(message: string): never;
   /**

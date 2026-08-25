@@ -72,6 +72,13 @@ export type AppState = {
   /** When the current stage began, so the frame can say how long *this* wait has lasted. */
   stageStartedAt?: number;
   pending?: Pending;
+  /**
+   * Waiting for the next thing to work on.
+   *
+   * Set while the session is idle at the prompt: plain prose typed then is a request, and the same
+   * prose typed mid-run has nowhere to go. The presence of this resolver is what tells them apart.
+   */
+  awaitingRequest?: (request: string) => void;
   startedAt: number;
   finished?: string;
 };

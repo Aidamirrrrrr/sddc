@@ -1,5 +1,6 @@
 import { Box, Text } from "ink";
 import { useMemo, useState } from "react";
+import { t } from "../language";
 import { theme } from "../theme";
 import { type Command, matchCommands } from "./commands";
 import { useKeys } from "./keys";
@@ -116,7 +117,9 @@ export function CommandLine({
           <Text color={theme.text}>{value}</Text>
         ) : (
           <Text color={theme.muted} dimColor>
-            {busy ? "working — /status, /stop, /help" : "/help for commands"}
+            {busy
+              ? t({ en: "working — /status, /stop, /help", ru: "работаю — /status, /stop, /help" })
+              : t({ en: "what should I build? · /help", ru: "что построить? · /help" })}
           </Text>
         )}
         <Text color={theme.accent}>▏</Text>
@@ -140,7 +143,7 @@ function Completions({ items, cursor }: { items: Command[]; cursor: number }) {
               {`/${command.name}`.padEnd(12)}
             </Text>
             <Text color={theme.muted} dimColor>
-              {command.summary}
+              {command.summary()}
             </Text>
           </Box>
         );

@@ -3,6 +3,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { budgetState } from "../../ai/budget";
 import { requestInterrupt } from "../../ai/interrupt";
 import { sessionUsage } from "../../ai/usage";
+import { t } from "../language";
 import { theme } from "../theme";
 import { CommandLine } from "./CommandLine";
 import { runCommand } from "./commands";
@@ -99,15 +100,22 @@ export function App({
             <PendingPrompt store={store} />
           ) : (
             <CommandLine
-              busy={Boolean(state.stage)}
+              busy={Boolean(state.stage) || !state.awaitingRequest}
               onCommand={(input) => handleCommand(input, state, store, exit)}
-              onPlainText={() =>
+              onPlainText={(input) => {
+                if (state.awaitingRequest) {
+                  state.awaitingRequest(input);
+                  return;
+                }
                 store.push({
                   kind: "line",
                   tone: "warn",
-                  text: "This run is driven by its phases; type /help for what you can do here.",
-                })
-              }
+                  text: t({
+                    en: "Busy. Type /status to see what, or /stop to interrupt it.",
+                    ru: "Занят. /status — чем именно, /stop — прервать.",
+                  }),
+                });
+              }}
             />
           )}
           {state.pending ? null : (

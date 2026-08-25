@@ -1,9 +1,11 @@
 import { basename } from "node:path";
 import { budgetState, onBudgetWarning, setBudget } from "../ai/budget";
+import { InterruptedError, resetInterrupt } from "../ai/interrupt";
 import { ModelClient } from "../ai/model-client";
-import { formatUsage, sessionUsage } from "../ai/usage";
+import { formatUsage, resetUsage, sessionUsage } from "../ai/usage";
 import { writeQuickstart } from "../artifacts/storage";
 import { parseCli } from "../cli/args";
+import { presentError } from "../cli/errors";
 import { helpText } from "../cli/help";
 import { readInput } from "../cli/input";
 import {
@@ -12,6 +14,7 @@ import {
   chooseUiLanguage,
   finish,
   info,
+  phrase,
   required,
   setOutputMode,
   setUiLanguage,
@@ -33,6 +36,7 @@ import { writeImplementationPlan } from "../planning/storage";
 import { loadConstitution } from "../policy/constitution";
 import { loadPolicy } from "../policy/load";
 import { writeTaskList } from "../tasks/storage";
+import { driver } from "../ui/driver";
 import { detectTheme, setTheme } from "../ui/theme";
 import { reportConsistency, runAnalyze } from "../workflows/analyze";
 import type { DialogueContext } from "../workflows/context";
@@ -107,8 +111,15 @@ export async function runCli(arguments_: string[]): Promise<void> {
       project: basename(process.cwd()),
       model: modelConfig.model,
       facts: [
-        `budget   ${cli.maxCalls ?? runPolicy.budget.max_model_calls} model calls`,
-        `rules    ${runPolicy.changes.require_test_before_implementation ? "test-first enforced" : "test-first off"}`,
+        phrase({
+          en: `budget   ${cli.maxCalls ?? runPolicy.budget.max_model_calls} model calls`,
+          ru: `бюджет   ${cli.maxCalls ?? runPolicy.budget.max_model_calls} вызовов модели`,
+        }),
+        phrase(
+          runPolicy.changes.require_test_before_implementation
+            ? { en: "rules    test-first enforced", ru: "правила  сначала тест" }
+            : { en: "rules    test-first off", ru: "правила  test-first выключен" },
+        ),
       ],
     });
   }
@@ -138,114 +149,151 @@ export async function runCli(arguments_: string[]): Promise<void> {
     );
   }
 
-  let request = await readInput(cli.input, "Task or question / Задача или вопрос", {
-    noInput: cli.noInput,
-  });
-  let intent = await classifyRequest(client, request);
-  info(
-    intent.intent === "inquiry"
-      ? { en: "Mode: read-only repository question", ru: "Режим: read-only вопрос о проекте" }
-      : intent.intent === "change"
-        ? { en: "Mode: controlled project change", ru: "Режим: контролируемое изменение проекта" }
-        : { en: "The request needs clarification", ru: "Запрос нужно уточнить" },
-  );
-  while (intent.intent === "unclear") {
-    info({ en: intent.question, ru: intent.question });
-    if (!interactive) return;
-    request += `\n\nUser clarification:\n${await required({ en: "Your intent", ru: "Ваше намерение" })}`;
-    intent = await classifyRequest(client, request);
-  }
-  if (intent.intent === "inquiry") {
-    if (!interactive) {
-      throw new Error(
-        "Repository inquiries require context approval. Run interactively without --no-input.",
-      );
+  // One request, start to finish. Extracted so the surface that can wait at a prompt may ask for
+  // another one afterwards instead of the process being the unit of work.
+  async function handleRequest(initial: string): Promise<void> {
+    let request = initial;
+    let intent = await classifyRequest(client, request);
+    info(
+      intent.intent === "inquiry"
+        ? { en: "Mode: read-only repository question", ru: "Режим: read-only вопрос о проекте" }
+        : intent.intent === "change"
+          ? { en: "Mode: controlled project change", ru: "Режим: контролируемое изменение проекта" }
+          : { en: "The request needs clarification", ru: "Запрос нужно уточнить" },
+    );
+    while (intent.intent === "unclear") {
+      info({ en: intent.question, ru: intent.question });
+      if (!interactive) return;
+      request += `\n\nUser clarification:\n${await required({ en: "Your intent", ru: "Ваше намерение" })}`;
+      intent = await classifyRequest(client, request);
     }
-    await runRepositoryInquiry(client, request, intent.language, process.cwd());
-    return;
-  }
-  const root = process.cwd();
-  const policy = runPolicy;
-  const session = await loadSession(root, request);
-  if (interactive && hasRecordedAnswers(session)) {
-    info({
-      en: "Resuming with the answers recorded for this request",
-      ru: "Продолжаю с ответами, записанными для этого запроса",
+    if (intent.intent === "inquiry") {
+      if (!interactive) {
+        throw new Error(
+          "Repository inquiries require context approval. Run interactively without --no-input.",
+        );
+      }
+      await runRepositoryInquiry(client, request, intent.language, process.cwd());
+      return;
+    }
+    const root = process.cwd();
+    const policy = runPolicy;
+    const session = await loadSession(root, request);
+    if (interactive && hasRecordedAnswers(session)) {
+      info({
+        en: "Resuming with the answers recorded for this request",
+        ru: "Продолжаю с ответами, записанными для этого запроса",
+      });
+    }
+    const context: DialogueContext = { root, request, session };
+
+    step(1, 5, { en: "Choose source access", ru: "Выбор доступа к коду" });
+    const requestContext = interactive
+      ? await createRequestContext(client, request, root)
+      : undefined;
+    step(2, 5, { en: "Agree on requirements", ru: "Согласование требований" });
+    // Loaded before the first phase that could contradict it, not just before planning.
+    const constitution = await loadConstitution(root);
+    const spec = await createApprovedSpecification(
+      client,
+      request,
+      requestContext,
+      interactive,
+      policy,
+      context,
+      constitution,
+    );
+    if (spec?.status !== "ready") return;
+
+    step(3, 5, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
+    const discovery = await createApprovedDiscovery(client, spec, root, requestContext);
+    const repository = await preparePlanningContext(root, discovery);
+    const plan = await createApprovedPlan(
+      client,
+      spec,
+      discovery,
+      policy,
+      repository,
+      constitution,
+      context,
+    );
+    const planPath = await writeImplementationPlan(plan);
+    await recordPlanProvenance(root, spec.feature);
+    success({ en: `Technical plan saved to ${planPath}`, ru: `План сохранён: ${planPath}` });
+
+    step(4, 5, { en: "Derive the task graph", ru: "Граф задач" });
+    const tasks = await createApprovedTaskList(
+      client,
+      spec,
+      plan,
+      discovery,
+      policy,
+      repository,
+      constitution,
+      context,
+    );
+    const tasksPath = await writeTaskList(tasks, root);
+    await recordTaskProvenance(root, spec.feature);
+    await writeQuickstart(root, spec, tasks);
+    success({ en: `Task graph saved to ${tasksPath}`, ru: `Граф задач сохранён: ${tasksPath}` });
+    await persistGovernance(root, spec, discovery, plan, tasks, policy);
+    // The artifacts record what was decided; only the session holds the user's own words. Read them
+    // out before the conversation is cleared, so the implementation phase still has them.
+    const clarifications = userAnswers(await loadSession(root, request));
+    await clearSession(root);
+    // SDD's analyze step: the artifacts are accepted, so this is the last moment they can be compared
+    // with each other before anything is built from them — a dry run wants it most of all.
+    await reportConsistency(root, spec.feature);
+    if (cli.dryRun) {
+      reportUsage();
+      finish({
+        en: "Dry run complete; no source files were changed",
+        ru: "Пробный запуск завершён; исходные файлы не изменены",
+      });
+      return;
+    }
+    step(5, 5, { en: "Controlled implementation", ru: "Контролируемая реализация" });
+    await runApprovedExecution(client, root, spec, plan, tasks, policy, {
+      constitution,
+      clarifications,
     });
-  }
-  const context: DialogueContext = { root, request, session };
-
-  step(1, 5, { en: "Choose source access", ru: "Выбор доступа к коду" });
-  const requestContext = interactive
-    ? await createRequestContext(client, request, root)
-    : undefined;
-  step(2, 5, { en: "Agree on requirements", ru: "Согласование требований" });
-  // Loaded before the first phase that could contradict it, not just before planning.
-  const constitution = await loadConstitution(root);
-  const spec = await createApprovedSpecification(
-    client,
-    request,
-    requestContext,
-    interactive,
-    policy,
-    context,
-    constitution,
-  );
-  if (spec?.status !== "ready") return;
-
-  step(3, 5, { en: "Map the project and plan the work", ru: "Карта проекта и план работ" });
-  const discovery = await createApprovedDiscovery(client, spec, root, requestContext);
-  const repository = await preparePlanningContext(root, discovery);
-  const plan = await createApprovedPlan(
-    client,
-    spec,
-    discovery,
-    policy,
-    repository,
-    constitution,
-    context,
-  );
-  const planPath = await writeImplementationPlan(plan);
-  await recordPlanProvenance(root, spec.feature);
-  success({ en: `Technical plan saved to ${planPath}`, ru: `План сохранён: ${planPath}` });
-
-  step(4, 5, { en: "Derive the task graph", ru: "Граф задач" });
-  const tasks = await createApprovedTaskList(
-    client,
-    spec,
-    plan,
-    discovery,
-    policy,
-    repository,
-    constitution,
-    context,
-  );
-  const tasksPath = await writeTaskList(tasks, root);
-  await recordTaskProvenance(root, spec.feature);
-  await writeQuickstart(root, spec, tasks);
-  success({ en: `Task graph saved to ${tasksPath}`, ru: `Граф задач сохранён: ${tasksPath}` });
-  await persistGovernance(root, spec, discovery, plan, tasks, policy);
-  // The artifacts record what was decided; only the session holds the user's own words. Read them
-  // out before the conversation is cleared, so the implementation phase still has them.
-  const clarifications = userAnswers(await loadSession(root, request));
-  await clearSession(root);
-  // SDD's analyze step: the artifacts are accepted, so this is the last moment they can be compared
-  // with each other before anything is built from them — a dry run wants it most of all.
-  await reportConsistency(root, spec.feature);
-  if (cli.dryRun) {
     reportUsage();
-    finish({
-      en: "Dry run complete; no source files were changed",
-      ru: "Пробный запуск завершён; исходные файлы не изменены",
-    });
+  }
+
+  const prompt = driver().nextRequest?.bind(driver());
+  if (!prompt) {
+    await handleRequest(
+      await readInput(cli.input, "Task or question / Задача или вопрос", {
+        noInput: cli.noInput,
+      }),
+    );
     return;
   }
-  step(5, 5, { en: "Controlled implementation", ru: "Контролируемая реализация" });
-  await runApprovedExecution(client, root, spec, plan, tasks, policy, {
-    constitution,
-    clarifications,
-  });
-  reportUsage();
+
+  // The prompt outlives a run here, so the session is the unit rather than the process: finish a
+  // feature and the line comes back asking for the next one.
+  let first = cli.input.join(" ").trim();
+  while (true) {
+    const request = first || (await prompt());
+    first = "";
+    // Each feature gets its own ceiling, its own counters and its own clean interrupt. Carrying any
+    // of them across would make the second request answer for the first one's spending — and would
+    // print a closing line whose two halves counted different things.
+    setBudget(cli.maxCalls ?? runPolicy.budget.max_model_calls);
+    resetUsage();
+    resetInterrupt();
+    try {
+      await handleRequest(request);
+    } catch (error) {
+      if (error instanceof InterruptedError) {
+        warn({ en: "Stopped.", ru: "Остановлено." });
+        continue;
+      }
+      const { message, hint } = presentError(error);
+      warn({ en: message, ru: message });
+      if (hint) info({ en: hint, ru: hint });
+    }
+  }
 }
 
 /** Closes the run with what it cost, including how much of the input the provider served from cache. */
@@ -254,7 +302,12 @@ function reportUsage(): void {
   if (usage.calls === 0) return;
   const budget = budgetState();
   // Reported every run, not only when it bites: a share the user watches is a share they can size.
-  const share = budget ? ` · ${budget.used} of ${budget.limit} call budget` : "";
+  const share = budget
+    ? phrase({
+        en: ` · ${budget.used} of ${budget.limit} call budget`,
+        ru: ` · ${budget.used} из ${budget.limit} бюджета вызовов`,
+      })
+    : "";
   const summary = `${formatUsage(usage, loadInputPrice())}${share}`;
   info({ en: summary, ru: summary });
 }

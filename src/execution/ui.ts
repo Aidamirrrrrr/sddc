@@ -251,7 +251,9 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
           ru: `${result.task_id} выполнена`,
         }),
         [
-          ...result.changed_files.map((path) => `wrote ${path}`),
+          ...result.changed_files.map((path) =>
+            phrase({ en: `wrote ${path}`, ru: `записан ${path}` }),
+          ),
           ...result.verification.map(
             (item) => `${item.exit_code === 0 ? "✓" : "✗"} ${item.program} ${item.args.join(" ")}`,
           ),

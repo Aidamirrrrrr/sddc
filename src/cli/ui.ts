@@ -1,14 +1,15 @@
+import { saveUserSetting } from "../config/env";
 import { startApp, stopApp } from "../ui/app";
 import { createClackDriver, paint } from "../ui/clack";
 import { type Choice, driver, setDriver, type TextOptions } from "../ui/driver";
+import { type Copy, setLanguage, t } from "../ui/language";
 import { createStreamDriver } from "../ui/stream";
 import { theme } from "../ui/theme";
 import type { ReviewDecision } from "./approval";
 
-export type Copy = { en: string; ru: string };
+export type { Copy } from "../ui/language";
 export type OutputMode = "app" | "interactive" | "plain" | "json";
 
-let russian = false;
 let outputMode: OutputMode = "interactive";
 // Keeps the module usable before the CLI has resolved its output mode, matching the previous default.
 setDriver(createClackDriver());
@@ -31,13 +32,13 @@ export function currentOutputMode(): OutputMode {
   return outputMode;
 }
 
-export function setUiLanguage(language: string): void {
-  russian = /^(ru|russian|рус)/i.test(language.trim());
+export function setUiLanguage(value: string): void {
+  setLanguage(value);
 }
 
-export async function chooseUiLanguage(language?: "en" | "ru"): Promise<void> {
-  if (language) {
-    setUiLanguage(language);
+export async function chooseUiLanguage(requested?: "en" | "ru"): Promise<void> {
+  if (requested) {
+    setUiLanguage(requested);
     return;
   }
   // A configured preference is an answer already given; asking again every run is not a choice.
@@ -46,20 +47,22 @@ export async function chooseUiLanguage(language?: "en" | "ru"): Promise<void> {
     setUiLanguage(configured);
     return;
   }
-  setUiLanguage(
-    await driver().select(
-      "Choose language / Выберите язык",
-      [
-        { value: "ru", label: "Русский" },
-        { value: "en", label: "English" },
-      ],
-      /^ru/i.test(process.env.LANG ?? "") ? "ru" : "en",
-    ),
+  const chosen = await driver().select(
+    "Choose language / Выберите язык",
+    [
+      { value: "ru", label: "Русский" },
+      { value: "en", label: "English" },
+    ],
+    /^ru/i.test(process.env.LANG ?? "") ? "ru" : "en",
   );
+  setUiLanguage(chosen);
+  // Recorded, so this is asked once rather than at the top of every session. A configuration that
+  // cannot be written to is not a reason to refuse the run — it only means asking again next time.
+  await saveUserSetting("SDDC_LANG", chosen).catch(() => undefined);
 }
 
 export function phrase(copy: Copy): string {
-  return russian ? copy.ru : copy.en;
+  return t(copy);
 }
 
 export function accent(value: string): string {

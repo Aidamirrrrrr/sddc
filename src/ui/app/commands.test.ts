@@ -1,11 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { isInterrupted, resetInterrupt } from "../../ai/interrupt";
+import { language, setLanguage } from "../language";
 import { currentTheme, setTheme } from "../theme";
 import { commands, isCommand, matchCommands, runCommand } from "./commands";
 import type { AppState } from "./store";
 
 afterEach(() => {
   setTheme("dark");
+  setLanguage("en");
   resetInterrupt();
 });
 
@@ -88,4 +90,32 @@ test("help lists every command, including itself", () => {
 
   if (outcome.kind !== "panel") throw new Error("expected a panel");
   for (const command of commands) expect(outcome.body).toContain(`/${command.name}`);
+});
+
+test("every command describes itself in the reader's language", () => {
+  setLanguage("ru");
+  const russian = commands.map((command) => command.summary());
+  setLanguage("en");
+  const english = commands.map((command) => command.summary());
+
+  // Half a surface in one language and half in the other is exactly what this guards against.
+  for (const summary of russian) expect(summary).toMatch(/[А-Яа-яЁё]/);
+  for (const summary of english) expect(summary).not.toMatch(/[А-Яа-яЁё]/);
+});
+
+test("the settings panel names what is set and how to change it", () => {
+  setLanguage("en");
+  const outcome = runCommand("/settings", { state: state() });
+
+  if (outcome.kind !== "panel") throw new Error("expected a panel");
+  expect(outcome.body).toContain("/lang en|ru");
+  expect(outcome.body).toContain("/theme dark|light|ansi");
+});
+
+test("lang switches the interface and refuses anything else", () => {
+  expect(runCommand("/lang ru", { state: state() })).toMatchObject({ tone: "success" });
+  expect(language()).toBe("ru");
+
+  expect(runCommand("/lang klingon", { state: state() })).toMatchObject({ tone: "warn" });
+  expect(language()).toBe("ru");
 });

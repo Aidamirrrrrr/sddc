@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import { useMemo, useState } from "react";
 import type { Choice, TextOptions } from "../driver";
+import { t } from "../language";
 import { theme } from "../theme";
 import { useKeys } from "./keys";
 
@@ -160,10 +161,17 @@ export function SelectPrompt({
       })}
       {choices.length > WINDOW ? (
         <Text color={theme.muted} dimColor>
-          {`    ${cursor + 1} of ${choices.length}`}
+          {t({
+            en: `    ${cursor + 1} of ${choices.length}`,
+            ru: `    ${cursor + 1} из ${choices.length}`,
+          })}
         </Text>
       ) : null}
-      <Hint>{numbered ? "1-9 choose · ↑↓ move · enter select" : "↑↓ move · enter select"}</Hint>
+      <Hint>
+        {numbered
+          ? t({ en: "1-9 choose · ↑↓ move · enter select", ru: "1-9 выбрать · ↑↓ листать · enter" })
+          : t({ en: "↑↓ move · enter select", ru: "↑↓ листать · enter выбрать" })}
+      </Hint>
     </Box>
   );
 }
@@ -197,7 +205,9 @@ export function ConfirmPrompt({
           {value ? "    2. No" : "  ▌ 2. No"}
         </Text>
       </Box>
-      <Hint>1/2 · y/n · ←→ switch · enter confirm</Hint>
+      <Hint>
+        {t({ en: "1/2 · y/n · ←→ switch · enter confirm", ru: "1/2 · y/n · ←→ · enter" })}
+      </Hint>
     </Box>
   );
 }
@@ -253,10 +263,13 @@ export function MultiSelectPrompt({
     <Box flexDirection="column">
       <Question message={message} />
       <Box marginBottom={1}>
-        <Text color={theme.muted}>{"  filter "}</Text>
+        <Text color={theme.muted}>{t({ en: "  filter ", ru: "  фильтр " })}</Text>
         <Text color={theme.text}>{query || "…"}</Text>
         <Text color={theme.muted} dimColor>
-          {`   ${selected.size} selected of ${choices.length}`}
+          {t({
+            en: `   ${selected.size} selected of ${choices.length}`,
+            ru: `   выбрано ${selected.size} из ${choices.length}`,
+          })}
         </Text>
       </Box>
       {window.map((choice) => {
@@ -280,7 +293,12 @@ export function MultiSelectPrompt({
           </Box>
         );
       })}
-      <Hint>type to filter · space toggle · ↑↓ move · enter confirm</Hint>
+      <Hint>
+        {t({
+          en: "type to filter · space toggle · ↑↓ move · enter confirm",
+          ru: "печатайте для фильтра · пробел — отметить · ↑↓ · enter",
+        })}
+      </Hint>
     </Box>
   );
 }
@@ -346,7 +364,7 @@ export function TextPrompt({
           <Text color={theme.danger}>{`  ${error}`}</Text>
         </Box>
       ) : (
-        <Hint>enter to submit</Hint>
+        <Hint>{t({ en: "enter to submit", ru: "enter — отправить" })}</Hint>
       )}
     </Box>
   );

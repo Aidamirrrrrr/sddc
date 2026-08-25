@@ -6,6 +6,7 @@ import {
   initializeUserConfig,
   loadMaxOutputTokens,
   loadUserEnvironment,
+  saveUserSetting,
   userConfigPath,
 } from "./env";
 
@@ -77,5 +78,38 @@ test("the completion cap can be removed deliberately", () => {
   } finally {
     if (previous === undefined) delete Bun.env.AI_MAX_OUTPUT_TOKENS;
     else Bun.env.AI_MAX_OUTPUT_TOKENS = previous;
+  }
+});
+
+test("a setting is written once and then found on the next run", async () => {
+  const home = await mkdtemp(join(tmpdir(), "sddc-settings-"));
+  const previous = Bun.env.XDG_CONFIG_HOME;
+  Bun.env.XDG_CONFIG_HOME = home;
+  try {
+    await writeFile(userConfigPath(), "AI_API_TOKEN=secret\nAI_MODEL=some-model\n", {
+      mode: 0o600,
+      flag: "w",
+    }).catch(async () => {
+      await initializeUserConfig();
+      await writeFile(userConfigPath(), "AI_API_TOKEN=secret\nAI_MODEL=some-model\n");
+    });
+
+    await saveUserSetting("SDDC_LANG", "ru");
+    const written = await readFile(userConfigPath(), "utf8");
+
+    // The one line changes and every other byte survives, so a hand-edited file is not rewritten.
+    expect(written).toContain("SDDC_LANG=ru");
+    expect(written).toContain("AI_API_TOKEN=secret");
+    expect(written).toContain("AI_MODEL=some-model");
+
+    await saveUserSetting("SDDC_LANG", "en");
+    const updated = await readFile(userConfigPath(), "utf8");
+    expect(updated).toContain("SDDC_LANG=en");
+    expect(updated).not.toContain("SDDC_LANG=ru");
+    // And the process sees it immediately, not only on the next start.
+    expect(Bun.env.SDDC_LANG).toBe("en");
+  } finally {
+    if (previous === undefined) delete Bun.env.XDG_CONFIG_HOME;
+    else Bun.env.XDG_CONFIG_HOME = previous;
   }
 });

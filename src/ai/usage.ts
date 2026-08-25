@@ -1,3 +1,5 @@
+import { t } from "../ui/language";
+
 /**
  * Running token totals for one session.
  *
@@ -44,18 +46,31 @@ export function cacheHitRate(usage: Usage): number | undefined {
 export function formatUsage(usage: Usage, inputUsdPerMillion?: number): string {
   const rate = cacheHitRate(usage);
   const parts = [
-    `${usage.calls} model calls`,
-    `${usage.inputTokens.toLocaleString()} in`,
-    `${usage.outputTokens.toLocaleString()} out`,
+    t({ en: `${usage.calls} model calls`, ru: `вызовов модели: ${usage.calls}` }),
+    t({
+      en: `${usage.inputTokens.toLocaleString()} in`,
+      ru: `вход ${usage.inputTokens.toLocaleString()}`,
+    }),
+    t({
+      en: `${usage.outputTokens.toLocaleString()} out`,
+      ru: `выход ${usage.outputTokens.toLocaleString()}`,
+    }),
   ];
   if (rate !== undefined && usage.cachedInputTokens > 0) {
-    parts.push(`${Math.round(rate * 100)}% of input served from cache`);
+    parts.push(
+      t({
+        en: `${Math.round(rate * 100)}% of input served from cache`,
+        ru: `${Math.round(rate * 100)}% входа из кэша`,
+      }),
+    );
   }
   if (inputUsdPerMillion !== undefined) {
     // Cached input is billed at a discount that varies by provider, so bill it as full price here
     // and let the reported cache share explain why the invoice is lower.
     const cost = (usage.inputTokens / 1_000_000) * inputUsdPerMillion;
-    parts.push(`~$${cost.toFixed(4)} uncached input`);
+    parts.push(
+      t({ en: `~$${cost.toFixed(4)} uncached input`, ru: `~$${cost.toFixed(4)} за вход без кэша` }),
+    );
   }
   return parts.join(" · ");
 }

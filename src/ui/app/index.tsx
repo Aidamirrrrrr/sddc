@@ -107,6 +107,22 @@ export function startApp(root = process.cwd()): Driver {
       remember(message, value);
       return value;
     },
+    nextRequest() {
+      return new Promise<string>((resolve) => {
+        store.update((state) => ({
+          ...state,
+          // A finished run leaves its banner up; arriving back at the prompt clears it so the next
+          // request does not read as a continuation of the last one's ending.
+          finished: undefined,
+          stage: undefined,
+          awaitingRequest: (request) => {
+            store.update((current) => ({ ...current, awaitingRequest: undefined }));
+            store.push({ kind: "command", text: request });
+            resolve(request);
+          },
+        }));
+      });
+    },
     cancel(message) {
       store.update((state) => ({ ...state, pending: undefined, finished: message }));
       stopApp();

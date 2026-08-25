@@ -1,4 +1,5 @@
 import { Box, Text } from "ink";
+import { t } from "../language";
 import { phaseColor, phaseGlyph, theme } from "../theme";
 import type { AppState, Phase } from "./store";
 
@@ -49,7 +50,7 @@ export function Banner({
         </Text>
       </Box>
       <Box marginTop={1} marginLeft={2}>
-        <Text color={theme.muted}>{"model  "}</Text>
+        <Text color={theme.muted}>{t({ en: "model  ", ru: "модель  " })}</Text>
         <Text color={theme.text}>{model}</Text>
       </Box>
       {facts.map((fact) => (
@@ -59,7 +60,10 @@ export function Banner({
       ))}
       <Box marginLeft={2} marginTop={1}>
         <Text color={theme.muted} dimColor>
-          {"/help for commands · esc interrupts · ctrl+c exits"}
+          {t({
+            en: "/help for commands · esc interrupts · ctrl+c exits",
+            ru: "/help — команды · esc — прервать · ctrl+c — выход",
+          })}
         </Text>
       </Box>
     </Box>
@@ -125,9 +129,9 @@ export function StageIndicator({
   calls: number;
   budget?: { used: number; limit: number };
 }) {
-  const parts = [clock(elapsedMs), `${calls} calls`];
+  const parts = [clock(elapsedMs), t({ en: `${calls} calls`, ru: `вызовов: ${calls}` })];
   if (budget) parts.push(`${budget.used}/${budget.limit}`);
-  parts.push("esc to interrupt");
+  parts.push(t({ en: "esc to interrupt", ru: "esc — прервать" }));
   const counters = `(${parts.join(" · ")})`;
   return (
     <Box marginBottom={1}>
@@ -166,8 +170,10 @@ export function StatusBar({
   const done = state.phases.filter((phase) => phase.state === "done").length;
   const summary = [
     clock(Date.now() - state.startedAt),
-    state.phases.length > 0 ? `phase ${done}/${state.phases.length}` : undefined,
-    `${calls} model calls`,
+    state.phases.length > 0
+      ? t({ en: `phase ${done}/${state.phases.length}`, ru: `фаза ${done}/${state.phases.length}` })
+      : undefined,
+    t({ en: `${calls} model calls`, ru: `вызовов модели: ${calls}` }),
   ]
     .filter(Boolean)
     .join("  ·  ");

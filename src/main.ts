@@ -4,6 +4,7 @@ import { InterruptedError } from "./ai/interrupt";
 import { runCli } from "./app/run";
 import { presentError } from "./cli/errors";
 import { teardownUi } from "./cli/ui";
+import { t } from "./ui/language";
 
 try {
   await runCli(Bun.argv.slice(2));
@@ -14,7 +15,12 @@ try {
   // Someone pressing escape asked for this. Reporting their own decision back to them as a failure,
   // with a stack trace under --debug, would be the tool arguing with the person using it.
   if (error instanceof InterruptedError) {
-    console.error("Stopped. Nothing further was sent to the model.");
+    console.error(
+      t({
+        en: "Stopped. Nothing further was sent to the model.",
+        ru: "Остановлено. Больше ничего в модель не отправлялось.",
+      }),
+    );
     process.exitCode = 130;
   } else {
     const { message, hint } = presentError(error);
