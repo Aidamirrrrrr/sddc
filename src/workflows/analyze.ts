@@ -30,10 +30,25 @@ export async function analyzeFeature(root: string, feature: string): Promise<Fin
   const tasks = await readTasks(root, feature);
 
   findings.push(...(await staleness(root, feature, plan, tasks)));
-  if (plan) findings.push(...planGaps(spec, plan));
-  if (tasks) findings.push(...taskGaps(spec, tasks));
-  if (plan && tasks) findings.push(...planToTaskGaps(plan, tasks));
+  findings.push(...artifactFindings(spec, plan, tasks));
   return findings;
+}
+
+/**
+ * The half of the analysis that needs no filesystem: whether the artifacts serve each other.
+ *
+ * Kept pure so the eval harness can score a candidate artifact that was never written to disk.
+ */
+export function artifactFindings(
+  spec: Spec,
+  plan: ImplementationPlan | undefined,
+  tasks: TaskList | undefined,
+): Finding[] {
+  return [
+    ...(plan ? planGaps(spec, plan) : []),
+    ...(tasks ? taskGaps(spec, tasks) : []),
+    ...(plan && tasks ? planToTaskGaps(plan, tasks) : []),
+  ];
 }
 
 async function staleness(

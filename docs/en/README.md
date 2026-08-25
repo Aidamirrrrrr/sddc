@@ -204,6 +204,34 @@ about to change.
 before any work happens on it, and spending a model call ahead of that approval
 would defeat the mode.
 
+## Evaluating quality
+
+Editing a prompt or trimming context changes what the model produces, and without
+a measurement that is a blind bet. An eval corpus makes the change measurable.
+
+Nothing has to be hand-labelled: a stored feature already holds artifacts a user
+reviewed and approved. Recording a case is a copy.
+
+```bash
+sddc --eval-record -- registration   # record an accepted run as a case
+sddc --eval                          # score the corpus, no model calls
+sddc --eval --live                   # regenerate plan and tasks, then score
+```
+
+Scoring reuses the pipeline's own validators instead of inventing a rubric: they
+already encode what correct means here, they cannot be argued with, and they run
+without a model. Cases are checked for `spec-valid`, `plan-valid`, `tasks-valid`
+and `tasks-policy`; coverage gaps are counted separately — not failures, but the
+number should not grow.
+
+Offline, the corpus replays recorded artifacts, which catches a validator change
+that silently starts rejecting work a user already accepted. With `--live`, plan
+and tasks are rebuilt from the recorded specification, which is what makes a
+prompt or context change verifiable.
+
+The command exits non-zero when a case fails, so it can gate CI or a pre-commit
+hook.
+
 ## Consistency analysis
 
 Stored artifacts are meant to be edited, so the agent records which version of its

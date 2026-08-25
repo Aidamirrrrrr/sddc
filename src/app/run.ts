@@ -21,6 +21,7 @@ import {
   loadUserEnvironment,
 } from "../config/env";
 import { PRODUCT_NAME, VERSION } from "../config/product";
+import { runEvalRecord, runEvals } from "../evals/run";
 import { classifyRequest } from "../intake/classify";
 import { preparePlanningContext } from "../planning/pipeline";
 import { writeImplementationPlan } from "../planning/storage";
@@ -80,6 +81,17 @@ export async function runCli(arguments_: string[]): Promise<void> {
 
   if (cli.analyze) {
     return runAnalyze(process.cwd(), cli.input.join(" ").trim());
+  }
+
+  if (cli.evalRecord) {
+    return runEvalRecord(process.cwd(), cli.input.join(" ").trim());
+  }
+
+  if (cli.evaluate) {
+    const passing = await runEvals({ root: process.cwd(), live: cli.live, client });
+    // A failing corpus is a failing command, so this can gate a commit.
+    if (!passing) process.exitCode = 1;
+    return;
   }
 
   if (cli.recompile) {

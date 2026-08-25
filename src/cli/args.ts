@@ -2,6 +2,9 @@ export type Cli = {
   stage?: string;
   recompile?: "plan" | "tasks" | "execute";
   analyze: boolean;
+  evaluate: boolean;
+  evalRecord: boolean;
+  live: boolean;
   language?: "en" | "ru";
   thinking: boolean;
   help: boolean;
@@ -18,6 +21,9 @@ export type Cli = {
 export function parseCli(args: string[]): Cli {
   const cli: Cli = {
     analyze: false,
+    evaluate: false,
+    evalRecord: false,
+    live: false,
     thinking: false,
     help: false,
     init: false,
@@ -51,6 +57,12 @@ export function parseCli(args: string[]): Cli {
       cli.debug = true;
     } else if (value === "--analyze") {
       cli.analyze = true;
+    } else if (value === "--eval") {
+      cli.evaluate = true;
+    } else if (value === "--eval-record") {
+      cli.evalRecord = true;
+    } else if (value === "--live") {
+      cli.live = true;
     } else if (value === "--recompile") {
       const phase = requireArgument(args, ++index, "--recompile");
       if (phase !== "plan" && phase !== "tasks" && phase !== "execute") {
