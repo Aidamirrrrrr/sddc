@@ -1,5 +1,5 @@
 import type { Task } from "../tasks/schemas";
-import { isBehaviouralSource, isTestPath } from "./paths";
+import { isBehaviouralSource, isTestPath, writesOnlyTests } from "./paths";
 import type { Policy } from "./schemas";
 
 const DEPENDENCY_FILES = new Set([
@@ -52,6 +52,7 @@ export function validateTaskPolicy(tasks: Task[], policy: Policy): void {
     }
   }
   validateWriteOrdering(tasks);
+  assertOwnersCanProve(tasks, policy);
   if (policy.changes.require_test_before_implementation) validateTestFirst(tasks);
 }
 
@@ -118,6 +119,32 @@ function validateTestFirst(tasks: Task[]): void {
         `${task.id} changes ${source.join(", ")} without depending on a task that writes a test`,
       );
     }
+  }
+}
+
+/**
+ * A criterion's owner must be able to prove it — unless test-first says otherwise.
+ *
+ * A task owning criteria that writes only tests and waits for nobody normally runs before the code
+ * under test exists, so its test cannot even compile. Under require_test_before_implementation that
+ * is the prescribed shape: the test lands first and is expected to fail until the implementation
+ * arrives. Enforcing both at once left no satisfiable graph, which is how this ended up next to the
+ * rule it has to agree with.
+ */
+function assertOwnersCanProve(tasks: Task[], policy: Policy): void {
+  if (policy.changes.require_test_before_implementation) return;
+  const someoneWritesSource = tasks.some((task) =>
+    [...task.files.modify, ...task.files.create].some(isBehaviouralSource),
+  );
+  if (!someoneWritesSource) return;
+  for (const task of tasks) {
+    if (task.acceptance.length === 0) continue;
+    if (!writesOnlyTests(task.files)) continue;
+    if (task.depends_on.length > 0) continue;
+    throw new Error(
+      `${task.id} owns ${task.acceptance.join(", ")} but only writes tests and depends on nothing, ` +
+        "so it runs before the code under test exists",
+    );
   }
 }
 

@@ -1,4 +1,9 @@
-import { conventionalTestPaths, isBehaviouralSource, writesOnlyTests } from "../policy/paths";
+import {
+  conventionalTestPaths,
+  isBehaviouralSource,
+  isTestPath,
+  writesOnlyTests,
+} from "../policy/paths";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task, TaskList, TaskListDraft, TaskListReview } from "./schemas";
@@ -23,7 +28,7 @@ export function normalizeTaskList(draft: TaskListDraft, feature: string): TaskLi
   return {
     ...draft,
     feature,
-    tasks: assignWaves(renumbered),
+    tasks: resolveAcceptanceOwners(assignWaves(renumbered)),
     questions: draft.questions.map((question, index) => ({
       ...question,
       id: `Q${index + 1}`,
@@ -57,6 +62,32 @@ export function assignWaves(tasks: Omit<Task, "wave" | "parallel">[]): Task[] {
     const wave = waves[index] ?? 1;
     return { ...task, wave, parallel: (sizes.get(wave) ?? 1) > 1 };
   });
+}
+
+/**
+ * Decides who owns each acceptance criterion instead of asking.
+ *
+ * A criterion is a test, so its owner is the task that writes the test proving it. That is derivable
+ * from the graph, and six attempts at wording the rule showed it is not reliably answerable by a
+ * model — the same lesson waves already taught: compute what can be computed, and let the validator
+ * guard the residue rather than carry the mechanism.
+ */
+export function resolveAcceptanceOwners(tasks: Task[]): Task[] {
+  const owner = new Map<string, string>();
+  for (const id of new Set(tasks.flatMap((task) => task.acceptance))) {
+    const claimants = tasks.filter((task) => task.acceptance.includes(id));
+    // Prefer a claimant that writes a test; among equals the latest one, which is what completes it.
+    const proving = claimants.filter((task) =>
+      [...task.files.modify, ...task.files.create].some(isTestPath),
+    );
+    const candidates = proving.length > 0 ? proving : claimants;
+    const chosen = candidates.reduce((best, task) => (task.wave >= best.wave ? task : best));
+    owner.set(id, chosen.id);
+  }
+  return tasks.map((task) => ({
+    ...task,
+    acceptance: task.acceptance.filter((id) => owner.get(id) === task.id),
+  }));
 }
 
 export function orderTasks(tasks: Task[]): Task[] {
@@ -124,7 +155,6 @@ export function validateTaskList(
     assertCoverage(requirements, coveredRequirements, "requirements");
     assertCoverage(acceptance, coveredAcceptance, "acceptance criteria");
     assertExclusiveAcceptance(list.tasks);
-    assertOwnersCanProve(list.tasks);
     assertTestsInScope(list.tasks, existingFiles, approvedFiles);
   }
   assertAcyclic(list.tasks);
@@ -183,32 +213,6 @@ function assertExclusiveAcceptance(tasks: Task[]): void {
   if (shared.length > 0) {
     const detail = shared.map(([id, claimants]) => `${id} by ${claimants.join(", ")}`).join("; ");
     throw new Error(`Acceptance criteria must be owned by exactly one task: ${detail}`);
-  }
-}
-
-/**
- * A criterion's owner must be able to prove it.
- *
- * A task that owns criteria, writes nothing but tests, and depends on no one runs before the code it
- * tests exists — its test cannot even compile. That is unprovable by construction, so it is caught
- * here rather than by a blocker halfway through execution.
- *
- * A test-only task with no dependencies is fine when nothing else writes source: the behaviour it
- * covers already exists, and the test is simply being added.
- */
-function assertOwnersCanProve(tasks: Task[]): void {
-  const someoneWritesSource = tasks.some((task) =>
-    [...task.files.modify, ...task.files.create].some(isBehaviouralSource),
-  );
-  if (!someoneWritesSource) return;
-  for (const task of tasks) {
-    if (task.acceptance.length === 0) continue;
-    if (!writesOnlyTests(task.files)) continue;
-    if (task.depends_on.length > 0) continue;
-    throw new Error(
-      `${task.id} owns ${task.acceptance.join(", ")} but only writes tests and depends on nothing, ` +
-        "so it runs before the code under test exists",
-    );
   }
 }
 

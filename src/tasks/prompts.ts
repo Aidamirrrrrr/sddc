@@ -5,12 +5,10 @@ or patches. One task may carry several approach steps: grouping steps is not rev
 whenever a criterion's code and its test live in different steps. Changing the approach itself is what is forbidden.
 Each task implements part of the accepted approach, has one focused goal, cites requirement
 and acceptance IDs from the specification, and lists explicit read/modify/create paths, dependencies,
-verification commands, completion conditions, and concrete risks. Every acceptance criterion belongs to exactly one task: the task that proves it. By default that one task writes
-both the change the criterion describes and the test proving it, listing all of those files in its own files.modify
-or files.create, so the task is self-contained and its verification passes on its own. Never split a criterion
-across tasks, never list the same acceptance ID twice, and never leave a criterion with a task that cannot prove it.
-Group criteria that share files into one task. A task that serves a requirement without proving a criterion leaves
-acceptance empty. Requirements may be served by several tasks. When a completion condition mentions existing tests, list the test files covering whatever the task modifies in its
+verification commands, completion conditions, and concrete risks. One rule governs acceptance: a criterion belongs to the task that writes its test, and to that task only. So exactly
+one task lists any given acceptance ID, and that task's files.modify or files.create contains the test file proving
+it. Every other task — including one implementing the very code under test — lists an empty acceptance array and
+serves requirements instead. Requirements may be served by several tasks; acceptance IDs may not. When a completion condition mentions existing tests, list the test files covering whatever the task modifies in its
 files.read, so that condition can be checked against the code rather than assumed. Existing read and modify paths must
 come from discovery.context.files. New paths may appear only in create. Declare a dependency only when
 a task truly needs the output of another one: independent tasks are executed as one parallel wave, so
@@ -19,8 +17,7 @@ ordered by a dependency. Use only commands supported by repository evidence, rep
 and an argument array, never as a shell string. Every file argument must already exist or be created
 by that task or a dependency. When policy.changes.require_test_before_implementation is true, a task that changes
 behavioural source must depend on a separate earlier task that writes the test covering it; writing the test in the
-same task does not satisfy the rule. The test task owns the acceptance criteria it covers, and its test is expected to
-fail until the implementation lands, so the implementation task serves requirements and leaves acceptance empty. Follow the supplied policy, and the constitution principles when one is supplied. Declare
+same task does not satisfy the rule. Its test is expected to fail until the implementation lands. Follow the supplied policy, and the constitution principles when one is supplied. Declare
 permissions only when a task genuinely needs them; a permission is visible to the user and is not a way to bypass a forbidden
 policy. Ask at most three neutral questions, and only when the plan left a user-owned decision
 genuinely open. Write all prose in outputLanguage and return JSON only.`,

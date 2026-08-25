@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { discovery, readySpec } from "../planning/test-fixtures";
+import { defaultPolicy } from "../policy/load";
+import { validateTaskPolicy } from "../policy/validate";
 import { readyTasks } from "./test-fixtures";
 import { validateTaskList } from "./validate";
 
@@ -50,22 +52,39 @@ test("exclusivity is not demanded of a graph that is still asking questions", ()
 });
 
 test("a criterion owner that only writes tests and waits for nobody is rejected", () => {
-  // The exact graph the live run produced: T1 owns everything, writes only the test, depends on
-  // nothing, so it would run before src/store.ts had the function under test.
-  const list = tasksWith((value) => {
-    const [first, second] = value.tasks;
-    if (!first || !second) throw new Error("Fixture must contain two tasks");
-    first.acceptance = ["A1"];
-    first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
-    first.depends_on = [];
-    second.acceptance = [];
-    second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
-    second.depends_on = [];
-  });
+  // The rule lives beside test-first now, because under test-first this shape is the required one.
+  const list = readyTasks();
+  const [first, second] = list.tasks;
+  if (!first || !second) throw new Error("Fixture must contain two tasks");
+  first.acceptance = ["A1"];
+  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+  first.depends_on = [];
+  second.acceptance = [];
+  second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+  second.depends_on = [];
 
-  expect(() => validateTaskList(list, readySpec(), discovery())).toThrow(
+  expect(() => validateTaskPolicy(list.tasks, defaultPolicy)).toThrow(
     "T1 owns A1 but only writes tests and depends on nothing",
   );
+});
+
+test("under test-first that same shape is the prescribed one", () => {
+  const list = readyTasks();
+  const [first, second] = list.tasks;
+  if (!first || !second) throw new Error("Fixture must contain two tasks");
+  first.acceptance = ["A1"];
+  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+  first.depends_on = [];
+  second.acceptance = [];
+  second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+  second.depends_on = ["T1"];
+
+  // Demanding a dependency here while test-first demands the opposite left no graph satisfiable.
+  const testFirst = {
+    ...defaultPolicy,
+    changes: { ...defaultPolicy.changes, require_test_before_implementation: true },
+  };
+  expect(() => validateTaskPolicy(list.tasks, testFirst)).not.toThrow();
 });
 
 test("a test-only owner that waits for the implementation is fine", () => {
