@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
+import { type IgnoreMatcher, loadGitignore } from "./gitignore";
 
 const EXCLUDED_DIRECTORIES = new Set([
   ".git",
@@ -20,7 +21,10 @@ export type FileSnapshot = RepositoryFile & { content: string };
 
 export async function indexRepository(root: string): Promise<RepositoryFile[]> {
   const files: RepositoryFile[] = [];
-  await walk(root, root, files);
+  // The hardcoded list below covers what every project has; the project's own .gitignore covers
+  // what only this one does. Without it a large vendored directory spends the whole file budget on
+  // files nobody would pick, and that index is what the user chooses context from.
+  await walk(root, root, files, await loadGitignore(root));
   return files.sort((left, right) => left.path.localeCompare(right.path));
 }
 
@@ -45,20 +49,27 @@ export async function readSnapshots(
   return snapshots;
 }
 
-async function walk(root: string, directory: string, files: RepositoryFile[]): Promise<void> {
+async function walk(
+  root: string,
+  directory: string,
+  files: RepositoryFile[],
+  ignored: IgnoreMatcher,
+): Promise<void> {
   if (files.length >= MAX_INDEXED_FILES) return;
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     if (files.length >= MAX_INDEXED_FILES) return;
     if (entry.isSymbolicLink()) continue;
     const absolutePath = join(directory, entry.name);
+    const relativePath = relative(root, absolutePath).split(sep).join("/");
     if (entry.isDirectory()) {
-      if (!EXCLUDED_DIRECTORIES.has(entry.name)) await walk(root, absolutePath, files);
+      if (EXCLUDED_DIRECTORIES.has(entry.name) || ignored(relativePath, true)) continue;
+      await walk(root, absolutePath, files, ignored);
       continue;
     }
-    if (!entry.isFile() || isSensitive(entry.name)) continue;
+    if (!entry.isFile() || isSensitive(entry.name) || ignored(relativePath, false)) continue;
     const metadata = await stat(absolutePath);
-    files.push({ path: relative(root, absolutePath).split(sep).join("/"), size: metadata.size });
+    files.push({ path: relativePath, size: metadata.size });
   }
 }
 

@@ -7,6 +7,7 @@ import type { Policy } from "../policy/schemas";
 import { validateTaskPolicy } from "../policy/validate";
 import type { Spec } from "../spec/schemas";
 import type { TaskList } from "../tasks/schemas";
+import { recordExecutionProvenance } from "./provenance";
 
 export async function runApprovedExecution(
   client: ModelClient,
@@ -35,6 +36,9 @@ export async function runApprovedExecution(
     undefined,
     upstream,
   );
+  // Recorded only on a completed run: a failed or blocked one left the workspace part-way, and
+  // claiming that code was built from this graph would be the opposite of the truth.
+  if (journal.status === "completed") await recordExecutionProvenance(root, plan.feature);
   const path = `.specs/${plan.feature}/execution.yaml`;
   success({
     en: `Execution ${journal.status}; journal saved to ${path}`,

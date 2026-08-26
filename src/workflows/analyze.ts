@@ -1,8 +1,9 @@
+import { join } from "node:path";
 import { document, success, warn } from "../cli/ui";
 import type { ImplementationPlan } from "../planning/schemas";
 import { readImplementationPlan } from "../planning/storage";
 import type { Spec } from "../spec/schemas";
-import { readSpec } from "../spec/storage";
+import { featureSlug, readSpec } from "../spec/storage";
 import type { TaskList } from "../tasks/schemas";
 import { readTaskList } from "../tasks/storage";
 import { resolveFeature } from "./features";
@@ -66,6 +67,17 @@ async function staleness(
     findings.push({
       severity: "stale",
       statement: "plan.yaml was derived from an older spec.yaml; recompile the plan",
+    });
+  }
+  const tasksDigest = await artifactDigest(root, feature, "tasks.yaml");
+  const executed = await Bun.file(
+    join(root, ".specs", featureSlug(feature), "execution.yaml"),
+  ).exists();
+  if (executed && provenance.execution && provenance.execution.tasks_sha256 !== tasksDigest) {
+    findings.push({
+      severity: "stale",
+      statement:
+        "the code on disk was implemented from an older tasks.yaml; re-run --recompile execute",
     });
   }
   if (tasks && provenance.tasks) {
