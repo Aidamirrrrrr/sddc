@@ -25,6 +25,7 @@ function capturingClient(onContext: (context: Record<string, unknown>) => void) 
                 tool: "write",
                 read: null,
                 search: null,
+                remove: null,
                 write: { path: "src/auth.ts", content: "new\n" },
                 run: null,
                 finish: null,
@@ -35,6 +36,7 @@ function capturingClient(onContext: (context: Record<string, unknown>) => void) 
                 tool: "finish",
                 read: null,
                 search: null,
+                remove: null,
                 write: null,
                 run: null,
                 finish: {
@@ -217,7 +219,7 @@ test("under test-first a test-only task is told its command must fail", async ()
   const [first] = readyTasks().tasks;
   if (!first) throw new Error("Fixture must contain a task");
   first.acceptance = [];
-  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"], delete: [] };
   const testFirst = {
     ...defaultPolicy,
     changes: { ...defaultPolicy.changes, require_test_before_implementation: true },

@@ -77,6 +77,7 @@ export function validateProposal(
 
   const modify = new Set(task.files.modify);
   const create = new Set(task.files.create);
+  const remove = new Set(task.files.delete);
   const snapshots = new Map(files.map((file) => [file.path, file]));
   const seen = new Set<string>();
   let changedLines = 0;
@@ -97,6 +98,14 @@ export function validateProposal(
       if (change.content === snapshot.content)
         throw new Error(`${task.id} does not change ${change.path}`);
       changedLines += approximateChangedLines(snapshot.content, change.content);
+    } else if (change.operation === "delete") {
+      if (!remove.has(change.path)) throw new Error(`${task.id} may not delete ${change.path}`);
+      if (change.content !== "")
+        throw new Error(`${task.id} sends content with the removal of ${change.path}`);
+      const snapshot = snapshots.get(change.path);
+      // The lines that disappear are changed lines: a removal that fits under no limit at all would
+      // be the one way to make an arbitrarily large change without the policy noticing.
+      changedLines += snapshot ? snapshot.content.split("\n").length : 0;
     } else {
       if (!create.has(change.path)) throw new Error(`${task.id} may not create ${change.path}`);
       if (change.expected_sha256 !== null)
@@ -104,7 +113,7 @@ export function validateProposal(
       changedLines += change.content.split("\n").length;
     }
   }
-  const omitted = [...modify, ...create].find((path) => !seen.has(path));
+  const omitted = [...modify, ...create, ...remove].find((path) => !seen.has(path));
   if (omitted) throw new Error(`${task.id} omits planned change: ${omitted}`);
   const traced = new Map(proposal.traceability.map((item) => [item.covers, new Set(item.paths)]));
   const changed = [...seen].join(", ");

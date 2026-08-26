@@ -23,6 +23,7 @@ export function normalizeTaskList(draft: TaskListDraft, feature: string): TaskLi
       read: unique(task.files.read),
       modify: unique(task.files.modify),
       create: unique(task.files.create),
+      delete: unique(task.files.delete),
     },
   }));
   return {
@@ -125,13 +126,27 @@ export function validateTaskList(
     for (const id of task.acceptance) coveredAcceptance.add(id);
     validateReferences(task.depends_on, taskIds, "task dependency", task.id);
     if (task.depends_on.includes(task.id)) throw new Error(`${task.id} depends on itself`);
-    for (const path of [...task.files.read, ...task.files.modify, ...task.files.create]) {
+    for (const path of [
+      ...task.files.read,
+      ...task.files.modify,
+      ...task.files.create,
+      ...task.files.delete,
+    ]) {
       if (!isSafeProjectPath(path)) throw new Error(`${task.id} contains unsafe path: ${path}`);
     }
-    for (const path of [...task.files.read, ...task.files.modify]) {
+    // A deletion is read before it is done — the model has to see what it is removing — so the same
+    // approval a modification needs applies to it.
+    for (const path of [...task.files.read, ...task.files.modify, ...task.files.delete]) {
       if (!approvedFiles.has(path))
         throw new Error(`${task.id} references unapproved file: ${path}`);
     }
+    const missingDelete = task.files.delete.find((path) => !existingFiles.has(path));
+    if (missingDelete)
+      throw new Error(`${task.id} deletes a file that does not exist: ${missingDelete}`);
+    const contradicted = task.files.delete.find(
+      (path) => task.files.modify.includes(path) || task.files.create.includes(path),
+    );
+    if (contradicted) throw new Error(`${task.id} both deletes and writes ${contradicted}`);
     const existingCreate = task.files.create.find((path) => existingFiles.has(path));
     if (existingCreate)
       throw new Error(`${task.id} lists existing file as create: ${existingCreate}`);

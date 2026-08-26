@@ -159,7 +159,7 @@ test("a blocker asking for a file a sibling task owns is rejected", () => {
   const sibling = {
     ...task,
     id: "T3",
-    files: { read: [], modify: ["src/store.ts"], create: [] },
+    files: { read: [], modify: ["src/store.ts"], create: [], delete: [] },
   };
   const proposal = blockedOn(["src/store.ts"]);
 
@@ -179,7 +179,11 @@ test("a blocker naming a file no task owns is a real answer", () => {
 
 test("a blocker naming both an owned and an unowned file still stands", () => {
   const task = testOnlyTask();
-  const sibling = { ...task, id: "T3", files: { read: [], modify: ["src/store.ts"], create: [] } };
+  const sibling = {
+    ...task,
+    id: "T3",
+    files: { read: [], modify: ["src/store.ts"], create: [], delete: [] },
+  };
   const proposal = blockedOn(["src/store.ts", "config/secrets.yaml"]);
 
   // Only a refusal the graph fully answers is wrong; a partial one may still be reporting a gap.
@@ -194,7 +198,7 @@ function testOnlyTask(): Task {
     id: "T1",
     requirements: ["R1"],
     acceptance: [],
-    files: { read: ["src/store.ts"], modify: ["src/store.test.ts"], create: [] },
+    files: { read: ["src/store.ts"], modify: ["src/store.test.ts"], create: [], delete: [] },
   };
 }
 

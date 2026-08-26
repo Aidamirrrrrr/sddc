@@ -70,7 +70,7 @@ test("a transitive dependency orders a shared file just as well", () => {
     ...second,
     id: "T3",
     depends_on: [second.id],
-    files: { read: [], modify: [], create: ["src/middle.ts"] },
+    files: { read: [], modify: [], create: ["src/middle.ts"], delete: [] },
   };
   second.depends_on = [];
   second.files.modify = [...first.files.modify];

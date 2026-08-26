@@ -14,6 +14,7 @@ const blank: ToolCall = {
   read: null,
   search: null,
   write: null,
+  remove: null,
   run: null,
   finish: null,
   block: null,
@@ -30,7 +31,7 @@ function task(): Task {
     ...first,
     acceptance: [],
     requirements: ["R1"],
-    files: { read: [], modify: ["src/auth.ts"], create: ["src/new.ts"] },
+    files: { read: [], modify: ["src/auth.ts"], create: ["src/new.ts"], delete: [] },
     verification: [{ command: { program: "bun", args: ["test"] }, purpose: "Suite" }],
   };
 }

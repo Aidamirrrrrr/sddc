@@ -19,6 +19,15 @@ export const taskSchema = z.object({
     read: z.array(z.string()),
     modify: z.array(z.string()),
     create: z.array(z.string()),
+    /**
+     * Files this task removes.
+     *
+     * Absent until now, so a change that moves or retires a file could not be expressed at all —
+     * in a tool whose subject is controlled project change, and where renaming is among the
+     * commonest real edits. A rename is a create and a delete in one task, which is why the two
+     * have to be orderable against each other.
+     */
+    delete: z.array(z.string()),
   }),
   verification: z
     .array(

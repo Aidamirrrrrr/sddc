@@ -12,6 +12,7 @@ const blank: ToolCall = {
   read: null,
   search: null,
   write: null,
+  remove: null,
   run: null,
   finish: null,
   block: null,
@@ -23,6 +24,10 @@ export function toolCall(partial: Partial<ToolCall>): ToolCall {
 
 export function writeCall(path: string, content: string): ToolCall {
   return toolCall({ tool: "write", write: { path, content } });
+}
+
+export function removeCall(path: string): ToolCall {
+  return toolCall({ tool: "remove", remove: { path } });
 }
 
 export function readCall(reason: string, paths: string[]): ToolCall {

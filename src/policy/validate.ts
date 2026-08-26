@@ -28,7 +28,9 @@ export function validateTaskPolicy(
   coverage?: AcceptanceCoverage,
 ): void {
   for (const task of tasks) {
-    const changed = [...new Set([...task.files.modify, ...task.files.create])];
+    const changed = [
+      ...new Set([...task.files.modify, ...task.files.create, ...task.files.delete]),
+    ];
     if (changed.length > policy.changes.max_files_per_task) {
       throw new Error(
         `${task.id} changes ${changed.length} files; policy allows ${policy.changes.max_files_per_task}`,
@@ -193,10 +195,12 @@ function validateWriteOrdering(tasks: Task[]): void {
   for (let index = 0; index < tasks.length; index += 1) {
     const task = tasks[index];
     if (!task) continue;
-    const writes = new Set([...task.files.modify, ...task.files.create]);
+    // Removing a file is a write to it, and the most consequential one: a task that deletes what
+    // another is editing has to be ordered against it or the two outcomes depend on the wave.
+    const writes = new Set([...task.files.modify, ...task.files.create, ...task.files.delete]);
     for (const other of tasks.slice(index + 1)) {
-      const overlap = [...other.files.modify, ...other.files.create].find((path) =>
-        writes.has(path),
+      const overlap = [...other.files.modify, ...other.files.create, ...other.files.delete].find(
+        (path) => writes.has(path),
       );
       if (!overlap) continue;
       const ordered =

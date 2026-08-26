@@ -28,7 +28,7 @@ function task(id: string, path: string, requirement: string, acceptance: string)
     acceptance: [acceptance],
     depends_on: [],
     permissions: [],
-    files: { read: [path], modify: [path], create: [] },
+    files: { read: [path], modify: [path], create: [], delete: [] },
     verification: [{ command: { program: "bun", args: ["-e", ""] }, purpose: "check" }],
     done_when: ["done"],
     risks: [],

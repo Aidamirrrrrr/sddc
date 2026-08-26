@@ -32,7 +32,7 @@ function task() {
     ...first,
     acceptance: [],
     requirements: ["R1"],
-    files: { read: [], modify: ["src/auth.ts"], create: [] },
+    files: { read: [], modify: ["src/auth.ts"], create: [], delete: [] },
     verification: [{ command: { program: "bun", args: ["run", "suite.ts"] }, purpose: "Suite" }],
   };
 }

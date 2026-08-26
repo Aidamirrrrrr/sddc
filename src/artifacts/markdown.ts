@@ -44,6 +44,7 @@ const LABELS = {
     reads: "Reads",
     modifies: "Modifies",
     creates: "Creates",
+    deletes: "Deletes",
     permissions: "Permissions",
     none: "none",
     doneWhen: "Done when",
@@ -102,6 +103,7 @@ const LABELS = {
     reads: "Читает",
     modifies: "Изменяет",
     creates: "Создаёт",
+    deletes: "Удаляет",
     permissions: "Разрешения",
     none: "нет",
     doneWhen: "Готово, когда",
@@ -223,6 +225,7 @@ export function taskMarkdown(taskList: TaskList): string {
               [t.reads, task.files.read.length ? code(task.files.read) : "—"],
               [t.modifies, task.files.modify.length ? code(task.files.modify) : "—"],
               [t.creates, task.files.create.length ? code(task.files.create) : "—"],
+              [t.deletes, task.files.delete.length ? code(task.files.delete) : "—"],
               [t.permissions, task.permissions.length ? code(task.permissions) : t.none],
             ]),
             fence(

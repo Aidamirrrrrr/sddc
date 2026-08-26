@@ -15,6 +15,7 @@ const blank: ToolCall = {
   read: null,
   search: null,
   write: null,
+  remove: null,
   run: null,
   finish: null,
   block: null,

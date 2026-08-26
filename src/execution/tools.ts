@@ -5,7 +5,7 @@ import type { RepositoryFile } from "../repository/scan";
 import { indexRepository } from "../repository/scan";
 import type { Task } from "../tasks/schemas";
 import { type ExecutionFile, grantRequestedFiles, sha256 } from "./context";
-import { emptyBackup, type FileBackup, writeTracked } from "./files";
+import { deleteTracked, emptyBackup, type FileBackup, writeTracked } from "./files";
 import type { ChangeProposal } from "./schemas";
 import { searchRepository } from "./search";
 import { runCommand } from "./verify";
@@ -31,7 +31,7 @@ import { runCommand } from "./verify";
 export const toolCallSchema = z.object({
   /** One line on why this call, so a transcript can be read back by a person. */
   reasoning: z.string(),
-  tool: z.enum(["read", "search", "write", "run", "finish", "block"]),
+  tool: z.enum(["read", "search", "write", "remove", "run", "finish", "block"]),
   read: z
     .object({
       reason: z.string(),
@@ -45,6 +45,7 @@ export const toolCallSchema = z.object({
     })
     .nullable(),
   write: z.object({ path: z.string(), content: z.string() }).nullable(),
+  remove: z.object({ path: z.string() }).nullable(),
   run: z.object({ program: z.string(), args: z.array(z.string()) }).nullable(),
   finish: z
     .object({
@@ -64,7 +65,7 @@ export const toolCallSchema = z.object({
 export type ToolCall = z.infer<typeof toolCallSchema>;
 export type ToolName = ToolCall["tool"];
 
-const PAYLOADS = ["read", "search", "write", "run", "finish", "block"] as const;
+const PAYLOADS = ["read", "search", "write", "remove", "run", "finish", "block"] as const;
 
 /**
  * One call names one tool and carries exactly its payload.
@@ -147,6 +148,8 @@ export function createToolHost(context: ToolHostContext) {
   const { root, task, policy } = context;
   const writable = new Set([...task.files.modify, ...task.files.create]);
   const creatable = new Set(task.files.create);
+  const removable = new Set(task.files.delete);
+  const removed = new Set<string>();
   const written = new Map<string, string>();
   const backup: FileBackup = emptyBackup();
   const supplied = new Set<string>();
@@ -281,6 +284,23 @@ export function createToolHost(context: ToolHostContext) {
         return ok("write", `wrote ${path} (${lines} lines)`);
       }
 
+      if (call.remove) {
+        const { path } = call.remove;
+        if (!removable.has(path)) {
+          return failed(
+            "remove",
+            `remove ${path}: outside the approved scope`,
+            `${path} is not one of this task's files to delete. This task may remove ${
+              [...removable].join(", ") || "nothing"
+            }.`,
+          );
+        }
+        await deleteTracked(root, path, backup);
+        removed.add(path);
+        written.delete(path);
+        return ok("remove", `removed ${path}`);
+      }
+
       if (call.run) {
         const { program, args } = call.run;
         if (!policy.commands.allowed_programs.includes(program)) {
@@ -325,14 +345,22 @@ export function createToolHost(context: ToolHostContext) {
             summary: call.finish.summary,
             blocker: null,
             traceability: call.finish.traceability,
-            changes: [...written].map(([path, content]) => ({
-              path,
-              operation: creatable.has(path) ? ("create" as const) : ("modify" as const),
-              // The pre-task state, which is what the validator compares against — not the state
-              // after an earlier write in this same loop.
-              expected_sha256: creatable.has(path) ? null : (originalHash(backup, path) ?? null),
-              content,
-            })),
+            changes: [
+              ...[...written].map(([path, content]) => ({
+                path,
+                operation: creatable.has(path) ? ("create" as const) : ("modify" as const),
+                // The pre-task state, which is what the validator compares against — not the state
+                // after an earlier write in this same loop.
+                expected_sha256: creatable.has(path) ? null : (originalHash(backup, path) ?? null),
+                content,
+              })),
+              ...[...removed].map((path) => ({
+                path,
+                operation: "delete" as const,
+                expected_sha256: originalHash(backup, path) ?? null,
+                content: "",
+              })),
+            ],
           },
         };
       }

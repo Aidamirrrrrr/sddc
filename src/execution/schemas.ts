@@ -28,7 +28,7 @@ export const changeProposalSchema = z.object({
   changes: z.array(
     z.object({
       path: z.string(),
-      operation: z.enum(["modify", "create"]),
+      operation: z.enum(["modify", "create", "delete"]),
       expected_sha256: z.string().nullable(),
       content: z.string(),
     }),

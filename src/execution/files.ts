@@ -37,13 +37,17 @@ export async function applyProposal(root: string, proposal: ChangeProposal): Pro
     if (change.operation === "create" && exists) {
       throw new Error(`File was created after proposal was created: ${change.path}`);
     }
+    if (change.operation === "delete" && !exists) {
+      throw new Error(`File was already removed before the proposal was applied: ${change.path}`);
+    }
     backup.files.set(change.path, content);
     for (const directory of await absentDirectories(root, change.path)) created.add(directory);
   }
   backup.directories = [...created];
   try {
     for (const change of proposal.changes) {
-      await writeAtomically(join(root, change.path), change.content);
+      if (change.operation === "delete") await rm(join(root, change.path), { force: true });
+      else await writeAtomically(join(root, change.path), change.content);
     }
     return backup;
   } catch (error) {
@@ -76,6 +80,23 @@ export async function writeTracked(
     }
   }
   await writeAtomically(target, content);
+}
+
+/**
+ * Removes one file, recording what a rollback will need to put back.
+ *
+ * The counterpart to writeTracked. A removal is the one change whose undo is the content, so the
+ * content is what the backup holds — exactly as it does for a file that did not exist before, only
+ * the other way round.
+ */
+export async function deleteTracked(root: string, path: string, backup: FileBackup): Promise<void> {
+  await assertSafeDestination(root, path);
+  const target = join(root, path);
+  if (!backup.files.has(path)) {
+    const file = Bun.file(target);
+    backup.files.set(path, (await file.exists()) ? await file.text() : null);
+  }
+  await rm(target, { force: true });
 }
 
 /** Never a partially written file: the reader either sees the old one or the new one. */
