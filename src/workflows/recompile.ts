@@ -30,6 +30,7 @@ export async function runRecompile(
   phase: RecompilePhase,
   requestedFeature: string,
   dryRun: boolean,
+  unattended = false,
 ): Promise<void> {
   const feature = await resolveFeature(root, requestedFeature);
   const spec = await readSpec(root, feature);
@@ -98,10 +99,16 @@ export async function runRecompile(
   });
   // The constitution reaches the implementation phase here too; recompiling must not quietly
   // produce code held to fewer principles than a first run would be.
-  await runApprovedExecution(client, root, spec, plan, tasks, policy, {
-    constitution,
-    clarifications: userAnswers(await loadSession(root, context.request)),
-  });
+  await runApprovedExecution(
+    client,
+    root,
+    spec,
+    plan,
+    tasks,
+    policy,
+    { constitution, clarifications: userAnswers(await loadSession(root, context.request)) },
+    unattended,
+  );
 }
 
 async function readStoredPlan(root: string, feature: string, phase: RecompilePhase) {

@@ -12,6 +12,48 @@ import {
 import type { ExecutionHooks } from "./runner";
 import type { ExecutionJournal } from "./schemas";
 
+/**
+ * Runs the implementation with nobody at the terminal.
+ *
+ * The only phase that writes code was also the only one that could not be exercised without a
+ * human: configureExecution always confirmed, so nothing about it reached CI, and the eval corpus
+ * stopped at the task graph.
+ *
+ * What it accepts is what the accepted graph already described — the diffs it produces and the
+ * commands it declared. What it does not accept is a sensitive permission. The README states that
+ * those are always confirmed, and a flag that quietly made that untrue would be worth less than the
+ * automation it bought: a graph needing one blocks, and says so in the journal.
+ */
+export function unattendedExecution(policy: Policy): {
+  mode: ExecutionJournal["mode"];
+  hooks: ExecutionHooks;
+} {
+  return {
+    mode: policy.execution.default_approval_mode === "strict" ? "normal" : "trusted",
+    hooks: {
+      async review() {
+        return { accepted: true };
+      },
+      async retryAfterFailure() {
+        return false;
+      },
+      async approveSensitive() {
+        return false;
+      },
+      async resumeExisting() {
+        return true;
+      },
+      taskCompleted(result) {
+        driver().action(
+          `${result.task_id} completed`,
+          result.changed_files.map((path) => `wrote ${path}`),
+          "success",
+        );
+      },
+    },
+  };
+}
+
 export async function configureExecution(
   root: string,
   feature: string,

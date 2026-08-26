@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { defaultPolicy } from "../policy/load";
 import type { Policy } from "../policy/schemas";
 import type { Task } from "../tasks/schemas";
@@ -158,4 +159,57 @@ function approximateChangedLines(before: string, after: string): number {
     suffix += 1;
   }
   return oldLines.length - prefix - suffix + (newLines.length - prefix - suffix);
+}
+
+/**
+ * Roughly how many tokens a chunk of source costs to emit.
+ *
+ * The same four-bytes-per-token heuristic the context selector already shows people when it prices
+ * a selection. Precise enough to catch a file that cannot possibly fit; never precise enough to be
+ * worth arguing with, which is why the threshold below leaves room.
+ */
+function estimateTokens(bytes: number): number {
+  return Math.ceil(bytes / 4);
+}
+
+/** How much of a completion may go to one file, leaving the rest for reasoning and the call itself. */
+const FILE_SHARE_OF_OUTPUT = 0.6;
+
+/**
+ * Refuses a graph whose files cannot be written by the model that would have to write them.
+ *
+ * Two limits were describing the same thing and disagreeing: policy allowed a generated file of
+ * 128 KiB, which is something like 35,000 tokens of source, while the default completion cap is
+ * 32,768 — and on a reasoning model the thinking is billed against that same budget. So the policy
+ * promised a size the transport could not deliver.
+ *
+ * Worse than being wrong, it was wrong late: the failure arrives as an empty response, which the
+ * repair path answers by retrying with reasoning turned down — spending an attempt on a case it
+ * cannot fix, because what ran out was room for the answer.
+ *
+ * Checked before implementation starts, against the files as they exist, so it is a deterministic
+ * refusal with a number in it rather than a run that dies halfway.
+ */
+export async function assertTasksFitOutputBudget(
+  root: string,
+  tasks: Task[],
+  maxOutputTokens: number | undefined,
+): Promise<void> {
+  if (maxOutputTokens === undefined) return;
+  const budget = Math.floor(maxOutputTokens * FILE_SHARE_OF_OUTPUT);
+  for (const task of tasks) {
+    for (const path of task.files.modify) {
+      const file = Bun.file(join(root, path));
+      if (!(await file.exists())) continue;
+      const tokens = estimateTokens(file.size);
+      if (tokens <= budget) continue;
+      throw new Error(
+        `${task.id} must rewrite ${path}, which is about ${tokens.toLocaleString()} tokens of ` +
+          `source. A single completion is capped at ${maxOutputTokens.toLocaleString()} tokens, ` +
+          `shared with the model's reasoning, so this file cannot be written back in one piece. ` +
+          `Raise AI_MAX_OUTPUT_TOKENS, set it to "off", or split the change so no task rewrites ` +
+          `a file this large.`,
+      );
+    }
+  }
 }

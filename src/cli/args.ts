@@ -16,6 +16,8 @@ export type Cli = {
   plain: boolean;
   json: boolean;
   noInput: boolean;
+  /** Accepts what the accepted graph already described, so a run needs nobody at the terminal. */
+  yes: boolean;
   debug: boolean;
   input: string[];
 };
@@ -34,6 +36,7 @@ export function parseCli(args: string[]): Cli {
     plain: false,
     json: false,
     noInput: false,
+    yes: false,
     debug: false,
     input: [],
   };
@@ -55,6 +58,8 @@ export function parseCli(args: string[]): Cli {
       cli.noInput = true;
     } else if (value === "--no-input") {
       cli.noInput = true;
+    } else if (value === "--yes" || value === "-y") {
+      cli.yes = true;
     } else if (value === "--debug") {
       cli.debug = true;
     } else if (value === "--analyze") {
