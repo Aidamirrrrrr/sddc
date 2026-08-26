@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { APICallError } from "@ai-sdk/provider";
 import { presentError } from "./errors";
 import { setUiLanguage } from "./ui";
 
@@ -23,4 +24,34 @@ test("explains an exhausted output budget behind a named task stage", () => {
     message: "task coverage check could not be completed: No output generated.",
     hint: "The model returned no structured output twice; its output budget is likely exhausted by reasoning. Raise AI_MAX_OUTPUT_TOKENS in ~/.config/sddc/.env, or rerun with --thinking off.",
   });
+});
+
+test("the provider's own explanation reaches the user", () => {
+  // "Bad Request" on its own is unactionable. The body carried the only sentence that said what to
+  // do about it, and it was being dropped on the floor.
+  const error = new APICallError({
+    message: "Bad Request",
+    url: "https://example.com/v1/chat/completions",
+    requestBodyValues: {},
+    statusCode: 400,
+    responseBody: JSON.stringify({ message: "Wait until status `available`." }),
+  });
+
+  const presented = presentError(error);
+
+  expect(presented.message).toContain("HTTP 400");
+  expect(presented.message).toContain("Wait until status");
+  expect(presented.hint).toContain("endpoint is running");
+});
+
+test("a body that is not JSON is still reported", () => {
+  const error = new APICallError({
+    message: "Bad Request",
+    url: "https://example.com/v1/chat/completions",
+    requestBodyValues: {},
+    statusCode: 404,
+    responseBody: "no such endpoint",
+  });
+
+  expect(presentError(error).message).toContain("no such endpoint");
 });
