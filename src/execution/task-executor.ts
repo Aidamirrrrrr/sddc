@@ -105,6 +105,20 @@ export async function executeTask(
       ...(hooks.taskProgress
         ? { onTurn: (turn, checks) => hooks.taskProgress?.(task, turn, checks) }
         : {}),
+      // Reading is not writing, so only strict mode stops to ask. The host checks every requested
+      // path against the same rules in every mode either way.
+      ...(mode === "strict" && hooks.approveFiles
+        ? {
+            approveFiles: (request) =>
+              hooks.approveFiles?.(task, request) ?? Promise.resolve(false),
+          }
+        : {}),
+      ...(hooks.filesRequested
+        ? {
+            onFilesRequested: (granted, refusals) =>
+              hooks.filesRequested?.(task, granted, refusals),
+          }
+        : {}),
     });
   } catch (error) {
     // A workspace that moved under a proposal is a stale draw and another one fixes it. Anything
@@ -207,6 +221,7 @@ function blockedByUser(task: Task): ChangeProposal {
       required_files: [...task.files.modify, ...task.files.create],
       required_decision: "Revise the plan or explicitly approve the sensitive operation",
     },
+    needs_files: null,
     traceability: [],
     changes: [],
   };

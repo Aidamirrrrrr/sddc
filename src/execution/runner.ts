@@ -8,6 +8,7 @@ import type { Task } from "../tasks/schemas";
 import { orderTasks } from "../tasks/validate";
 import { createGitCheckpoint } from "./checkpoint";
 import { groupByWave, prefetchable } from "./concurrency";
+import type { FileRequest } from "./context";
 import { type FileBackup, restoreFiles } from "./files";
 import type { ProposalContext } from "./pipeline";
 import { validateResume } from "./resume";
@@ -25,6 +26,10 @@ export type ExecutionHooks = {
   proposalBlocked?(task: Task, proposal: ChangeProposal): void;
   approveSensitive?(task: Task): Promise<boolean>;
   approveCommand?(task: Task, verification: Task["verification"][number]): Promise<boolean>;
+  /** Approves a task's request to read files it was not granted. Strict mode asks; others do not. */
+  approveFiles?(task: Task, request: FileRequest): Promise<boolean>;
+  /** Reports what a task asked to read and what the host actually handed over. */
+  filesRequested?(task: Task, granted: string[], refusals: string[]): void;
   /** Called after each turn of a task's agent loop, so a long task is not a silent one. */
   taskProgress?(task: Task, turn: number, verification: ExecutionTaskResult["verification"]): void;
   retryAfterFailure(task: Task, result: ExecutionTaskResult): Promise<boolean>;

@@ -49,6 +49,9 @@ export const defaultPolicy: Policy = {
     max_proposal_revisions: 2,
     max_task_iterations: 3,
     max_task_attempts: 3,
+    // Two is what a task needs to follow one import it could not see and then one it found behind
+    // it. A third has not been observed to answer anything the first two did not.
+    max_context_expansions: 2,
     command_timeout_seconds: 120,
     allow_git_checkpoints: false,
   },

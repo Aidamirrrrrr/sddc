@@ -68,6 +68,14 @@ export const policySchema = z.object({
      * verification kept failing could be retried forever as long as something kept saying yes.
      */
     max_task_attempts: z.number().int().positive(),
+    /**
+     * How many times one task may ask to read a file it was not granted.
+     *
+     * Its own budget rather than a share of the turns, because answering a read request is not an
+     * attempt at the work: nothing has been written and nothing has been verified. Bounded all the
+     * same — an unbounded appetite for context is how a task talks its way to the whole repository.
+     */
+    max_context_expansions: z.number().int().nonnegative(),
     command_timeout_seconds: z.number().int().positive(),
     allow_git_checkpoints: z.boolean(),
   }),

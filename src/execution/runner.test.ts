@@ -26,6 +26,7 @@ test("failed verification rolls source changes back", async () => {
       status: "ready",
       summary: "Change auth",
       blocker: null,
+      needs_files: null,
       traceability: [
         { covers: "R1", paths: ["src/auth.ts"] },
         { covers: "A1", paths: ["src/auth.ts"] },
@@ -73,6 +74,7 @@ test("verified changes are kept and recorded as completed", async () => {
       status: "ready",
       summary: "Change auth",
       blocker: null,
+      needs_files: null,
       traceability: [
         { covers: "R1", paths: ["src/auth.ts"] },
         { covers: "A1", paths: ["src/auth.ts"] },
@@ -166,6 +168,7 @@ test("resume skips completed tasks after validating output hashes", async () => 
       status: "ready",
       summary: "Add tests",
       blocker: null,
+      needs_files: null,
       traceability: [
         { covers: "R1", paths: ["src/auth.test.ts"] },
         { covers: "A1", paths: ["src/auth.test.ts"] },
@@ -311,6 +314,7 @@ function proposal(content: string) {
     status: "ready",
     summary: "Change auth",
     blocker: null,
+    needs_files: null,
     traceability: [
       { covers: "R1", paths: ["src/auth.ts"] },
       { covers: "A1", paths: ["src/auth.ts"] },

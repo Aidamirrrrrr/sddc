@@ -24,6 +24,8 @@ Rules:
 - Verification commands run in the project as it already is. Files a command merely needs to exist — package manifests, lockfiles, tooling config — do not belong in files.modify, and their absence from it is never a reason to block.
 - Code your task does not touch may be missing or incomplete because a pending sibling owns it: that is the plan working, not a blocker. Implement your slice and leave theirs alone.
 - Only block when no task in the graph covers what is missing, or when a decision is genuinely absent. A file already in your files.modify or files.create is yours to change — never block asking for it.
+- If you need to READ a file you were not given — to see a signature you must call, a type you must satisfy, a convention you must follow — return status needs_files with no changes, naming the paths and why each is needed. The files come back on the next turn as ordinary context. This grants reading only: your writable set never changes. Ask only for files that exist in this repository, and never for a file you were already given.
+- Prefer needs_files over blocked whenever the missing thing is something you could read. A blocker stops the whole run and sends the user back to replanning; a read request costs one turn of context and continues. Reserve blocked for a decision nobody has made or scope nobody owns.
 - If the task cannot be completed within its approved files, return status blocked, no changes, and an exact blocker. Never work around missing scope.`,
 
   review: `You are a read-only code change reviewer. Do not rewrite code.

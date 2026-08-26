@@ -64,6 +64,7 @@ function scriptedClient(write: (turn: number, feedback: string) => string, seen:
         status: "ready",
         summary: `Change ${path}`,
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: [path] }],
         changes: [
           {
@@ -148,6 +149,7 @@ test("a turn that writes outside the approved scope is rejected, not applied", a
         status: "ready",
         summary: "Reach past the scope",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: ["suite.ts"] }],
         changes: [
           {
@@ -230,6 +232,7 @@ test("a review rejection becomes the next turn's instruction, not a wasted draw"
         status: "ready",
         summary: "Change auth",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: [path] }],
         changes: [
           {
@@ -282,6 +285,7 @@ test("the reviewer only ever sees a change that already passed its commands", as
         status: "ready",
         summary: "Change auth",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: [path] }],
         changes: [
           {
@@ -331,6 +335,7 @@ test("a turn that cannot be drawn falls back to work that already came out right
         status: "ready",
         summary: "Change auth",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: [path] }],
         changes: [
           { path, operation: "modify", expected_sha256: file?.sha256, content: "correct\n" },

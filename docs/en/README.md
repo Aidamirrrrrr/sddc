@@ -435,6 +435,16 @@ current snapshots and either returns complete file contents or an explicit
 blocker requiring replanning. The host checks paths, operations, changed-line and
 content-size limits, requirement traces, and SHA-256 snapshots.
 
+A task may also ask to **read** a file it was not granted. Its readable set is fixed while the graph
+is planned, by a model that has not yet watched the verification fail; when the failure names a file
+outside that set, guessing and blocking were the only moves, and blocking ends the run. A read
+request is answered by the host against the same rules the graph was held to — the path must exist,
+be inside the project, and not be forbidden by policy — and the file arrives as ordinary context on
+the next turn. It grants reading only: `files.modify` never changes. `execution.max_context_expansions`
+bounds it (default 2), separately from the turns, because answering a request is not an attempt at
+the work. In `strict` mode the request is shown and confirmed first; a refusal is not a failure, it
+goes back as the reason and the task carries on with what it has.
+
 A separate read-only model call checks coverage, scope, public behavior, secrets,
 error handling, test quality, and undeclared decisions. It may reject but cannot
 edit a proposal. Revision attempts are limited by policy.

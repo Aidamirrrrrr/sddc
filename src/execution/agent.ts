@@ -4,7 +4,13 @@ import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
-import { type ExecutionFile, readTaskFiles } from "./context";
+import {
+  type ExecutionFile,
+  type FileGrant,
+  type FileRequest,
+  grantRequestedFiles,
+  readTaskFiles,
+} from "./context";
 import { applyProposal, emptyBackup, type FileBackup, restoreFiles } from "./files";
 import { buildTaskProposal, type ProposalContext, reviewContextFor } from "./pipeline";
 import { reviewProposal } from "./review";
@@ -61,6 +67,13 @@ export type AgentOptions = {
   onTurn?: (turn: number, verification: Verification) => void;
   /** Supplied by the prefetcher, so a proposal generated ahead of time is not thrown away. */
   prepared?: { files: ExecutionFile[]; proposal: ChangeProposal };
+  /**
+   * Approves a request to read files the task was not granted. Strict mode supplies it; without it
+   * the host still decides what may be read, it just does not ask first.
+   */
+  approveFiles?: (request: FileRequest) => Promise<boolean>;
+  /** Lets the caller show what the task asked to read and what it got. */
+  onFilesRequested?: (granted: string[], refusals: string[]) => void;
 };
 
 /**
@@ -113,6 +126,9 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       : undefined;
   let backup: FileBackup = emptyBackup();
   let feedback = options.feedback;
+  /** Files granted on request during this task, carried across its turns. Read-only, always. */
+  let extra: ExecutionFile[] = [];
+  let expansions = 0;
   let last: AgentTurn | undefined;
   /** The best turn seen: one whose commands came out the way the host requires. */
   let satisfied: AgentTurn | undefined;
@@ -126,13 +142,51 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
     let files: ExecutionFile[];
     let proposal: ChangeProposal;
     try {
-      files = reuse?.files ?? (await readTaskFiles(root, task));
+      files = [...(reuse?.files ?? (await readTaskFiles(root, task))), ...extra];
       proposal =
         reuse?.proposal ??
         (await buildTaskProposal(client, root, spec, plan, task, feedback, policy, graph, {
           ...stage,
           files,
         }));
+      // Answered here rather than by spending a turn on it. Nothing has been written and nothing
+      // verified, so this is still the same attempt at the same task — which is exactly why the
+      // expansions carry a budget of their own rather than eating into the turns.
+      while (
+        proposal.status === "needs_files" &&
+        proposal.needs_files &&
+        expansions < policy.execution.max_context_expansions
+      ) {
+        expansions += 1;
+        const grant = await expandContext(root, proposal.needs_files, policy, files, options);
+        extra = [...extra, ...grant.granted];
+        feedback = expansionFeedback(grant);
+        files = [...(await readTaskFiles(root, task)), ...extra];
+        proposal = await buildTaskProposal(
+          client,
+          root,
+          spec,
+          plan,
+          task,
+          feedback,
+          policy,
+          graph,
+          {
+            ...stage,
+            files,
+          },
+        );
+      }
+      if (proposal.status === "needs_files") {
+        // The budget is spent, and asking again would only spend the turns too. Say so plainly and
+        // let the ordinary loop carry on with what the task has.
+        feedback =
+          "No further files can be granted for this task. Work with the files you were given: " +
+          `${files.map((file) => file.path).join(", ")}. Code owned by a pending sibling task may ` +
+          "legitimately be absent — write your slice against it as it will be. Return the change, " +
+          "or a blocker if the work genuinely cannot be done within this scope.";
+        continue;
+      }
     } catch (error) {
       // A turn that cannot even be drawn ends the loop rather than the task. Anything already
       // applied stays applied and is judged on its own merits — and if nothing has been applied
@@ -223,6 +277,51 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       turns: turnCount,
     };
   }
+}
+
+/**
+ * Resolves one read request: the user may be asked, and the host checks every path either way.
+ *
+ * A refusal is not a failure. It goes back as the next draw's feedback saying which path was refused
+ * and why, so the model can ask for something else or get on with the work — which is the whole
+ * difference between this and a blocker.
+ */
+async function expandContext(
+  root: string,
+  request: FileRequest,
+  policy: Policy,
+  files: ExecutionFile[],
+  options: AgentOptions,
+): Promise<FileGrant> {
+  const approved = options.approveFiles ? await options.approveFiles(request) : true;
+  const grant = approved
+    ? await grantRequestedFiles(root, request, policy, new Set(files.map((f) => f.path)))
+    : {
+        granted: [],
+        refusals: request.paths.map((item) => `${item.path} was not approved by the user.`),
+      };
+  options.onFilesRequested?.(
+    grant.granted.map((file) => file.path),
+    grant.refusals,
+  );
+  return grant;
+}
+
+/** What the model is told after asking to read something. */
+function expansionFeedback(grant: FileGrant): string {
+  const parts: string[] = [];
+  if (grant.granted.length > 0) {
+    parts.push(
+      `These files are now in the supplied file list: ${grant.granted
+        .map((file) => file.path)
+        .join(", ")}. They are readable only — your writable set has not changed.`,
+    );
+  }
+  if (grant.refusals.length > 0) {
+    parts.push(`These were not supplied:\n${grant.refusals.map((item) => `- ${item}`).join("\n")}`);
+  }
+  parts.push("Return the change now, or ask again only if you genuinely still cannot proceed.");
+  return parts.join("\n\n");
 }
 
 /** Runs the reviewer and returns its objection, or nothing when it passed. */

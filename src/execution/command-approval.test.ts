@@ -58,6 +58,7 @@ function client() {
         status: "ready",
         summary: "Change src/auth.ts",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
         changes: [
           {
