@@ -14,8 +14,10 @@ Acceptance: every acceptance criterion must be claimed by the task that writes t
 Do not worry about a criterion appearing on more than one task — the host assigns each criterion to a
 single owner afterwards. A criterion claimed by no task at all is the failure to avoid.
 
-Paths: existing read and modify paths must come from discovery.context.files, which is supplied as
-approvedPaths. New paths may appear only in create. When a completion condition mentions existing
+Paths: existing read, modify and delete paths must come from discovery.context.files, which is
+supplied as approvedPaths. New paths may appear only in create. A file being renamed or retired goes
+in delete; a rename is that file in delete and its new path in create, in the same task. A path may
+never be in delete and in modify or create at once. When a completion condition mentions existing
 tests, list the test files covering whatever the task modifies in its files.read, so that condition
 can be checked against the code rather than assumed.
 

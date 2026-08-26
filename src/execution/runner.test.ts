@@ -8,6 +8,7 @@ import { readyTasks } from "../tasks/test-fixtures";
 import { sha256 } from "./context";
 import { executePlan } from "./runner";
 import { writeExecutionJournal } from "./storage";
+import { blockCall, finishCall, writeCall } from "./tool-fixtures";
 
 test("failed verification rolls source changes back", async () => {
   const root = await mkdtemp(join(tmpdir(), "sddc-execution-"));
@@ -21,25 +22,11 @@ test("failed verification rolls source changes back", async () => {
     { command: { program: "bun", args: ["-e", "process.exit(7)"] }, purpose: "Fail" },
   ];
   const client = stub([
-    {
-      task_id: task.id,
-      status: "ready",
-      summary: "Change auth",
-      blocker: null,
-      needs_files: null,
-      traceability: [
-        { covers: "R1", paths: ["src/auth.ts"] },
-        { covers: "A1", paths: ["src/auth.ts"] },
-      ],
-      changes: [
-        {
-          path: "src/auth.ts",
-          operation: "modify",
-          expected_sha256: sha256("old\n"),
-          content: "new\n",
-        },
-      ],
-    },
+    writeCall("src/auth.ts", "new\n"),
+    finishCall("Change auth", [
+      { covers: "R1", paths: ["src/auth.ts"] },
+      { covers: "A1", paths: ["src/auth.ts"] },
+    ]),
     passedReview(),
   ]);
 
@@ -69,25 +56,11 @@ test("verified changes are kept and recorded as completed", async () => {
     { command: { program: "bun", args: ["-e", "process.exit(0)"] }, purpose: "Pass" },
   ];
   const client = stub([
-    {
-      task_id: task.id,
-      status: "ready",
-      summary: "Change auth",
-      blocker: null,
-      needs_files: null,
-      traceability: [
-        { covers: "R1", paths: ["src/auth.ts"] },
-        { covers: "A1", paths: ["src/auth.ts"] },
-      ],
-      changes: [
-        {
-          path: "src/auth.ts",
-          operation: "modify",
-          expected_sha256: sha256("old\n"),
-          content: "new\n",
-        },
-      ],
-    },
+    writeCall("src/auth.ts", "new\n"),
+    finishCall("Change auth", [
+      { covers: "R1", paths: ["src/auth.ts"] },
+      { covers: "A1", paths: ["src/auth.ts"] },
+    ]),
     passedReview(),
   ]);
 
@@ -113,20 +86,7 @@ test("blocked proposals stop without touching source files", async () => {
   tasks.tasks = tasks.tasks.slice(0, 1);
   const task = tasks.tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
-  const client = stub([
-    {
-      task_id: task.id,
-      status: "blocked",
-      summary: "Repository method is missing",
-      blocker: {
-        reason: "A repository file is outside scope",
-        required_files: ["src/repository.ts"],
-        required_decision: null,
-      },
-      traceability: [],
-      changes: [],
-    },
-  ]);
+  const client = stub([blockCall("A repository file is outside scope", ["src/repository.ts"])]);
 
   const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
     async review() {
@@ -163,25 +123,11 @@ test("resume skips completed tasks after validating output hashes", async () => 
     ],
   });
   const client = stub([
-    {
-      task_id: "T2",
-      status: "ready",
-      summary: "Add tests",
-      blocker: null,
-      needs_files: null,
-      traceability: [
-        { covers: "R1", paths: ["src/auth.test.ts"] },
-        { covers: "A1", paths: ["src/auth.test.ts"] },
-      ],
-      changes: [
-        {
-          path: "src/auth.test.ts",
-          operation: "create",
-          expected_sha256: null,
-          content: "test('registration', () => {});\n",
-        },
-      ],
-    },
+    writeCall("src/auth.test.ts", "test('registration', () => {});\n"),
+    finishCall("Add tests", [
+      { covers: "R1", paths: ["src/auth.test.ts"] },
+      { covers: "A1", paths: ["src/auth.test.ts"] },
+    ]),
     passedReview(),
   ]);
   const secondTask = tasks.tasks[1];
@@ -211,7 +157,12 @@ test("final review rolls a task back and requests a revised proposal", async () 
   await Bun.write(join(root, "src/auth.ts"), "old\n");
   const plan = readyPlan();
   const tasks = singleTaskList();
-  const client = stub([proposal("new\n"), passedReview(), proposal("revised\n"), passedReview()]);
+  const client = stub([
+    ...proposal("new\n"),
+    passedReview(),
+    ...proposal("revised\n"),
+    passedReview(),
+  ]);
   let reviews = 0;
 
   const journal = await executePlan(client, root, readySpec(), plan, tasks.tasks, {
@@ -239,7 +190,7 @@ test("disabled checkpoint restores the verified task", async () => {
 
   await expect(
     executePlan(
-      stub([proposal("new\n"), passedReview()]),
+      stub([...proposal("new\n"), passedReview()]),
       root,
       readySpec(),
       readyPlan(),
@@ -308,26 +259,15 @@ function singleTaskList() {
   return list;
 }
 
+/** One attempt at T1: write the file, then finish. Two calls where there used to be one. */
 function proposal(content: string) {
-  return {
-    task_id: "T1",
-    status: "ready",
-    summary: "Change auth",
-    blocker: null,
-    needs_files: null,
-    traceability: [
+  return [
+    writeCall("src/auth.ts", content),
+    finishCall("Change auth", [
       { covers: "R1", paths: ["src/auth.ts"] },
       { covers: "A1", paths: ["src/auth.ts"] },
-    ],
-    changes: [
-      {
-        path: "src/auth.ts",
-        operation: "modify",
-        expected_sha256: sha256("old\n"),
-        content,
-      },
-    ],
-  };
+    ]),
+  ];
 }
 
 function stub(responses: unknown[]) {

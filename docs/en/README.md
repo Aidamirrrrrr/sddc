@@ -435,6 +435,17 @@ current snapshots and either returns complete file contents or an explicit
 blocker requiring replanning. The host checks paths, operations, changed-line and
 content-size limits, requirement traces, and SHA-256 snapshots.
 
+`sddc --yes` implements without stopping at each diff, which is what makes the phase runnable in
+CI at all — it is the only one that writes code and was the only one that could not run without a
+person. It accepts what the accepted graph already described, and refuses a sensitive permission:
+those are always confirmed, and a flag that quietly made that untrue would be worth less than the
+automation it buys. A graph needing one blocks and says so in the journal.
+
+`dialogue.auto_accept_seconds` (default 5, zero to disable) shows an artifact and accepts it after
+a countdown when the phase never asked a question and was never sent back for another version.
+Everything reaching that point has already passed every validator, so validity is not the signal —
+having nothing to decide is. Any key opens the ordinary review menu, at no cost.
+
 A task may also ask to **read** a file it was not granted. Its readable set is fixed while the graph
 is planned, by a model that has not yet watched the verification fail; when the failure names a file
 outside that set, guessing and blocking were the only moves, and blocking ends the run. A read

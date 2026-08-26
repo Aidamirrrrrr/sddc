@@ -57,10 +57,10 @@ test("a criterion owner that only writes tests and waits for nobody is rejected"
   const [first, second] = list.tasks;
   if (!first || !second) throw new Error("Fixture must contain two tasks");
   first.acceptance = ["A1"];
-  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"], delete: [] };
   first.depends_on = [];
   second.acceptance = [];
-  second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+  second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [], delete: [] };
   second.depends_on = [];
 
   expect(() => validateTaskPolicy(list.tasks, defaultPolicy)).toThrow(
@@ -73,10 +73,10 @@ test("under test-first that same shape is the prescribed one", () => {
   const [first, second] = list.tasks;
   if (!first || !second) throw new Error("Fixture must contain two tasks");
   first.acceptance = ["A1"];
-  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+  first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"], delete: [] };
   first.depends_on = [];
   second.acceptance = [];
-  second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+  second.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [], delete: [] };
   second.depends_on = ["T1"];
 
   // Demanding a dependency here while test-first demands the opposite left no graph satisfiable.
@@ -97,7 +97,7 @@ test("adding a test for behaviour that already exists needs no dependency", () =
     const [first] = value.tasks;
     if (!first) throw new Error("Fixture must contain a task");
     first.acceptance = ["A1"];
-    first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"] };
+    first.files = { read: ["src/auth.ts"], modify: [], create: ["src/auth.test.ts"], delete: [] };
     first.depends_on = [];
     // Nothing in the graph writes behavioural source, so there is nothing to wait for.
     value.tasks = [first];
@@ -111,8 +111,8 @@ function sourceAndTestGraph(visibleToT1: string[]) {
   const list = readyTasks();
   const [first, second] = list.tasks;
   if (!first || !second) throw new Error("Fixture must contain two tasks");
-  first.files = { read: visibleToT1, modify: ["src/auth.ts"], create: [] };
-  second.files = { read: ["src/auth.ts"], modify: ["src/auth.test.ts"], create: [] };
+  first.files = { read: visibleToT1, modify: ["src/auth.ts"], create: [], delete: [] };
+  second.files = { read: ["src/auth.ts"], modify: ["src/auth.test.ts"], create: [], delete: [] };
   return list;
 }
 
@@ -147,7 +147,7 @@ test("a test discovery never approved is not demanded, or no graph could satisfy
   const list = readyTasks();
   const [first] = list.tasks;
   if (!first) throw new Error("Fixture must contain a task");
-  first.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+  first.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [], delete: [] };
 
   expect(() => validateTaskList(list, readySpec(), discovery(), ["src/auth.ts"])).not.toThrow();
 });
@@ -156,7 +156,7 @@ test("a project without a sibling test is not constrained by guesswork", () => {
   const list = readyTasks();
   const [first] = list.tasks;
   if (!first) throw new Error("Fixture must contain a task");
-  first.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [] };
+  first.files = { read: ["src/auth.ts"], modify: ["src/auth.ts"], create: [], delete: [] };
 
   expect(() => validateTaskList(list, readySpec(), discovery(), ["src/auth.ts"])).not.toThrow();
 });

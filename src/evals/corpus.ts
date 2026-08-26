@@ -6,7 +6,8 @@ import { type Policy, policySchema } from "../policy/schemas";
 import { type RepositoryDiscovery, repositoryDiscoverySchema } from "../repository/schemas";
 import { type Spec, specSchema } from "../spec/schemas";
 import { featureSlug } from "../spec/storage";
-import { type TaskList, taskListSchema } from "../tasks/schemas";
+import type { TaskList } from "../tasks/schemas";
+import { parseStoredTaskList } from "../tasks/storage";
 
 /**
  * A case is an accepted run, frozen.
@@ -51,7 +52,7 @@ export async function loadCase(root: string, name: string): Promise<EvalCase | u
     discovery,
     policy: await readPolicy(directory),
     plan: await read(directory, "plan.yaml", implementationPlanSchema),
-    tasks: await read(directory, "tasks.yaml", taskListSchema),
+    tasks: await read(directory, "tasks.yaml", { parse: parseStoredTaskList }),
   };
 }
 
@@ -87,7 +88,7 @@ function assertAgree(feature: string, contents: Map<string, string>): void {
   const tasks = contents.get("tasks.yaml");
   if (!spec || !tasks) return;
   const parsedSpec = specSchema.parse(Bun.YAML.parse(spec));
-  const parsedTasks = taskListSchema.parse(Bun.YAML.parse(tasks));
+  const parsedTasks = parseStoredTaskList(Bun.YAML.parse(tasks));
   const known = new Set([
     ...parsedSpec.requirements.map((item) => item.id),
     ...parsedSpec.acceptance.map((item) => item.id),

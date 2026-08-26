@@ -71,11 +71,21 @@ export function isSafeProjectPath(path: string): boolean {
   return !lower.endsWith(".pem") && !lower.endsWith(".key");
 }
 
-/** Whether a path is covered by one of the policy's forbidden names. */
+/**
+ * Whether a path is covered by one of the policy's forbidden names.
+ *
+ * A forbidden name matches a directory or file called exactly that, and the family of files named
+ * after it — `.env` covers `.env.local`, `credentials` covers `credentials.json`. The one exception
+ * is `.env.example`, which is checked in on purpose: it documents the variables rather than holding
+ * them, the repository walker indexes it for exactly that reason, and forbidding it here left the
+ * two halves of the tool disagreeing about a single file.
+ */
 export function isForbiddenPath(path: string, forbidden: string[]): boolean {
   const parts = path.toLocaleLowerCase().split("/");
-  return forbidden.some((name) => {
-    const target = name.toLocaleLowerCase();
-    return parts.includes(target) || parts.at(-1)?.startsWith(`${target}.`) === true;
+  const name = parts.at(-1) ?? "";
+  return forbidden.some((entry) => {
+    const target = entry.toLocaleLowerCase();
+    if (parts.includes(target)) return true;
+    return name.startsWith(`${target}.`) && name !== ".env.example";
   });
 }

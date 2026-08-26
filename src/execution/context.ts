@@ -3,11 +3,17 @@ import { isForbiddenPath, isSafeProjectPath } from "../policy/paths";
 import type { Policy } from "../policy/schemas";
 import { MAX_FILE_BYTES } from "../repository/scan";
 import type { Task } from "../tasks/schemas";
-import type { ChangeProposal } from "./schemas";
 
 export type ExecutionFile = { path: string; sha256: string; content: string };
 
-export type FileRequest = NonNullable<ChangeProposal["needs_files"]>;
+/**
+ * A request to read files, from whoever is asking.
+ *
+ * Spelled out rather than derived from the proposal schema: the tool loop asks the same question
+ * with a different shape, and tying the grant to one caller's schema would mean changing the grant
+ * whenever that caller changes.
+ */
+export type FileRequest = { reason: string; paths: Array<{ path: string; reason: string }> };
 
 /** What came of a read request: what the task may now see, and why the rest was refused. */
 export type FileGrant = { granted: ExecutionFile[]; refusals: string[] };

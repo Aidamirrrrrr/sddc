@@ -153,6 +153,7 @@ export async function runCli(arguments_: string[]): Promise<void> {
       cli.recompile,
       cli.input.join(" ").trim(),
       cli.dryRun,
+      cli.yes,
     );
   }
 
@@ -260,10 +261,16 @@ export async function runCli(arguments_: string[]): Promise<void> {
       return;
     }
     step(5, 5, { en: "Controlled implementation", ru: "Контролируемая реализация" });
-    await runApprovedExecution(client, root, spec, plan, tasks, policy, {
-      constitution,
-      clarifications,
-    });
+    await runApprovedExecution(
+      client,
+      root,
+      spec,
+      plan,
+      tasks,
+      policy,
+      { constitution, clarifications },
+      cli.yes,
+    );
     reportUsage();
   }
 

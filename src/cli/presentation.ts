@@ -169,6 +169,7 @@ export function taskDocument(list: TaskList): string {
         .filter((task) => task.wave === wave)
         .map((task) => {
           const writes = [...task.files.modify, ...task.files.create];
+          const removals = task.files.delete;
           const commands = task.verification.map(
             (item) => `$ ${item.command.program} ${item.command.args.join(" ")}`,
           );
@@ -180,6 +181,9 @@ export function taskDocument(list: TaskList): string {
               ? `  ${phrase({ en: "After", ru: "После" })}: ${task.depends_on.join(", ")}`
               : "",
             writes.length ? `  ${phrase({ en: "Files", ru: "Файлы" })}: ${writes.join(", ")}` : "",
+            removals.length
+              ? `  ${phrase({ en: "Removes", ru: "Удаляет" })}: ${removals.join(", ")}`
+              : "",
             commands.length
               ? `  ${phrase({ en: "Checks", ru: "Проверки" })}: ${commands.join("; ")}`
               : "",

@@ -19,7 +19,7 @@ function task(id: string, dependsOn: string[], writes: string[]): Task {
     acceptance: ["A1"],
     depends_on: dependsOn,
     permissions: [],
-    files: { read: [], modify: [], create: writes },
+    files: { read: [], modify: [], create: writes, delete: [] },
     verification: [{ command: { program: "bun", args: ["test"] }, purpose: "check" }],
     done_when: ["done"],
     risks: [],

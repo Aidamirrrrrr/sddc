@@ -24,6 +24,7 @@ Options:
   --live                With --eval, regenerate artifacts with the model first
   --stage <name>        Run one diagnostic model stage
   -n, --dry-run         Stop after the accepted task graph
+  -y, --yes             Implement without prompting; sensitive permissions still block
   --no-input            Never prompt; write a draft when approval is required
   --plain               Disable decorative terminal output
   --json                Emit JSON lines; implies --no-input

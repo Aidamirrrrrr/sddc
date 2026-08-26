@@ -11,7 +11,13 @@ import { runCommand } from "./commands";
 import { Banner, Header, PhaseRail, StageIndicator, StatusBar } from "./Frame";
 import { useKeys } from "./keys";
 import { Panel, PanelBody } from "./Panel";
-import { ConfirmPrompt, MultiSelectPrompt, SelectPrompt, TextPrompt } from "./prompts";
+import {
+  ConfirmPrompt,
+  CountdownPrompt,
+  MultiSelectPrompt,
+  SelectPrompt,
+  TextPrompt,
+} from "./prompts";
 import type { AppState, Block, Store, Tone } from "./store";
 
 /** How long a wait has to last before it is worth putting something to read in it. */
@@ -191,6 +197,15 @@ function PendingPrompt({ store }: { store: Store }) {
         message={pending.message}
         choices={pending.choices}
         initial={pending.initial}
+        onSubmit={pending.resolve}
+      />
+    );
+  }
+  if (pending.kind === "countdown") {
+    return (
+      <CountdownPrompt
+        message={pending.message}
+        seconds={pending.seconds}
         onSubmit={pending.resolve}
       />
     );

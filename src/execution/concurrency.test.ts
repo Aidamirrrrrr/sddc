@@ -14,7 +14,12 @@ function task(id: string, dependsOn: string[], files: Files): Task {
     acceptance: ["A1"],
     depends_on: dependsOn,
     permissions: [],
-    files: { read: files.read ?? [], modify: files.modify ?? [], create: files.create ?? [] },
+    files: {
+      read: files.read ?? [],
+      modify: files.modify ?? [],
+      create: files.create ?? [],
+      delete: [],
+    },
     verification: [{ command: { program: "bun", args: ["test"] }, purpose: "check" }],
     done_when: ["done"],
     risks: [],

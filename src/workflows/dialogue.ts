@@ -3,12 +3,14 @@ import {
   type ArtifactAction,
   type Copy,
   document,
+  phrase,
   required,
   reviewDocument,
   warn,
   withSpinner,
 } from "../cli/ui";
 import type { Policy } from "../policy/schemas";
+import { driver } from "../ui/driver";
 import { type DialoguePhase, type PhaseState, phaseState, saveSession } from "./session";
 
 /** Every phase artifact answers these two questions the same way. */
@@ -87,6 +89,8 @@ export async function converge<T extends Clarifiable>(options: ConvergeOptions<T
 
     if (options.settled?.(value)) return value;
 
+    if (await autoAccepted(options, value, state)) return value;
+
     // The review menu stays open until the user either accepts or asks for another build; editing
     // and inspecting decisions change nothing upstream, so neither spends a revision round.
     let decision = await review(options, value);
@@ -159,3 +163,33 @@ function errorText(error: unknown): string {
 }
 
 export { phaseState };
+
+/**
+ * Whether this artifact is one nobody had to decide anything about.
+ *
+ * Everything that reaches the review menu has already passed every validator — sampling would not
+ * have returned otherwise — so "it is valid" is not a signal, and treating it as one would delete
+ * the review rather than shorten it.
+ *
+ * The signal is that the phase never had to ask a question and was never sent back for another
+ * version. Then the accept keystroke carries no information: the user is agreeing with something
+ * they were never in tension with. The artifact is still shown, still lands in the transcript, and
+ * is still stoppable — only the demand for a keystroke goes away.
+ *
+ * A surface that cannot read a key without a prompt open does not offer this, and falls through to
+ * asking properly.
+ */
+async function autoAccepted<T extends Clarifiable>(
+  options: ConvergeOptions<T>,
+  value: T,
+  state: PhaseState,
+): Promise<boolean> {
+  const seconds = options.policy.dialogue.auto_accept_seconds;
+  if (seconds <= 0) return false;
+  if (value.status !== "ready" || value.questions.length > 0) return false;
+  if (state.clarification_rounds > 0 || state.revision_rounds > 0) return false;
+  const countdown = driver().autoAccept;
+  if (!countdown) return false;
+  document(options.title, options.summary(value));
+  return countdown.call(driver(), phrase(options.reviewPrompt), seconds);
+}

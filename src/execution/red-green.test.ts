@@ -12,7 +12,7 @@ const testFirst = {
 function taskWriting(modify: string[], create: string[] = []): Task {
   const task = readyTasks().tasks[0];
   if (!task) throw new Error("Fixture must contain a task");
-  return { ...task, files: { read: [], modify, create } };
+  return { ...task, files: { read: [], modify, create, delete: [] } };
 }
 
 const green = [{ program: "bun", args: ["test"], exit_code: 0, timed_out: false, output: "" }];

@@ -15,6 +15,15 @@ export const provenanceSchema = z.object({
   version: z.literal(1),
   plan: z.object({ spec_sha256: z.string() }).optional(),
   tasks: z.object({ spec_sha256: z.string(), plan_sha256: z.string() }).optional(),
+  /**
+   * Which task graph the code on disk was actually built from.
+   *
+   * The two entries above catch a stale artifact; this one catches stale *code*. Editing
+   * `spec.yaml`, recompiling, and forgetting to re-run the implementation leaves a repository whose
+   * source answers a graph nobody would accept any more — and until now that was invisible, which
+   * is exactly the shape of failure the other two exist to prevent one level up.
+   */
+  execution: z.object({ tasks_sha256: z.string() }).optional(),
 });
 
 export type Provenance = z.infer<typeof provenanceSchema>;
@@ -63,5 +72,14 @@ export async function recordTaskProvenance(root: string, feature: string): Promi
   await write(root, feature, {
     ...(await readProvenance(root, feature)),
     tasks: { spec_sha256: spec, plan_sha256: plan },
+  });
+}
+
+export async function recordExecutionProvenance(root: string, feature: string): Promise<void> {
+  const tasks = await artifactDigest(root, feature, "tasks.yaml");
+  if (!tasks) return;
+  await write(root, feature, {
+    ...(await readProvenance(root, feature)),
+    execution: { tasks_sha256: tasks },
   });
 }

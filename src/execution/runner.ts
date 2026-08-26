@@ -8,7 +8,6 @@ import type { Task } from "../tasks/schemas";
 import { orderTasks } from "../tasks/validate";
 import { createGitCheckpoint } from "./checkpoint";
 import { groupByWave, prefetchable } from "./concurrency";
-import type { FileRequest } from "./context";
 import { type FileBackup, restoreFiles } from "./files";
 import type { ProposalContext } from "./pipeline";
 import { validateResume } from "./resume";
@@ -26,10 +25,8 @@ export type ExecutionHooks = {
   proposalBlocked?(task: Task, proposal: ChangeProposal): void;
   approveSensitive?(task: Task): Promise<boolean>;
   approveCommand?(task: Task, verification: Task["verification"][number]): Promise<boolean>;
-  /** Approves a task's request to read files it was not granted. Strict mode asks; others do not. */
-  approveFiles?(task: Task, request: FileRequest): Promise<boolean>;
-  /** Reports what a task asked to read and what the host actually handed over. */
-  filesRequested?(task: Task, granted: string[], refusals: string[]): void;
+  /** Reports each tool call a task made, so a long task is not a silent one. */
+  toolResult?(task: Task, result: { tool: string; ok: boolean; summary: string }): void;
   /** Called after each turn of a task's agent loop, so a long task is not a silent one. */
   taskProgress?(task: Task, turn: number, verification: ExecutionTaskResult["verification"]): void;
   retryAfterFailure(task: Task, result: ExecutionTaskResult): Promise<boolean>;
@@ -40,25 +37,17 @@ export type ExecutionHooks = {
 };
 
 /**
- * Generates proposals for independent tasks of a wave while the current one is being reviewed.
+ * Reads the files of a wave's independent tasks while the current one is being reviewed.
  *
- * Model latency dominates a run, and the tasks of a wave are independent by construction. Only the
- * generation is shared out: writing, verifying and approving stay strictly ordered, so the terminal
- * never has to host two conversations at once.
+ * It used to generate their whole proposals. Now that a task runs commands as it works, doing that
+ * ahead of time would run them before the user had reached the task — unacceptable in strict mode
+ * and surprising everywhere else. So only the reading happens early: less latency saved, nothing
+ * else spent.
  *
- * Strict mode never prefetches — it exists so the user authorizes each task before any work happens
- * on it, and spending a model call ahead of that approval would defeat the mode.
+ * Strict mode still never prefetches. It exists so the user authorizes each task before any work
+ * happens on it, and reading files ahead of that approval is still work.
  */
-function createPrefetcher(
-  client: Pick<ModelClient, "generateObject">,
-  root: string,
-  spec: Spec,
-  plan: ImplementationPlan,
-  ordered: Task[],
-  policy: Policy,
-  mode: ExecutionJournal["mode"],
-  stage: () => ProposalContext,
-) {
+function createPrefetcher(root: string, ordered: Task[], mode: ExecutionJournal["mode"]) {
   const pending = new Map<string, Promise<TaskPreparation>>();
   const released = new Set<number>();
   const waves = groupByWave(ordered);
@@ -70,7 +59,7 @@ function createPrefetcher(
       const group = waves.find((tasks) => tasks[0]?.wave === wave) ?? [];
       // The first task of the wave is about to run inline; only its siblings are worth prefetching.
       for (const task of prefetchable(group).slice(1)) {
-        const work = prepareTask(client, root, spec, plan, task, "", policy, ordered, stage());
+        const work = prepareTask(root, task);
         // A prefetch that fails must surface when the task is reached, not as an unhandled rejection.
         work.catch(() => undefined);
         pending.set(task.id, work);
@@ -80,7 +69,7 @@ function createPrefetcher(
       const work = pending.get(taskId);
       if (!work) return undefined;
       pending.delete(taskId);
-      // A failed prefetch is not a failed task: fall back to generating it inline.
+      // A failed prefetch is not a failed task: fall back to reading it inline.
       return work.catch(() => undefined);
     },
   };
@@ -179,7 +168,7 @@ export async function executePlan(
         item.status === "completed" && item.verification.some((check) => check.exit_code !== 0),
     ),
   });
-  const prefetch = createPrefetcher(client, root, spec, plan, ordered, policy, mode, stage);
+  const prefetch = createPrefetcher(root, ordered, mode);
   if (journal.pending_feedback) {
     feedback.set(journal.pending_feedback.task_id, journal.pending_feedback.feedback);
     journal.pending_feedback = null;

@@ -37,7 +37,7 @@ export function ranToCompletion(item: { exit_code: number; timed_out: boolean })
   return !item.timed_out && item.exit_code < 126;
 }
 
-type CommandOutcome = Omit<ExecutionTaskResult["verification"][number], "program" | "args">;
+export type CommandOutcome = Omit<ExecutionTaskResult["verification"][number], "program" | "args">;
 
 export async function runVerification(
   root: string,
@@ -81,11 +81,13 @@ export async function runVerification(
   return results;
 }
 
-async function runCommand(
+/** Runs one command under both bounds. Shared with the tool loop, which runs diagnostics. */
+export async function runCommand(
   root: string,
   command: Task["verification"][number]["command"],
-  bounds: { timeoutMs: number; killGraceMs: number },
+  bounds: { timeoutMs: number; killGraceMs?: number },
 ): Promise<CommandOutcome> {
+  const killGraceMs = bounds.killGraceMs ?? KILL_GRACE_MS;
   const child = Bun.spawn([command.program, ...command.args], {
     cwd: root,
     stdout: "pipe",
@@ -97,7 +99,7 @@ async function runCommand(
   const timer = setTimeout(() => {
     timedOut = true;
     child.kill();
-    escalation = setTimeout(() => child.kill("SIGKILL"), bounds.killGraceMs);
+    escalation = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
   }, bounds.timeoutMs);
 
   const collected = Promise.all([
@@ -110,7 +112,7 @@ async function runCommand(
   // wait. Killing the child bounds the child; only this bounds the call.
   let abandon: ReturnType<typeof setTimeout> | undefined;
   const abandoned = new Promise<undefined>((resolve) => {
-    abandon = setTimeout(() => resolve(undefined), bounds.timeoutMs + bounds.killGraceMs * 2);
+    abandon = setTimeout(() => resolve(undefined), bounds.timeoutMs + killGraceMs * 2);
   });
 
   try {

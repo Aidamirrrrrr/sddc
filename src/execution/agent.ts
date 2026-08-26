@@ -4,37 +4,15 @@ import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
-import {
-  type ExecutionFile,
-  type FileGrant,
-  type FileRequest,
-  grantRequestedFiles,
-  readTaskFiles,
-} from "./context";
-import { applyProposal, emptyBackup, type FileBackup, restoreFiles } from "./files";
-import { buildTaskProposal, type ProposalContext, reviewContextFor } from "./pipeline";
+import type { ExecutionFile } from "./context";
+import { emptyBackup, type FileBackup, restoreFiles } from "./files";
+import { type ProposalContext, reviewContextFor, runTaskTools, type TaskAttempt } from "./pipeline";
 import { reviewProposal } from "./review";
 import type { ChangeProposal, ExecutionTaskResult } from "./schemas";
 import { verificationSatisfied } from "./task-executor";
 import { ranToCompletion, runVerification } from "./verify";
 
 type Verification = ExecutionTaskResult["verification"];
-
-/**
- * The workspace moved between reading a file and writing it.
- *
- * Its own type because it is the one failure in here that another draw genuinely fixes: a prefetched
- * proposal built from an older snapshot, an editor saving, a formatter running. Everything else that
- * throws — a provider that is down, a budget spent on refusals — is not improved by asking again, and
- * the caller has to be able to tell them apart.
- */
-export class WorkspaceMovedError extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause));
-    this.name = "WorkspaceMovedError";
-    this.cause = cause;
-  }
-}
 
 export type AgentTurn = {
   proposal: ChangeProposal;
@@ -65,15 +43,10 @@ export type AgentOptions = {
   approveCommand?: (item: Task["verification"][number]) => Promise<boolean>;
   /** Lets the caller show progress; a turn can take a model call plus a test run. */
   onTurn?: (turn: number, verification: Verification) => void;
-  /** Supplied by the prefetcher, so a proposal generated ahead of time is not thrown away. */
-  prepared?: { files: ExecutionFile[]; proposal: ChangeProposal };
-  /**
-   * Approves a request to read files the task was not granted. Strict mode supplies it; without it
-   * the host still decides what may be read, it just does not ask first.
-   */
-  approveFiles?: (request: FileRequest) => Promise<boolean>;
-  /** Lets the caller show what the task asked to read and what it got. */
-  onFilesRequested?: (granted: string[], refusals: string[]) => void;
+  /** Supplied by the prefetcher, so files read ahead of time are not read twice. */
+  prepared?: { files: ExecutionFile[] };
+  /** Lets the caller show a task working rather than a task thinking. */
+  onToolResult?: (result: { tool: string; ok: boolean; summary: string }) => void;
 };
 
 /**
@@ -126,9 +99,6 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       : undefined;
   let backup: FileBackup = emptyBackup();
   let feedback = options.feedback;
-  /** Files granted on request during this task, carried across its turns. Read-only, always. */
-  let extra: ExecutionFile[] = [];
-  let expansions = 0;
   let last: AgentTurn | undefined;
   /** The best turn seen: one whose commands came out the way the host requires. */
   let satisfied: AgentTurn | undefined;
@@ -139,57 +109,22 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
     // Re-read every turn: after the first, the files carry this task's own previous attempt, which
     // is exactly what the model has to see to correct it.
     const reuse = turn === 1 ? options.prepared : undefined;
-    let files: ExecutionFile[];
-    let proposal: ChangeProposal;
+    let attempt: TaskAttempt;
     try {
-      files = [...(reuse?.files ?? (await readTaskFiles(root, task))), ...extra];
-      proposal =
-        reuse?.proposal ??
-        (await buildTaskProposal(client, root, spec, plan, task, feedback, policy, graph, {
-          ...stage,
-          files,
-        }));
-      // Answered here rather than by spending a turn on it. Nothing has been written and nothing
-      // verified, so this is still the same attempt at the same task — which is exactly why the
-      // expansions carry a budget of their own rather than eating into the turns.
-      while (
-        proposal.status === "needs_files" &&
-        proposal.needs_files &&
-        expansions < policy.execution.max_context_expansions
-      ) {
-        expansions += 1;
-        const grant = await expandContext(root, proposal.needs_files, policy, files, options);
-        extra = [...extra, ...grant.granted];
-        feedback = expansionFeedback(grant);
-        files = [...(await readTaskFiles(root, task)), ...extra];
-        proposal = await buildTaskProposal(
-          client,
-          root,
-          spec,
-          plan,
-          task,
-          feedback,
-          policy,
-          graph,
-          {
-            ...stage,
-            files,
-          },
-        );
-      }
-      if (proposal.status === "needs_files") {
-        // The budget is spent, and asking again would only spend the turns too. Say so plainly and
-        // let the ordinary loop carry on with what the task has.
-        feedback =
-          "No further files can be granted for this task. Work with the files you were given: " +
-          `${files.map((file) => file.path).join(", ")}. Code owned by a pending sibling task may ` +
-          "legitimately be absent — write your slice against it as it will be. Return the change, " +
-          "or a blocker if the work genuinely cannot be done within this scope.";
-        continue;
-      }
+      attempt = await runTaskTools(client, root, spec, plan, task, feedback, policy, graph, {
+        ...stage,
+        ...(reuse ? { files: reuse.files } : {}),
+        approveCommand: async () => {
+          // Routed through the same gate the verification commands go through, so a task confirms
+          // its commands once whichever of them asks first.
+          if (!options.approveCommand) return true;
+          return commandsApproved();
+        },
+        ...(options.onToolResult ? { onToolResult: options.onToolResult } : {}),
+      });
     } catch (error) {
       // A turn that cannot even be drawn ends the loop rather than the task. Anything already
-      // applied stays applied and is judged on its own merits — and if nothing has been applied
+      // written stays written and is judged on its own merits — and if nothing has been written
       // yet there is no work to judge, so the failure travels on as it always did.
       if (!last) {
         await restoreFiles(root, backup);
@@ -198,18 +133,14 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       return exhausted(turn - 1);
     }
 
+    // Folded before anything else can go wrong: the loop wrote as it went, so this turn's pre-state
+    // has to join the earlier turns' before any path out of here restores.
+    backup = foldBackup(backup, attempt.backup);
+    const { proposal, files } = attempt;
+
     if (proposal.status === "blocked") {
       await restoreFiles(root, backup);
       return { kind: "blocked", proposal };
-    }
-
-    try {
-      backup = foldBackup(backup, await applyProposal(root, proposal));
-    } catch (error) {
-      // Nothing of this turn landed, so restore whatever earlier turns wrote and let the caller
-      // decide, rather than leaving a half-applied task behind.
-      await restoreFiles(root, backup);
-      throw new WorkspaceMovedError(error);
     }
 
     const verification = await runVerification(root, task, {
@@ -277,51 +208,6 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       turns: turnCount,
     };
   }
-}
-
-/**
- * Resolves one read request: the user may be asked, and the host checks every path either way.
- *
- * A refusal is not a failure. It goes back as the next draw's feedback saying which path was refused
- * and why, so the model can ask for something else or get on with the work — which is the whole
- * difference between this and a blocker.
- */
-async function expandContext(
-  root: string,
-  request: FileRequest,
-  policy: Policy,
-  files: ExecutionFile[],
-  options: AgentOptions,
-): Promise<FileGrant> {
-  const approved = options.approveFiles ? await options.approveFiles(request) : true;
-  const grant = approved
-    ? await grantRequestedFiles(root, request, policy, new Set(files.map((f) => f.path)))
-    : {
-        granted: [],
-        refusals: request.paths.map((item) => `${item.path} was not approved by the user.`),
-      };
-  options.onFilesRequested?.(
-    grant.granted.map((file) => file.path),
-    grant.refusals,
-  );
-  return grant;
-}
-
-/** What the model is told after asking to read something. */
-function expansionFeedback(grant: FileGrant): string {
-  const parts: string[] = [];
-  if (grant.granted.length > 0) {
-    parts.push(
-      `These files are now in the supplied file list: ${grant.granted
-        .map((file) => file.path)
-        .join(", ")}. They are readable only — your writable set has not changed.`,
-    );
-  }
-  if (grant.refusals.length > 0) {
-    parts.push(`These were not supplied:\n${grant.refusals.map((item) => `- ${item}`).join("\n")}`);
-  }
-  parts.push("Return the change now, or ask again only if you genuinely still cannot proceed.");
-  return parts.join("\n\n");
 }
 
 /** Runs the reviewer and returns its objection, or nothing when it passed. */

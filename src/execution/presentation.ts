@@ -5,6 +5,7 @@ import type { ChangeProposal, ExecutionJournal } from "./schemas";
 export function contractSummary(feature: string, tasks: Task[], policy: Policy): string {
   const modified = new Set(tasks.flatMap((task) => task.files.modify));
   const created = new Set(tasks.flatMap((task) => task.files.create));
+  const deleted = new Set(tasks.flatMap((task) => task.files.delete));
   const permissions = new Set(tasks.flatMap((task) => task.permissions));
   const commands = tasks.flatMap((task) =>
     task.verification.map((item) => `${item.command.program} ${item.command.args.join(" ")}`),
@@ -13,7 +14,7 @@ export function contractSummary(feature: string, tasks: Task[], policy: Policy):
   return [
     `Feature: ${feature}`,
     `Tasks: ${tasks.length} in ${waves.size} dependency waves`,
-    `Files: ${modified.size} modified, ${created.size} created`,
+    `Files: ${modified.size} modified, ${created.size} created, ${deleted.size} deleted`,
     `Permissions: ${[...permissions].join(", ") || "none"}`,
     `Commands: ${commands.join("; ")}`,
     `Network: ${policy.commands.allow_external_network ? "allowed by policy" : "blocked"}`,
