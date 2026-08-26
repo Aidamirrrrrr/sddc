@@ -43,17 +43,47 @@ export async function applyProposal(root: string, proposal: ChangeProposal): Pro
   backup.directories = [...created];
   try {
     for (const change of proposal.changes) {
-      const path = join(root, change.path);
-      await mkdir(dirname(path), { recursive: true });
-      const temporary = `${path}.sddc-${crypto.randomUUID()}.tmp`;
-      await Bun.write(temporary, change.content);
-      await rename(temporary, path);
+      await writeAtomically(join(root, change.path), change.content);
     }
     return backup;
   } catch (error) {
     await restoreFiles(root, backup);
     throw new Error(`Failed to apply task ${proposal.task_id}`, { cause: error });
   }
+}
+
+/**
+ * Writes one file, recording whatever a rollback will need to undo it.
+ *
+ * The counterpart to applyProposal for a task that edits as it goes: applyProposal checks every
+ * hash before touching anything, so one bad change costs nothing, while this lands each write as it
+ * is made and the loop lives with what it wrote. The pre-state is captured on first touch only —
+ * a file written three times still restores to what it was before the first.
+ */
+export async function writeTracked(
+  root: string,
+  path: string,
+  content: string,
+  backup: FileBackup,
+): Promise<void> {
+  await assertSafeDestination(root, path);
+  const target = join(root, path);
+  if (!backup.files.has(path)) {
+    const file = Bun.file(target);
+    backup.files.set(path, (await file.exists()) ? await file.text() : null);
+    for (const directory of await absentDirectories(root, path)) {
+      if (!backup.directories.includes(directory)) backup.directories.push(directory);
+    }
+  }
+  await writeAtomically(target, content);
+}
+
+/** Never a partially written file: the reader either sees the old one or the new one. */
+async function writeAtomically(target: string, content: string): Promise<void> {
+  await mkdir(dirname(target), { recursive: true });
+  const temporary = `${target}.sddc-${crypto.randomUUID()}.tmp`;
+  await Bun.write(temporary, content);
+  await rename(temporary, target);
 }
 
 async function assertSafeDestination(root: string, path: string): Promise<void> {
