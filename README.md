@@ -116,6 +116,14 @@ changes:
 - [How to write requests](docs/en/writing-requests.md)
 - [Документация на русском](docs/ru/README.md)
 
+### Licence
+
+Copyright (C) 2026 Aidamir. Licensed under the
+[GNU Affero General Public License v3.0](LICENSE).
+
+Use it, change it, ship it. If you run a modified version as a network service,
+the people using that service are entitled to its source.
+
 ## Русский
 
 CLI-приложение на Bun и TypeScript, которое превращает описание задачи в
@@ -231,3 +239,11 @@ changes:
 - [Документация на русском](docs/ru/README.md)
 - [Как составлять запросы](docs/ru/writing-requests.md)
 - [English documentation](docs/en/README.md)
+
+### Лицензия
+
+Copyright (C) 2026 Aidamir. Распространяется по
+[GNU Affero General Public License v3.0](LICENSE).
+
+Пользуйтесь, изменяйте, распространяйте. Если вы запускаете изменённую версию
+как сетевой сервис — пользователи этого сервиса имеют право на её исходный код.
