@@ -83,25 +83,36 @@ export async function loadUserEnvironment(): Promise<void> {
   }
 }
 
+/**
+ * Every setting the tool reads, in the order a fresh configuration lists them.
+ *
+ * One list rather than three. `--init` wrote eight names while `.env.example` carried four, and the
+ * two that had gone missing were exactly the two an error message tells people to set — so the
+ * advice pointed at a variable the repository never mentioned. A test compares this list with the
+ * checked-in example, which turns the next divergence into a failure rather than a discovery.
+ */
+export const CONFIG_KEYS = [
+  "AI_API_TOKEN",
+  "AI_API_URL",
+  "AI_MODEL",
+  "AI_INPUT_USD_PER_MILLION",
+  "AI_MAX_OUTPUT_TOKENS",
+  "AI_REQUEST_TIMEOUT_SECONDS",
+  "SDDC_LANG",
+  "SDDC_THEME",
+] as const;
+
+/** The body of a blank configuration: every key, no values. */
+export function blankConfig(): string {
+  return `${CONFIG_KEYS.map((name) => `${name}=`).join("\n")}\n`;
+}
+
 export async function initializeUserConfig(): Promise<{ path: string; created: boolean }> {
   const path = userConfigPath();
   const file = Bun.file(path);
   if (await file.exists()) return { path, created: false };
   await mkdir(dirname(path), { recursive: true });
-  await Bun.write(
-    path,
-    [
-      "AI_API_TOKEN=",
-      "AI_API_URL=",
-      "AI_MODEL=",
-      "AI_INPUT_USD_PER_MILLION=",
-      "AI_MAX_OUTPUT_TOKENS=",
-      "AI_REQUEST_TIMEOUT_SECONDS=",
-      "SDDC_LANG=",
-      "SDDC_THEME=",
-      "",
-    ].join("\n"),
-  );
+  await Bun.write(path, blankConfig());
   await chmod(path, 0o600);
   return { path, created: true };
 }

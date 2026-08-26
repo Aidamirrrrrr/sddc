@@ -3,6 +3,8 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  blankConfig,
+  CONFIG_KEYS,
   initializeUserConfig,
   loadMaxOutputTokens,
   loadRequestTimeout,
@@ -132,4 +134,17 @@ test("the request timeout is bounded, and refuses a value too small to be one", 
     if (previous === undefined) delete Bun.env.AI_REQUEST_TIMEOUT_SECONDS;
     else Bun.env.AI_REQUEST_TIMEOUT_SECONDS = previous;
   }
+});
+
+test("the checked-in example lists exactly the settings a fresh configuration gets", async () => {
+  // Three places used to describe the same set and two of them had drifted. The example is the one
+  // people read before they ever run --init, so it is the one that must not lie.
+  const example = await Bun.file(new URL("../../.env.example", import.meta.url)).text();
+  const names = example
+    .split("\n")
+    .map((line) => line.split("=")[0]?.trim())
+    .filter(Boolean);
+
+  expect(names).toEqual([...CONFIG_KEYS]);
+  expect(blankConfig()).toBe(`${names.map((name) => `${name}=`).join("\n")}\n`);
 });

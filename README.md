@@ -83,7 +83,14 @@ AI_API_TOKEN=your-token
 AI_API_URL=https://example.com/v1/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
+AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
+AI_REQUEST_TIMEOUT_SECONDS=optional-seconds
+SDDC_LANG=en
+SDDC_THEME=dark
 ```
+
+Only the first three are required. `sddc --init` writes the whole list; the
+[full documentation](docs/en/README.md#configuration) explains what each one bounds.
 
 ### Test-first (SDD Article III)
 
@@ -190,7 +197,15 @@ AI_API_TOKEN=your-token
 AI_API_URL=https://example.com/v1/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
+AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
+AI_REQUEST_TIMEOUT_SECONDS=optional-seconds
+SDDC_LANG=ru
+SDDC_THEME=dark
 ```
+
+Обязательны только первые три. `sddc --init` записывает весь список; что именно
+ограничивает каждая переменная, описано в
+[документации](docs/ru/README.md#конфигурация).
 
 ### Сначала тест (Article III в SDD)
 

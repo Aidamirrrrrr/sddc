@@ -11,6 +11,7 @@ import { buildTaskProposal, type ProposalContext } from "./pipeline";
 import { renderProposal } from "./render";
 import type { ExecutionHooks } from "./runner";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
+import { ranToCompletion } from "./verify";
 
 export type TaskOutcome =
   | { kind: "completed"; result: ExecutionTaskResult; backup: FileBackup }
@@ -186,14 +187,14 @@ export function verificationSatisfied(
  *
  * Accepting any non-zero exit made the inverted expectation trivially satisfiable: a syntax error,
  * a missing binary or a timeout all counted as "the test correctly fails". Those say the suite never
- * got to run an assertion, which is the opposite of what test-first is asking for. Exit codes are the
- * only framework-agnostic signal available here — 126/127 mean the command could not be executed and
- * anything above 128 means it was killed by a signal, so only the ordinary failure range counts.
+ * got to run an assertion, which is the opposite of what test-first is asking for. `ranToCompletion`
+ * draws that line, and draws it in one place so this rule and the inherited-failure rule cannot end
+ * up disagreeing about what a command's exit code meant.
  */
 function failedAsATest(verification: ExecutionTaskResult["verification"]): boolean {
   const last = verification.at(-1);
-  if (!last || last.timed_out) return false;
-  return last.exit_code > 0 && last.exit_code < 126;
+  if (!last || !ranToCompletion(last)) return false;
+  return last.exit_code > 0;
 }
 
 function blockedByUser(task: Task): ChangeProposal {
@@ -212,7 +213,7 @@ function blockedByUser(task: Task): ChangeProposal {
 }
 
 /** An inverted expectation fails with every command green, so it needs its own explanation. */
-function failureFeedback(task: Task, policy: Policy, result: ExecutionTaskResult): string {
+export function failureFeedback(task: Task, policy: Policy, result: ExecutionTaskResult): string {
   if (policy.changes.require_test_before_implementation && writesOnlyTests(task.files)) {
     const last = result.verification.at(-1);
     // Two different failures wear the same status here, and the feedback has to tell them apart or

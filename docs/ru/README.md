@@ -511,6 +511,9 @@ AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
 AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
+AI_REQUEST_TIMEOUT_SECONDS=optional-seconds
+SDDC_LANG=ru
+SDDC_THEME=dark
 ```
 
 `budget.max_model_calls` в `.sddc/policy.yaml` — потолок вызовов модели на весь прогон (по
@@ -532,6 +535,12 @@ reasoning, чтобы весь бюджет ушёл на сам ответ.
 умолчанию 300, минимум 10). Соединение, которое открылось и замолчало, неотличимо от медленной
 модели, поэтому без границы прогон без человека ждёт его вечно. Запрос по таймауту повторяется,
 отменённый вами — нет.
+
+`SDDC_LANG` и `SDDC_THEME` — это настройки, а не доступы, и обе записываются обратно при первом
+ответе: выбор языка спрашивается один раз, а команды `/lang` и `/theme` внутри сессии сохраняют
+новый выбор в тот же файл. `SDDC_THEME` принимает `dark`, `light` или `ansi`; если оставить пусто,
+палитра определяется по терминалу — `NO_COLOR` или отсутствие `COLORTERM` включают `ansi`, а
+`COLORFGBG` различает светлый и тёмный фон.
 
 `AI_MAX_OUTPUT_TOKENS=off` вообще не отправляет ограничение — действует
 собственный максимум модели. Это верная настройка для self-hosted эндпоинта или

@@ -1,12 +1,30 @@
-import { lstat, mkdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, rename, rm, rmdir, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { sha256 } from "./context";
 import type { ChangeProposal } from "./schemas";
 
-export type FileBackup = Map<string, string | null>;
+/**
+ * Everything needed to put the workspace back exactly as it was.
+ *
+ * The directories are recorded rather than inferred at restore time, because "empty once the files
+ * are removed" is a different question from "was not there before". A directory that already existed
+ * and already happened to be empty is not this task's to delete, and only the pre-state knows which
+ * is which.
+ */
+export type FileBackup = {
+  /** Contents before the change; `null` for a file that did not exist. */
+  files: Map<string, string | null>;
+  /** Directories the change had to create, relative to the root. */
+  directories: string[];
+};
+
+export function emptyBackup(): FileBackup {
+  return { files: new Map(), directories: [] };
+}
 
 export async function applyProposal(root: string, proposal: ChangeProposal): Promise<FileBackup> {
-  const backup: FileBackup = new Map();
+  const backup = emptyBackup();
+  const created = new Set<string>();
   for (const change of proposal.changes) {
     await assertSafeDestination(root, change.path);
     const path = join(root, change.path);
@@ -19,8 +37,10 @@ export async function applyProposal(root: string, proposal: ChangeProposal): Pro
     if (change.operation === "create" && exists) {
       throw new Error(`File was created after proposal was created: ${change.path}`);
     }
-    backup.set(change.path, content);
+    backup.files.set(change.path, content);
+    for (const directory of await absentDirectories(root, change.path)) created.add(directory);
   }
+  backup.directories = [...created];
   try {
     for (const change of proposal.changes) {
       const path = join(root, change.path);
@@ -63,13 +83,43 @@ function isMissingFileError(error: unknown): boolean {
 }
 
 export async function restoreFiles(root: string, backup: FileBackup): Promise<void> {
-  for (const [relative, content] of backup) {
-    const path = join(root, relative);
+  for (const [changed, content] of backup.files) {
+    const path = join(root, changed);
     if (content === null) {
       await rm(path, { force: true });
     } else {
       await mkdir(dirname(path), { recursive: true });
       await Bun.write(path, content);
     }
+  }
+  // Deepest first, so a nested directory is gone before the one holding it is tried. Anything still
+  // inside belongs to somebody else, and rmdir refusing to remove it is the right answer rather than
+  // something to work around.
+  const deepestFirst = [...backup.directories].sort(
+    (left, right) => right.split("/").length - left.split("/").length,
+  );
+  for (const directory of deepestFirst) {
+    await rmdir(join(root, directory)).catch(() => undefined);
+  }
+}
+
+/** Ancestor directories of `path` that do not exist yet, shallowest first. */
+async function absentDirectories(root: string, path: string): Promise<string[]> {
+  const parts = path.split(/[\\/]/).slice(0, -1);
+  const absent: string[] = [];
+  let current = "";
+  for (const part of parts) {
+    current = current ? `${current}/${part}` : part;
+    if (await isDirectory(join(root, current))) continue;
+    absent.push(current);
+  }
+  return absent;
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
   }
 }

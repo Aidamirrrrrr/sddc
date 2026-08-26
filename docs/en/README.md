@@ -502,6 +502,9 @@ AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
 AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
+AI_REQUEST_TIMEOUT_SECONDS=optional-seconds
+SDDC_LANG=en
+SDDC_THEME=dark
 ```
 
 `budget.max_model_calls` in `.sddc/policy.yaml` is the whole run's ceiling on model calls
@@ -528,6 +531,12 @@ Set `AI_MAX_OUTPUT_TOKENS=off` to send no cap at all and leave the model's own
 maximum in force. That is the right setting when the endpoint is a flat-rate or
 self-hosted one; against a per-token endpoint the default is a deliberate bound
 on an otherwise open-ended bill.
+
+`SDDC_LANG` and `SDDC_THEME` are preferences rather than credentials, and both are written back
+the first time they are answered: the language selector appears once, and `/lang` or `/theme` in the
+session records the new choice in the same file. `SDDC_THEME` takes `dark`, `light`, or `ansi`;
+left empty, the palette is read from the terminal — `NO_COLOR` or a missing `COLORTERM` selects
+`ansi`, and `COLORFGBG` decides between light and dark.
 
 Process environment variables take precedence over the user configuration.
 To install a development build from this repository, run
