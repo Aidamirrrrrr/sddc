@@ -4,13 +4,19 @@ import type { ImplementationPlan } from "../planning/schemas";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
-import { type ExecutionFile, readTaskFiles } from "./context";
-import { applyProposal, type FileBackup, restoreFiles } from "./files";
+import {
+  type ExecutionFile,
+  type FileGrant,
+  type FileRequest,
+  grantRequestedFiles,
+  readTaskFiles,
+} from "./context";
+import { applyProposal, emptyBackup, type FileBackup, restoreFiles } from "./files";
 import { buildTaskProposal, type ProposalContext, reviewContextFor } from "./pipeline";
 import { reviewProposal } from "./review";
 import type { ChangeProposal, ExecutionTaskResult } from "./schemas";
 import { verificationSatisfied } from "./task-executor";
-import { runVerification } from "./verify";
+import { ranToCompletion, runVerification } from "./verify";
 
 type Verification = ExecutionTaskResult["verification"];
 
@@ -61,6 +67,13 @@ export type AgentOptions = {
   onTurn?: (turn: number, verification: Verification) => void;
   /** Supplied by the prefetcher, so a proposal generated ahead of time is not thrown away. */
   prepared?: { files: ExecutionFile[]; proposal: ChangeProposal };
+  /**
+   * Approves a request to read files the task was not granted. Strict mode supplies it; without it
+   * the host still decides what may be read, it just does not ask first.
+   */
+  approveFiles?: (request: FileRequest) => Promise<boolean>;
+  /** Lets the caller show what the task asked to read and what it got. */
+  onFilesRequested?: (granted: string[], refusals: string[]) => void;
 };
 
 /**
@@ -84,21 +97,43 @@ export type AgentOptions = {
 export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome> {
   const { client, root, spec, plan, task, policy, graph, stage } = options;
   const turns = Math.max(1, policy.execution.max_task_iterations);
+  let approved: boolean | undefined;
+  /**
+   * Whether this task's commands may run at all, asked once and reused.
+   *
+   * Every path that runs a command goes through here. The baseline below used to call the runner
+   * directly, so in strict mode — and for a task holding external_network, which is confirmed in
+   * every mode — the task's own commands ran once before the user had been asked anything at all.
+   * The approval is per task, not per turn: asking again each turn would make strict mode unusable
+   * without making it any stricter.
+   */
+  const commandsApproved = async (): Promise<boolean> => {
+    if (!options.approveCommand) return true;
+    if (approved === undefined) approved = await confirmAll(task, options.approveCommand);
+    return approved;
+  };
   // Taken once, before anything is written, and only when this run has already left the suite red on
   // purpose. A task is answerable for what its change broke, not for what was broken when it
   // arrived — and without this the loop asks a task with nothing left to fix to fix something,
   // which it answers by returning the same file and being rejected for not changing it.
-  const baseline = stage.suiteRedByDesign
-    ? await runVerification(root, task, { policy }).catch(() => undefined)
-    : undefined;
-  let backup: FileBackup = new Map();
+  //
+  // Skipped outright when the commands were refused: a command that never ran says nothing about the
+  // pre-state, and recording the refusal as the baseline would let the loop later match a refusal
+  // against a refusal and call the task inherited-green.
+  const baseline =
+    stage.suiteRedByDesign && (await commandsApproved())
+      ? await runVerification(root, task, { policy }).catch(() => undefined)
+      : undefined;
+  let backup: FileBackup = emptyBackup();
   let feedback = options.feedback;
+  /** Files granted on request during this task, carried across its turns. Read-only, always. */
+  let extra: ExecutionFile[] = [];
+  let expansions = 0;
   let last: AgentTurn | undefined;
   /** The best turn seen: one whose commands came out the way the host requires. */
   let satisfied: AgentTurn | undefined;
   /** Why the reviewer refused that turn, when it did. */
   let refusal: string | undefined;
-  let approved: boolean | undefined;
 
   for (let turn = 1; turn <= turns; turn += 1) {
     // Re-read every turn: after the first, the files carry this task's own previous attempt, which
@@ -107,13 +142,51 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
     let files: ExecutionFile[];
     let proposal: ChangeProposal;
     try {
-      files = reuse?.files ?? (await readTaskFiles(root, task));
+      files = [...(reuse?.files ?? (await readTaskFiles(root, task))), ...extra];
       proposal =
         reuse?.proposal ??
         (await buildTaskProposal(client, root, spec, plan, task, feedback, policy, graph, {
           ...stage,
           files,
         }));
+      // Answered here rather than by spending a turn on it. Nothing has been written and nothing
+      // verified, so this is still the same attempt at the same task — which is exactly why the
+      // expansions carry a budget of their own rather than eating into the turns.
+      while (
+        proposal.status === "needs_files" &&
+        proposal.needs_files &&
+        expansions < policy.execution.max_context_expansions
+      ) {
+        expansions += 1;
+        const grant = await expandContext(root, proposal.needs_files, policy, files, options);
+        extra = [...extra, ...grant.granted];
+        feedback = expansionFeedback(grant);
+        files = [...(await readTaskFiles(root, task)), ...extra];
+        proposal = await buildTaskProposal(
+          client,
+          root,
+          spec,
+          plan,
+          task,
+          feedback,
+          policy,
+          graph,
+          {
+            ...stage,
+            files,
+          },
+        );
+      }
+      if (proposal.status === "needs_files") {
+        // The budget is spent, and asking again would only spend the turns too. Say so plainly and
+        // let the ordinary loop carry on with what the task has.
+        feedback =
+          "No further files can be granted for this task. Work with the files you were given: " +
+          `${files.map((file) => file.path).join(", ")}. Code owned by a pending sibling task may ` +
+          "legitimately be absent — write your slice against it as it will be. Return the change, " +
+          "or a blocker if the work genuinely cannot be done within this scope.";
+        continue;
+      }
     } catch (error) {
       // A turn that cannot even be drawn ends the loop rather than the task. Anything already
       // applied stays applied and is judged on its own merits — and if nothing has been applied
@@ -139,14 +212,9 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       throw new WorkspaceMovedError(error);
     }
 
-    // The command was approved for this task, not for this turn; asking again every turn would make
-    // strict mode unusable without making it any stricter.
-    if (options.approveCommand && approved === undefined) {
-      approved = await confirmAll(task, options.approveCommand);
-    }
     const verification = await runVerification(root, task, {
       policy,
-      ...(approved === false ? { approve: async () => false } : {}),
+      ...((await commandsApproved()) ? {} : { approve: async () => false }),
     });
     last = { proposal, files, verification };
     options.onTurn?.(turn, verification);
@@ -209,6 +277,51 @@ export async function runTaskAgent(options: AgentOptions): Promise<AgentOutcome>
       turns: turnCount,
     };
   }
+}
+
+/**
+ * Resolves one read request: the user may be asked, and the host checks every path either way.
+ *
+ * A refusal is not a failure. It goes back as the next draw's feedback saying which path was refused
+ * and why, so the model can ask for something else or get on with the work — which is the whole
+ * difference between this and a blocker.
+ */
+async function expandContext(
+  root: string,
+  request: FileRequest,
+  policy: Policy,
+  files: ExecutionFile[],
+  options: AgentOptions,
+): Promise<FileGrant> {
+  const approved = options.approveFiles ? await options.approveFiles(request) : true;
+  const grant = approved
+    ? await grantRequestedFiles(root, request, policy, new Set(files.map((f) => f.path)))
+    : {
+        granted: [],
+        refusals: request.paths.map((item) => `${item.path} was not approved by the user.`),
+      };
+  options.onFilesRequested?.(
+    grant.granted.map((file) => file.path),
+    grant.refusals,
+  );
+  return grant;
+}
+
+/** What the model is told after asking to read something. */
+function expansionFeedback(grant: FileGrant): string {
+  const parts: string[] = [];
+  if (grant.granted.length > 0) {
+    parts.push(
+      `These files are now in the supplied file list: ${grant.granted
+        .map((file) => file.path)
+        .join(", ")}. They are readable only — your writable set has not changed.`,
+    );
+  }
+  if (grant.refusals.length > 0) {
+    parts.push(`These were not supplied:\n${grant.refusals.map((item) => `- ${item}`).join("\n")}`);
+  }
+  parts.push("Return the change now, or ask again only if you genuinely still cannot proceed.");
+  return parts.join("\n\n");
 }
 
 /** Runs the reviewer and returns its objection, or nothing when it passed. */
@@ -278,11 +391,16 @@ function turnFeedback(verification: Verification, turn: number, turns: number): 
  *
  * Deliberately strict — same command, same exit code — so a task that breaks the build in a new way
  * is still caught, and it is only ever consulted once the run has deliberately left the suite red.
+ *
+ * A command that never ran cannot be inherited from. Matching on the exit code alone let a missing
+ * binary absolve itself: 127 before and 127 after look identical, and the task was recorded as
+ * completed having verified nothing at all. `ranToCompletion` is the same line test-first already
+ * draws, which is why it is drawn once.
  */
 function inherited(baseline: Verification | undefined, verification: Verification): boolean {
   if (!baseline) return false;
   const failed = verification.find((item) => item.exit_code !== 0);
-  if (!failed || failed.timed_out) return false;
+  if (!failed || !ranToCompletion(failed)) return false;
   const before = baseline.find(
     (item) => item.program === failed.program && item.args.join(" ") === failed.args.join(" "),
   );
@@ -317,7 +435,10 @@ function annotate(verification: Verification): Verification {
 
 /** Keeps the earliest recorded state for every path, so one restore undoes every turn. */
 function foldBackup(first: FileBackup, next: FileBackup): FileBackup {
-  const folded = new Map(next);
-  for (const [path, content] of first) folded.set(path, content);
-  return folded;
+  const files = new Map(next.files);
+  for (const [path, content] of first.files) files.set(path, content);
+  return {
+    files,
+    directories: [...new Set([...first.directories, ...next.directories])],
+  };
 }

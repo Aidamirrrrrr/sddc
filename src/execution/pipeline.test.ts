@@ -19,6 +19,7 @@ test("invalid model proposal gets one constrained correction", async () => {
     status: "ready" as const,
     summary: "Implement task",
     blocker: null,
+    needs_files: null,
     traceability: [
       { covers: "R1", paths: ["src/auth.ts"] },
       { covers: "A1", paths: ["src/auth.ts"] },

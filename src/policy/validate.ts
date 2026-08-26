@@ -1,6 +1,6 @@
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
-import { isBehaviouralSource, isTestPath, writesOnlyTests } from "./paths";
+import { isBehaviouralSource, isForbiddenPath, isTestPath, writesOnlyTests } from "./paths";
 import type { Policy } from "./schemas";
 
 /** What a criterion proves, so "the test covering this task" can mean something checkable. */
@@ -77,7 +77,7 @@ function usesExternalNetwork(program: string, args: string[]): boolean {
 }
 
 function validateChangedPath(task: Task, path: string, policy: Policy): void {
-  if (policy.changes.forbid_paths.some((forbidden) => matchesPath(path, forbidden))) {
+  if (isForbiddenPath(path, policy.changes.forbid_paths)) {
     throw new Error(`${task.id} changes path forbidden by policy: ${path}`);
   }
   const name = path.split("/").at(-1) ?? path;
@@ -222,12 +222,6 @@ function dependsTransitively(
   return task.depends_on.some(
     (id) => id === dependencyId || dependsTransitively(id, dependencyId, tasks, visited),
   );
-}
-
-function matchesPath(path: string, forbidden: string): boolean {
-  const parts = path.toLocaleLowerCase().split("/");
-  const target = forbidden.toLocaleLowerCase();
-  return parts.includes(target) || parts.at(-1)?.startsWith(`${target}.`) === true;
 }
 
 function isConfiguration(path: string): boolean {

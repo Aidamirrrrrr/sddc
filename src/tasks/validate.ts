@@ -1,4 +1,9 @@
-import { conventionalTestPaths, isBehaviouralSource, isTestPath } from "../policy/paths";
+import {
+  conventionalTestPaths,
+  isBehaviouralSource,
+  isSafeProjectPath,
+  isTestPath,
+} from "../policy/paths";
 import type { RepositoryDiscovery } from "../repository/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task, TaskList, TaskListDraft, TaskListReview } from "./schemas";
@@ -278,15 +283,4 @@ function looksLikeProjectFile(argument: string): boolean {
     argument.includes("/") ||
     /\.(?:cjs|css|go|html|java|js|json|jsx|kt|md|mjs|py|rs|toml|ts|tsx|yaml|yml)$/i.test(argument)
   );
-}
-
-function isSafeProjectPath(path: string): boolean {
-  const normalized = path.replaceAll("\\", "/");
-  if (!normalized || normalized.startsWith("/") || normalized.includes("\0")) return false;
-  const parts = normalized.split("/");
-  if (parts.some((part) => part === "" || part === "." || part === "..")) return false;
-  const lower = parts.at(-1)?.toLocaleLowerCase() ?? "";
-  if (parts.includes(".git") || parts.includes(".specs")) return false;
-  if (lower === ".env" || (lower.startsWith(".env.") && lower !== ".env.example")) return false;
-  return !lower.endsWith(".pem") && !lower.endsWith(".key");
 }

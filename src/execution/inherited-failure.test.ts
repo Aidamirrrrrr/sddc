@@ -38,6 +38,7 @@ function client() {
         status: "ready",
         summary: `Change ${path}`,
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: [path] }],
         changes: [
           { path, operation: "modify", expected_sha256: file?.sha256, content: `new ${id}\n` },
@@ -138,6 +139,55 @@ test("without a deliberate red, a failing command still fails the task", async (
     "trusted",
   );
 
+  expect(journal.status).toBe("failed");
+  expect(retriesOffered).toBe(1);
+});
+
+/** T1 fails its suite the ordinary way; T2's own command cannot be executed at all. */
+function graphWithBrokenSibling() {
+  const [first, second] = graph();
+  if (!first || !second) throw new Error("Fixture must contain two tasks");
+  return [
+    first,
+    {
+      ...second,
+      verification: [
+        { command: { program: "bun", args: ["run", "broken.ts"] }, purpose: "Run the suite" },
+      ],
+    },
+  ];
+}
+
+test("a command that never ran is not something to inherit", async () => {
+  const root = await workspace();
+  // 127 is what a shell reports when it could not execute the command at all — a missing binary, a
+  // renamed script. Before and after look identical, so matching on the exit code alone let it
+  // absolve itself: T2 was recorded completed having verified precisely nothing.
+  await Bun.write(join(root, "broken.ts"), "process.exit(127);\n");
+  let retriesOffered = 0;
+
+  const journal = await executePlan(
+    client(),
+    root,
+    readySpec(),
+    readyPlan(),
+    graphWithBrokenSibling(),
+    {
+      async review() {
+        return { accepted: true };
+      },
+      async retryAfterFailure() {
+        retriesOffered += 1;
+        return false;
+      },
+    },
+    testFirst,
+    "trusted",
+  );
+
+  // T1 is red by design and completes, which is what puts T2 in the inherited-failure path at all.
+  expect(journal.tasks[0]?.status).toBe("completed");
+  // T2 must not be excused: nothing ran, so there is no evidence either way.
   expect(journal.status).toBe("failed");
   expect(retriesOffered).toBe(1);
 });

@@ -435,6 +435,16 @@ current snapshots and either returns complete file contents or an explicit
 blocker requiring replanning. The host checks paths, operations, changed-line and
 content-size limits, requirement traces, and SHA-256 snapshots.
 
+A task may also ask to **read** a file it was not granted. Its readable set is fixed while the graph
+is planned, by a model that has not yet watched the verification fail; when the failure names a file
+outside that set, guessing and blocking were the only moves, and blocking ends the run. A read
+request is answered by the host against the same rules the graph was held to — the path must exist,
+be inside the project, and not be forbidden by policy — and the file arrives as ordinary context on
+the next turn. It grants reading only: `files.modify` never changes. `execution.max_context_expansions`
+bounds it (default 2), separately from the turns, because answering a request is not an attempt at
+the work. In `strict` mode the request is shown and confirmed first; a refusal is not a failure, it
+goes back as the reason and the task carries on with what it has.
+
 A separate read-only model call checks coverage, scope, public behavior, secrets,
 error handling, test quality, and undeclared decisions. It may reject but cannot
 edit a proposal. Revision attempts are limited by policy.
@@ -502,6 +512,9 @@ AI_API_URL=https://chat.immers.cloud/v1/endpoints/model/generate/
 AI_MODEL=model-id
 AI_INPUT_USD_PER_MILLION=optional-input-price
 AI_MAX_OUTPUT_TOKENS=optional-output-cap-or-off
+AI_REQUEST_TIMEOUT_SECONDS=optional-seconds
+SDDC_LANG=en
+SDDC_THEME=dark
 ```
 
 `budget.max_model_calls` in `.sddc/policy.yaml` is the whole run's ceiling on model calls
@@ -528,6 +541,12 @@ Set `AI_MAX_OUTPUT_TOKENS=off` to send no cap at all and leave the model's own
 maximum in force. That is the right setting when the endpoint is a flat-rate or
 self-hosted one; against a per-token endpoint the default is a deliberate bound
 on an otherwise open-ended bill.
+
+`SDDC_LANG` and `SDDC_THEME` are preferences rather than credentials, and both are written back
+the first time they are answered: the language selector appears once, and `/lang` or `/theme` in the
+session records the new choice in the same file. `SDDC_THEME` takes `dark`, `light`, or `ansi`;
+left empty, the palette is read from the terminal — `NO_COLOR` or a missing `COLORTERM` selects
+`ansi`, and `COLORFGBG` decides between light and dark.
 
 Process environment variables take precedence over the user configuration.
 To install a development build from this repository, run

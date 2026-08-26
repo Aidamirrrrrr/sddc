@@ -2,13 +2,42 @@ import { z } from "zod";
 
 export const changeProposalSchema = z.object({
   task_id: z.string(),
-  status: z.enum(["ready", "blocked"]),
+  /**
+   * `needs_files` sits between the other two on purpose.
+   *
+   * A task's readable set is fixed while the graph is planned, by a model that has not yet seen the
+   * verification fail. When the failure names a file outside that set there used to be two moves:
+   * guess, or block — and blocking ends the run and sends the user back to replanning. One of those
+   * situations is recoverable and the other is not, and collapsing them into the irrecoverable one
+   * threw away runs that had nothing wrong with them.
+   *
+   * Reading is not writing: nothing lands, nothing needs rolling back, and the host still decides
+   * what may be read. So the model asks, and the answer arrives as ordinary context on the next
+   * draw.
+   */
+  status: z.enum(["ready", "blocked", "needs_files"]),
   summary: z.string(),
   blocker: z
     .object({
       reason: z.string(),
       required_files: z.array(z.string()),
       required_decision: z.string().nullable(),
+    })
+    .nullable(),
+  /**
+   * Read-only files the task wants before it can produce a change.
+   *
+   * Never grants write access: whatever arrives here is added to what the task may *see* on the next
+   * turn, and `files.modify` is untouched. Nullable rather than optional, matching `blocker`, because
+   * every property in these schemas is required — strict structured output wants it that way.
+   */
+  needs_files: z
+    .object({
+      reason: z.string(),
+      paths: z
+        .array(z.object({ path: z.string(), reason: z.string() }))
+        .min(1)
+        .max(6),
     })
     .nullable(),
   /**

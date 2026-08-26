@@ -34,6 +34,7 @@ function failingClient() {
         status: "ready",
         summary: "Change auth",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
         changes: [
           {
@@ -186,6 +187,7 @@ function movingClient(root: string) {
         status: "ready",
         summary: "Change auth",
         blocker: null,
+        needs_files: null,
         traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
         changes: [
           {

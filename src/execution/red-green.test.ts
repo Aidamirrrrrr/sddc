@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { defaultPolicy } from "../policy/load";
 import type { Task } from "../tasks/schemas";
 import { readyTasks } from "../tasks/test-fixtures";
-import { verificationSatisfied } from "./task-executor";
+import { failureFeedback, verificationSatisfied } from "./task-executor";
 
 const testFirst = {
   ...defaultPolicy,
@@ -87,4 +87,48 @@ test("a red run is judged by the command that actually failed", () => {
   const passedThenFailed = [...green, ...red];
 
   expect(verificationSatisfied(task, testFirst, passedThenFailed)).toBe(true);
+});
+
+/**
+ * What the task is told when it failed decides what it corrects next, and under test-first two very
+ * different failures wear the same status: a test that passed too early, and a suite that never ran.
+ * Telling them apart in prose is the whole job of this function — get it wrong and the next draw
+ * fixes the wrong thing.
+ */
+function failure(verification: typeof green): Parameters<typeof failureFeedback>[2] {
+  return {
+    task_id: "T1",
+    status: "failed",
+    changed_files: ["src/auth.test.ts"],
+    verification,
+    output_hashes: [],
+    checkpoint: null,
+  };
+}
+
+test("a test that passed too early is told it asserts nothing", () => {
+  const task = taskWriting([], ["src/auth.test.ts"]);
+
+  const message = failureFeedback(task, testFirst, failure(green));
+
+  expect(message).toContain("passed before its implementation exists");
+  expect(message).toContain("R1");
+});
+
+test("a suite that never started is told so instead", () => {
+  const task = taskWriting([], ["src/auth.test.ts"]);
+
+  // 127 and a timeout both mean nothing was asserted either way. Reusing the "passed too early"
+  // message here would send the model off weakening an assertion that never ran.
+  expect(failureFeedback(task, testFirst, failure(crashed))).toContain("could not be run");
+  expect(failureFeedback(task, testFirst, failure(timedOut))).toContain("could not be run");
+});
+
+test("an ordinary task is told its changes were rolled back", () => {
+  const task = taskWriting(["src/auth.ts"]);
+
+  const message = failureFeedback(task, defaultPolicy, failure(red));
+
+  expect(message).toContain("rolled back");
+  expect(message).toContain("bun test");
 });

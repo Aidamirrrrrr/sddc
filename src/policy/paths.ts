@@ -52,3 +52,30 @@ export function conventionalTestPaths(source: string): string[] {
     `${directory ?? ""}__tests__/${name}.${extension}`,
   ];
 }
+
+/**
+ * A path a task may name at all: inside the project, and not a file the tool refuses to touch.
+ *
+ * Lived privately in the task validator until a second caller needed it — the execution phase now
+ * checks a model's read request against the same rule the graph was checked against. Two copies of
+ * "which paths are off limits" is exactly the drift this module exists to prevent.
+ */
+export function isSafeProjectPath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/") || normalized.includes("\0")) return false;
+  const parts = normalized.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) return false;
+  const lower = parts.at(-1)?.toLocaleLowerCase() ?? "";
+  if (parts.includes(".git") || parts.includes(".specs")) return false;
+  if (lower === ".env" || (lower.startsWith(".env.") && lower !== ".env.example")) return false;
+  return !lower.endsWith(".pem") && !lower.endsWith(".key");
+}
+
+/** Whether a path is covered by one of the policy's forbidden names. */
+export function isForbiddenPath(path: string, forbidden: string[]): boolean {
+  const parts = path.toLocaleLowerCase().split("/");
+  return forbidden.some((name) => {
+    const target = name.toLocaleLowerCase();
+    return parts.includes(target) || parts.at(-1)?.startsWith(`${target}.`) === true;
+  });
+}

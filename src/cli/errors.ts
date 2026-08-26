@@ -1,3 +1,4 @@
+import { APICallError } from "@ai-sdk/provider";
 import { phrase } from "./ui";
 
 export type PresentedError = { message: string; hint?: string };
@@ -14,12 +15,58 @@ function errorMessages(error: unknown): string[] {
   const messages: string[] = [];
   let current: unknown = error;
   while (current instanceof Error && messages.length < 3) {
-    const message = current.message.replace(/\s+/g, " ").trim().slice(0, 500);
+    const message = [current.message, providerDetail(current)]
+      .filter(Boolean)
+      .join(": ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 500);
     if (message && !messages.includes(message)) messages.push(message);
     current = current.cause;
   }
   if (messages.length === 0) messages.push(String(error).slice(0, 500));
   return messages;
+}
+
+/**
+ * What the provider actually said.
+ *
+ * An APICallError's message is the HTTP reason phrase and nothing else. A run against an endpoint
+ * that was merely asleep reported "Bad Request" and threw away the one sentence that explained it —
+ * the body said to wait until the endpoint was available. Nothing else in the run could have told
+ * the user that, and the hint machinery below had nothing to match on either.
+ *
+ * The status code travels too: 400 and 401 call for completely different reactions, and the reason
+ * phrase alone does not separate them.
+ */
+function providerDetail(error: Error): string {
+  if (!APICallError.isInstance(error)) return "";
+  const status = error.statusCode ? `HTTP ${error.statusCode}` : "";
+  const body = error.responseBody?.trim();
+  return [status, body ? providerMessage(body) : ""].filter(Boolean).join(" ");
+}
+
+/** Providers answer with JSON far more often than not; fall back to the raw text when they do not. */
+function providerMessage(body: string): string {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed === "object" && parsed !== null) {
+      const record = parsed as { message?: unknown; error?: unknown; detail?: unknown };
+      const nested = record.error;
+      const candidate =
+        typeof nested === "string"
+          ? nested
+          : typeof nested === "object" && nested !== null
+            ? (nested as { message?: unknown }).message
+            : undefined;
+      for (const value of [candidate, record.message, record.detail]) {
+        if (typeof value === "string" && value.trim()) return value.trim().slice(0, 200);
+      }
+    }
+  } catch {
+    // Not JSON. The raw body is still better than nothing at all.
+  }
+  return body.slice(0, 200);
 }
 
 function friendlyError(messages: string[]): string {
@@ -72,6 +119,13 @@ function errorHint(message: string): string | undefined {
     return phrase({
       en: "The model returned no structured output twice; its output budget is likely exhausted by reasoning. Raise AI_MAX_OUTPUT_TOKENS in ~/.config/sddc/.env, or rerun with --thinking off.",
       ru: "Модель дважды не вернула структурированный ответ; скорее всего, бюджет вывода израсходован на рассуждения. Увеличьте AI_MAX_OUTPUT_TOKENS в ~/.config/sddc/.env или повторите запуск с --thinking off.",
+    });
+  // Anything the endpoint itself refused. Retryable statuses never reach here — backoff has already
+  // spent its attempts on those — so what is left is a request the provider will keep refusing.
+  if (/HTTP 40[0134]/.test(message))
+    return phrase({
+      en: "The provider refused the request. Check that the endpoint is running and that AI_MODEL names a model it serves.",
+      ru: "Провайдер отклонил запрос. Проверьте, что эндпоинт запущен и что AI_MODEL — это модель, которую он обслуживает.",
     });
   if (/fetch|network|timed? out|ECONN/i.test(message))
     return phrase({

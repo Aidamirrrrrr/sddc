@@ -34,6 +34,7 @@ function proposal(id: string, path: string, requirement: string, acceptance: str
     status: "ready",
     summary: `Change ${path}`,
     blocker: null,
+    needs_files: null,
     traceability: [
       { covers: requirement, paths: [path] },
       { covers: acceptance, paths: [path] },
