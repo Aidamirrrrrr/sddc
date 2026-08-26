@@ -107,6 +107,18 @@ export function startApp(root = process.cwd()): Driver {
       remember(message, value);
       return value;
     },
+    async autoAccept(message, seconds) {
+      const elapsed = await ask<boolean>((resolve) => ({
+        kind: "countdown",
+        message,
+        seconds,
+        resolve,
+      }));
+      // Recorded either way: the transcript should say the artifact was accepted without being
+      // argued with, not go quiet about it.
+      remember(message, elapsed ? "accepted" : "opened for review");
+      return elapsed;
+    },
     offerPaths: (paths) => store.update((state) => ({ ...state, paths })),
     nextRequest() {
       return new Promise<string>((resolve) => {

@@ -38,6 +38,8 @@ export const defaultPolicy: Policy = {
   dialogue: {
     max_clarification_rounds: 3,
     max_revision_rounds: 5,
+    // Long enough to read the summary and stop it, short enough not to be a wait.
+    auto_accept_seconds: 5,
   },
   execution: {
     default_approval_mode: "normal",

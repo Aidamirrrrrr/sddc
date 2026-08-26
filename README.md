@@ -69,8 +69,9 @@ sddc "Add user registration"
 ```
 
 Useful modes: `--dry-run` stops after the accepted task graph, `--recompile plan|tasks|execute` rebuilds a stored feature, `--plain` removes
-decorative output, `--json` emits JSON Lines and implies `--no-input`, `--debug`
-shows stack traces, and `--no-input` guarantees that no prompt will be opened.
+decorative output, `--json` emits JSON Lines and implies `--no-input`, `--yes` implements without
+stopping at each diff, `--debug` shows stack traces, and `--no-input` guarantees
+that no prompt will be opened.
 Use `--lang en` or `--lang ru` to skip the language selector.
 
 Process environment variables take precedence over the user configuration.
@@ -184,7 +185,8 @@ sddc "Добавить регистрацию пользователей"
 
 Режимы запуска: `--dry-run` останавливается после принятого графа задач, `--recompile plan|tasks|execute` пересобирает сохранённую фичу, `--plain`
 убирает декоративный вывод, `--json` выдаёт JSON Lines и включает `--no-input`,
-`--debug` показывает stack trace, а `--no-input` гарантирует отсутствие prompts.
+`--yes` выполняет реализацию без остановки на каждом diff, `--debug` показывает
+stack trace, а `--no-input` гарантирует отсутствие prompts.
 Флаги `--lang en` и `--lang ru` позволяют пропустить выбор языка.
 
 Переменные окружения имеют приоритет над пользовательским конфигом. Для

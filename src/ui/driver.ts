@@ -65,6 +65,14 @@ export type Driver = {
    * walked — and so a surface with no completion simply ignores it.
    */
   offerPaths?(paths: string[]): void;
+  /**
+   * Shows a countdown and answers whether it ran out.
+   *
+   * `true` means nobody interrupted and the caller may proceed; `false` means a key was pressed and
+   * the caller should ask properly. Only a surface that can read a keystroke without a prompt open
+   * can offer this; the others leave it undefined and the caller falls back to asking.
+   */
+  autoAccept?(message: string, seconds: number): Promise<boolean>;
   /** Ends the session on an explicit user cancellation. Never returns. */
   cancel(message: string): never;
   /**

@@ -58,6 +58,13 @@ export type Pending =
     }
   | { kind: "confirm"; message: string; initial: boolean; resolve: (value: boolean) => void }
   | {
+      kind: "countdown";
+      message: string;
+      seconds: number;
+      /** `true` when it ran out untouched, `false` when a key stopped it. */
+      resolve: (elapsed: boolean) => void;
+    }
+  | {
       kind: "text";
       message: string;
       options: TextOptions;

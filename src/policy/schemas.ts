@@ -46,6 +46,15 @@ export const policySchema = z.object({
     max_clarification_rounds: z.number().int().positive(),
     /** Caps how many times the user may reject an artifact and ask for another version. */
     max_revision_rounds: z.number().int().positive(),
+    /**
+     * How long an uncontested artifact is shown before it is accepted on the user's behalf.
+     *
+     * Zero turns it off. Everything reaching the review menu has already passed every validator —
+     * sampling would not have returned otherwise — so "it is valid" is not a signal. What is a
+     * signal is that the phase never had to ask anything and was never sent back: there was nothing
+     * to decide, and an approval that carries no decision is a keystroke, not a control.
+     */
+    auto_accept_seconds: z.number().int().nonnegative(),
   }),
   execution: z.object({
     default_approval_mode: z.enum(["strict", "normal", "trusted"]),

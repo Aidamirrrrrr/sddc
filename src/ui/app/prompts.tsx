@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Choice, TextOptions } from "../driver";
 import { t } from "../language";
 import { theme } from "../theme";
@@ -366,6 +366,49 @@ export function TextPrompt({
       ) : (
         <Hint>{t({ en: "enter to submit", ru: "enter — отправить" })}</Hint>
       )}
+    </Box>
+  );
+}
+
+/**
+ * An artifact nobody had to decide anything about, accepted unless someone objects.
+ *
+ * Deliberately a countdown rather than a silent acceptance: the artifact is still shown, still
+ * scrolls past in the transcript, and is still stoppable — the run only stops asking for a
+ * keystroke that carried no information.
+ */
+export function CountdownPrompt({
+  message,
+  seconds,
+  onSubmit,
+}: {
+  message: string;
+  seconds: number;
+  onSubmit: (elapsed: boolean) => void;
+}) {
+  const [left, setLeft] = useState(seconds);
+
+  useEffect(() => {
+    if (left <= 0) {
+      onSubmit(true);
+      return;
+    }
+    const timer = setTimeout(() => setLeft((current) => current - 1), 1_000);
+    return () => clearTimeout(timer);
+  }, [left, onSubmit]);
+
+  useKeys(() => onSubmit(false));
+
+  return (
+    <Box marginTop={1}>
+      <Text color={theme.accent}>{"  ◆  "}</Text>
+      <Text color={theme.text}>{message}</Text>
+      <Text color={theme.muted}>
+        {t({
+          en: `  accepting in ${left}s · any key to review`,
+          ru: `  приму через ${left}с · любая клавиша — проверить`,
+        })}
+      </Text>
     </Box>
   );
 }
