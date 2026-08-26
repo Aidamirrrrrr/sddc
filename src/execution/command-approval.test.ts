@@ -7,6 +7,7 @@ import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
 import { runTaskAgent } from "./agent";
 import { executionPrompts } from "./prompts";
+import { finishCall, writeCall } from "./tool-fixtures";
 
 /**
  * Strict mode promises that every verification command is confirmed, and a task holding
@@ -37,8 +38,9 @@ function task() {
 }
 
 function client() {
+  let step = 0;
   return {
-    async generateObject<T>(system: string, prompt: string): Promise<T> {
+    async generateObject<T>(system: string): Promise<T> {
       if (system !== executionPrompts.implement) {
         return {
           checks: Array.from({ length: 7 }, (_, index) => ({
@@ -49,26 +51,12 @@ function client() {
           findings: [],
         } as T;
       }
-      const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
-      const file = (context.files as Array<{ path: string; sha256: string }>).find(
-        (item) => item.path === "src/auth.ts",
-      );
-      return {
-        task_id: context.task.id,
-        status: "ready",
-        summary: "Change src/auth.ts",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
-        changes: [
-          {
-            path: "src/auth.ts",
-            operation: "modify",
-            expected_sha256: file?.sha256,
-            content: "changed\n",
-          },
-        ],
-      } as T;
+      step += 1;
+      return (
+        step % 2 === 1
+          ? writeCall("src/auth.ts", "changed\n")
+          : finishCall("Change src/auth.ts", [{ covers: "R1", paths: ["src/auth.ts"] }])
+      ) as T;
     },
   };
 }

@@ -8,8 +8,10 @@ import { specificationLanguage } from "../spec/language";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
 import { type ExecutionFile, readTaskFiles } from "./context";
+import type { FileBackup } from "./files";
 import { executionPrompts } from "./prompts";
 import { type ChangeProposal, changeProposalSchema, executionReviewSchema } from "./schemas";
+import { createToolHost, type ToolResult, toolCallSchema, validateToolCall } from "./tools";
 import { validateProposal } from "./validate";
 
 type ObjectGenerator = Pick<ModelClient, "generateObject">;
@@ -39,19 +41,16 @@ export type ProposalContext = {
    * would excuse a task whose verification simply never passes.
    */
   suiteRedByDesign?: boolean;
+  /**
+   * Confirms a command the user has not already approved in the implementation contract.
+   *
+   * A callback among facts, which is not tidy — but the alternative was a tenth positional
+   * parameter on a function that already had nine, and the loop is the only thing that needs it.
+   */
+  approveCommand?: (program: string, args: string[]) => Promise<boolean>;
+  /** Lets the terminal show a task working rather than a task thinking. */
+  onToolResult?: (result: { tool: string; ok: boolean; summary: string }) => void;
 };
-
-/**
- * The default repair instruction warns against expanding scope, which pushes a model that has just
- * refused a task toward refusing it again. When the refusal itself was what got rejected, the
- * instruction has to say the opposite.
- */
-function repairInstruction(rejectedBlocker: boolean): string {
-  return rejectedBlocker
-    ? "Your previous blocker was rejected as factually wrong: the approved scope already covers " +
-        "every file you need. Produce the change instead of a blocker."
-    : "Correct the proposal once without expanding the approved scope.";
-}
 
 /**
  * What the rest of the graph is doing, read-only.
@@ -102,7 +101,33 @@ function verificationExpectation(task: Task, policy: Policy): string {
   return "Verification commands must pass once this task's changes are applied.";
 }
 
-export async function buildTaskProposal(
+/**
+ * What one attempt at a task produced.
+ *
+ * The backup travels with the proposal now: the loop writes as it goes, so by the time there is
+ * something to judge the workspace has already moved, and whoever decides to keep or abandon the
+ * result needs the means to undo it in the same hand.
+ */
+export type TaskAttempt = {
+  proposal: ChangeProposal;
+  /** Everything the model ended up seeing, including files it opened during the loop. */
+  files: ExecutionFile[];
+  backup: FileBackup;
+};
+
+/**
+ * Drives one task's tool loop until it finishes, refuses, or runs out of calls.
+ *
+ * Every call is one structured output, validated before the host acts on it, and the host's answer
+ * goes back as the next call's evidence. `finish` produces the ordinary `ChangeProposal`, so
+ * everything downstream — the validator, the verification, the reviewer, the journal, the rollback —
+ * judges this exactly as it judged a single-shot proposal.
+ *
+ * A rejected `finish` is not the end of the attempt. `validateProposal`'s messages are written as
+ * instructions for whoever reads them next, so the rejection becomes a tool result and the loop
+ * gets to correct it — which is what a one-shot draw could never do.
+ */
+export async function runTaskTools(
   client: ObjectGenerator,
   root: string,
   spec: Spec,
@@ -112,10 +137,19 @@ export async function buildTaskProposal(
   policy: Policy = defaultPolicy,
   graph: Task[] = [task],
   stage: ProposalContext = {},
-): Promise<ChangeProposal> {
-  const files = stage.files ?? (await readTaskFiles(root, task));
+): Promise<TaskAttempt> {
+  const opening = stage.files ?? (await readTaskFiles(root, task));
+  const tools = createToolHost({
+    root,
+    task,
+    policy,
+    ...(stage.approveCommand ? { approveCommand: stage.approveCommand } : {}),
+  });
+  tools.supply(opening);
+
   // Ordered so the part shared by every task of the run — language, spec, constitution, plan —
-  // forms one prefix, and only the per-task tail changes. That is what a provider can cache.
+  // forms one prefix, and only the per-task tail changes. That is what a provider can cache, and
+  // it is why the transcript, which grows on every call, sits at the very end.
   const context = {
     outputLanguage: specificationLanguage(spec),
     specification: spec,
@@ -133,36 +167,75 @@ export async function buildTaskProposal(
     task,
     expectation: verificationExpectation(task, policy),
     otherTasks: graphOutline(graph, task, new Set(stage.completed ?? [])),
-    files,
     feedback,
   };
-  // One loop for both gates: a proposal has to survive deterministic validation and the read-only
-  // reviewer, and a rejection from either is what the next draw is told about.
-  let previous: ChangeProposal | undefined;
-  return sampleUntilValid(
-    policy.execution.max_proposal_revisions + 1,
-    async (rejection) => {
-      const proposal = await generate(
-        client,
-        rejection === undefined || !previous
-          ? context
-          : {
-              ...context,
-              // A rejected blocker's stated reason is wrong by definition, and echoing it back was
-              // measured to re-anchor the model on it. Only the refusal itself travels forward.
-              rejected_proposal: previous.status === "blocked" ? { status: "blocked" } : previous,
-              validation_error: rejection,
-              instruction: repairInstruction(previous.status === "blocked"),
-            },
-      );
-      previous = proposal;
-      return proposal;
-    },
-    // Only the deterministic gate runs here. The read-only reviewer used to run on every draw, which
-    // put a model's opinion in front of the code ever being executed: a proposal could be refused
-    // three times over a judgement call while the commands that would have settled it never ran.
-    // It is now the gate on what the loop finally settles, where its findings can be acted on.
-    (proposal) => validateProposal(proposal, task, files, policy, graph),
+
+  const transcript: ToolResult[] = [];
+  const calls = Math.max(1, policy.execution.max_tool_calls_per_task);
+  let lastRejection: string | undefined;
+
+  for (let step = 1; step <= calls; step += 1) {
+    const files = [...opening, ...tools.opened()];
+    const call = await sampleUntilValid(
+      policy.execution.max_proposal_revisions + 1,
+      async (rejection) =>
+        client.generateObject(
+          executionPrompts.implement,
+          pretty({
+            ...context,
+            files,
+            remaining_calls: calls - step + 1,
+            transcript: summarize(transcript, policy.execution.max_transcript_results),
+            ...(rejection === undefined ? {} : { call_error: rejection }),
+          }),
+          toolCallSchema,
+        ),
+      (candidate) => validateToolCall(candidate),
+    );
+
+    const outcome = await tools.execute(call);
+    if (outcome.kind === "continue") {
+      transcript.push({ ...outcome.result, summary: `${step}. ${outcome.result.summary}` });
+      stage.onToolResult?.(outcome.result);
+      continue;
+    }
+
+    try {
+      validateProposal(outcome.proposal, task, files, policy, graph);
+      return { proposal: outcome.proposal, files, backup: tools.backup() };
+    } catch (error) {
+      // Not the end of the attempt: the validator's message is written to be acted on, so it goes
+      // back as evidence and the loop corrects it. A one-shot draw could only be redrawn whole.
+      lastRejection = error instanceof Error ? error.message : String(error);
+      transcript.push({
+        tool: outcome.proposal.status === "blocked" ? "block" : "finish",
+        ok: false,
+        summary: `${step}. rejected: ${lastRejection.slice(0, 120)}`,
+        detail: lastRejection,
+      });
+    }
+  }
+
+  throw new Error(
+    `Task ${task.id} used all ${calls} tool calls without a usable result` +
+      (lastRejection ? `. Last rejection: ${lastRejection}` : "."),
+  );
+}
+
+/**
+ * The transcript the next call is shown.
+ *
+ * It grows on every call, and a task that reads four files and runs three commands would otherwise
+ * carry every byte of all seven forever. The recent entries keep their full text because that is
+ * what is being reasoned about; everything older collapses to the line it was summarised as, which
+ * is enough to remember that it happened and what came of it.
+ */
+export function summarize(results: ToolResult[], keep: number): unknown[] {
+  const full = Math.max(0, keep);
+  return results.map((result, index) =>
+    index >= results.length - full
+      ? { tool: result.tool, ok: result.ok, output: result.detail }
+      : { tool: result.tool, ok: result.ok, output: result.summary },
   );
 }
 
@@ -206,13 +279,6 @@ export async function runExecutionStage(
   return undefined;
 }
 
-async function generate(
-  client: ObjectGenerator,
-  context: Record<string, unknown>,
-): Promise<ChangeProposal> {
-  return client.generateObject(
-    executionPrompts.implement,
-    JSON.stringify(context, null, 2),
-    changeProposalSchema,
-  );
+function pretty(value: unknown): string {
+  return JSON.stringify(value, null, 2);
 }

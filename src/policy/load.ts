@@ -49,9 +49,10 @@ export const defaultPolicy: Policy = {
     max_proposal_revisions: 2,
     max_task_iterations: 3,
     max_task_attempts: 3,
-    // Two is what a task needs to follow one import it could not see and then one it found behind
-    // it. A third has not been observed to answer anything the first two did not.
-    max_context_expansions: 2,
+    // Enough for a task to read what it needs, write its files, run the suite, read the failure and
+    // correct itself twice over. A task that has not converged in forty moves is not one call away.
+    max_tool_calls_per_task: 40,
+    max_transcript_results: 6,
     command_timeout_seconds: 120,
     allow_git_checkpoints: false,
   },

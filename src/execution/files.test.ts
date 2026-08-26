@@ -13,7 +13,6 @@ test("applied files can be restored exactly", async () => {
     status: "ready",
     summary: "Change files",
     blocker: null,
-    needs_files: null,
     traceability: [{ covers: "R1", paths: ["existing.ts"] }],
     changes: [
       {
@@ -40,7 +39,6 @@ test("apply rejects a file changed after proposal generation", async () => {
       status: "ready",
       summary: "Stale change",
       blocker: null,
-      needs_files: null,
       traceability: [{ covers: "R1", paths: ["file.ts"] }],
       changes: [
         {
@@ -65,7 +63,6 @@ test("apply rejects destinations through symbolic links", async () => {
       status: "ready",
       summary: "Unsafe create",
       blocker: null,
-      needs_files: null,
       traceability: [{ covers: "R1", paths: ["linked/file.ts"] }],
       changes: [
         { path: "linked/file.ts", operation: "create", expected_sha256: null, content: "bad\n" },
@@ -82,7 +79,6 @@ test("a rolled-back task leaves no directory it created", async () => {
     status: "ready",
     summary: "Create a nested file",
     blocker: null,
-    needs_files: null,
     traceability: [{ covers: "R1", paths: ["src/feature/deep/thing.ts"] }],
     changes: [
       {
@@ -112,7 +108,6 @@ test("a directory that was already there survives a rollback", async () => {
     status: "ready",
     summary: "Create a file in an existing directory",
     blocker: null,
-    needs_files: null,
     traceability: [{ covers: "R1", paths: ["src/existing/thing.ts"] }],
     changes: [
       {
@@ -138,7 +133,6 @@ test("a directory holding somebody else's file is left alone", async () => {
     status: "ready",
     summary: "Create a nested file",
     blocker: null,
-    needs_files: null,
     traceability: [{ covers: "R1", paths: ["src/new/mine.ts"] }],
     changes: [
       { path: "src/new/mine.ts", operation: "create", expected_sha256: null, content: "mine\n" },

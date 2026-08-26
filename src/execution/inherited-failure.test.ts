@@ -7,6 +7,7 @@ import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
 import { executionPrompts } from "./prompts";
 import { executePlan } from "./runner";
+import { finishCall, writeCall } from "./tool-fixtures";
 
 const testFirst = {
   ...defaultPolicy,
@@ -15,6 +16,7 @@ const testFirst = {
 
 /** Proposes against whatever snapshot it is given, for whichever task is asking. */
 function client() {
+  const steps = new Map<string, number>();
   return {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       if (system !== executionPrompts.implement) {
@@ -30,20 +32,13 @@ function client() {
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
       const id = context.task?.id ?? "T1";
       const path = id === "T1" ? "src/auth.test.ts" : "docs/README.md";
-      const file = (context.files as Array<{ path: string; sha256: string }>).find(
-        (item) => item.path === path,
-      );
-      return {
-        task_id: id,
-        status: "ready",
-        summary: `Change ${path}`,
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: [path] }],
-        changes: [
-          { path, operation: "modify", expected_sha256: file?.sha256, content: `new ${id}\n` },
-        ],
-      } as T;
+      const step = (steps.get(id) ?? 0) + 1;
+      steps.set(id, step);
+      return (
+        step % 2 === 1
+          ? writeCall(path, `new ${id}\n`)
+          : finishCall(`Change ${path}`, [{ covers: "R1", paths: [path] }])
+      ) as T;
     },
   };
 }

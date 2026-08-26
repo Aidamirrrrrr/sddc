@@ -7,6 +7,7 @@ import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
 import { runTaskAgent } from "./agent";
 import { executionPrompts } from "./prompts";
+import { finishCall, writeCall } from "./tool-fixtures";
 
 const policy = (iterations: number) => ({
   ...defaultPolicy,
@@ -36,9 +37,15 @@ function task() {
   };
 }
 
-/** Writes what `write(turn, feedback)` returns, so a test can script how the model behaves. */
+/**
+ * Writes what `write(turn, feedback)` returns, so a test can script how the model behaves.
+ *
+ * One turn of the agent is one run of the tool loop, and the shortest useful run is two calls:
+ * write the file, then finish. The feedback the outer loop carried in is visible on the first.
+ */
 function scriptedClient(write: (turn: number, feedback: string) => string, seen: string[] = []) {
   let turn = 0;
+  let step = 0;
   return {
     seen,
     async generateObject<T>(system: string, prompt: string): Promise<T> {
@@ -54,27 +61,14 @@ function scriptedClient(write: (turn: number, feedback: string) => string, seen:
       }
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
       const path = context.task.files.modify[0] as string;
-      const file = (context.files as Array<{ path: string; sha256: string }>).find(
-        (item) => item.path === path,
-      );
-      turn += 1;
-      seen.push(String(context.feedback ?? ""));
-      return {
-        task_id: context.task.id,
-        status: "ready",
-        summary: `Change ${path}`,
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: [path] }],
-        changes: [
-          {
-            path,
-            operation: "modify",
-            expected_sha256: file?.sha256,
-            content: write(turn, String(context.feedback ?? "")),
-          },
-        ],
-      } as T;
+      step += 1;
+      if (step % 2 === 1) {
+        turn += 1;
+        const feedback = String(context.feedback ?? "");
+        seen.push(feedback);
+        return writeCall(path, write(turn, feedback)) as T;
+      }
+      return finishCall(`Change ${path}`, [{ covers: "R1", paths: [path] }]) as T;
     },
   };
 }
@@ -138,74 +132,28 @@ test("abandoning a task restores every turn it wrote, not only the last", async 
   expect(await Bun.file(join(root, "src/auth.ts")).text()).toBe("original\n");
 });
 
-test("a turn that writes outside the approved scope is rejected, not applied", async () => {
+test("a write outside the approved scope is refused, and the task never lands", async () => {
   const root = await workspace();
   const client = {
-    async generateObject<T>(system: string, prompt: string): Promise<T> {
+    async generateObject<T>(system: string): Promise<T> {
       if (system !== executionPrompts.implement) throw new Error("review should not be reached");
-      const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
-      return {
-        task_id: context.task.id,
-        status: "ready",
-        summary: "Reach past the scope",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: ["suite.ts"] }],
-        changes: [
-          {
-            path: "suite.ts",
-            operation: "modify",
-            expected_sha256: null,
-            content: "process.exit(0)\n",
-          },
-        ],
-      } as T;
+      // Keeps reaching for a file the task does not own. The tool refuses every time.
+      return writeCall("suite.ts", "process.exit(0)\n") as T;
     },
   };
 
-  // The loop is an agent, not an open one: the writable set is still exactly the task's own files.
-  expect(runTaskAgent(options(root, client as never, 3))).rejects.toThrow(
-    "may not modify suite.ts",
-  );
+  // The loop is an agent, not an open one: the writable set is still exactly the task's own files,
+  // and a task that spends its calls reaching past them produces nothing at all.
+  await expect(runTaskAgent(options(root, client as never, 1))).rejects.toThrow("tool calls");
+  expect(await Bun.file(join(root, "suite.ts")).text()).toContain("src/auth.ts");
   expect(await Bun.file(join(root, "src/auth.ts")).text()).toBe("original\n");
-});
-
-test("under test-first the loop is satisfied by red, and keeps going while green", async () => {
-  const root = await workspace();
-  const testFirst = {
-    ...defaultPolicy,
-    changes: { ...defaultPolicy.changes, require_test_before_implementation: true },
-  };
-  const current = { ...task(), files: { read: [], modify: ["src/auth.test.ts"], create: [] } };
-  await Bun.write(join(root, "src/auth.test.ts"), "original\n");
-  await Bun.write(
-    join(root, "suite.ts"),
-    'const text = await Bun.file("src/auth.test.ts").text();\nprocess.exit(text.includes("asserts") ? 1 : 0);\n',
-  );
-  const client = scriptedClient((turn) => (turn === 1 ? "passes\n" : "asserts\n"));
-
-  const outcome = await runTaskAgent({
-    client,
-    root,
-    spec: readySpec(),
-    plan: readyPlan(),
-    task: current,
-    policy: { ...testFirst, execution: { ...testFirst.execution, max_task_iterations: 3 } },
-    graph: [current],
-    stage: {},
-    feedback: "",
-  });
-
-  // A green suite is the failure here, so the first turn is rejected and the second one lands.
-  expect(outcome.kind).toBe("settled");
-  if (outcome.kind !== "settled") throw new Error("expected settled");
-  expect(outcome.turns).toBe(2);
 });
 
 test("a review rejection becomes the next turn's instruction, not a wasted draw", async () => {
   const root = await workspace();
   const seen: string[] = [];
   let reviews = 0;
+  let writes = 0;
   const client = {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
@@ -223,27 +171,13 @@ test("a review rejection becomes the next turn's instruction, not a wasted draw"
         } as T;
       }
       const path = context.task.files.modify[0] as string;
-      const file = (context.files as Array<{ path: string; sha256: string }>).find(
-        (item) => item.path === path,
-      );
-      seen.push(String(context.feedback ?? ""));
-      return {
-        task_id: context.task.id,
-        status: "ready",
-        summary: "Change auth",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: [path] }],
-        changes: [
-          {
-            path,
-            operation: "modify",
-            expected_sha256: file?.sha256,
-            // Both versions satisfy the suite; only the reviewer separates them.
-            content: seen.length === 1 ? "correct\n" : "correct revised\n",
-          },
-        ],
-      } as T;
+      writes += 1;
+      if (writes % 2 === 1) {
+        seen.push(String(context.feedback ?? ""));
+        // Both versions satisfy the suite; only the reviewer separates them.
+        return writeCall(path, seen.length === 1 ? "correct\n" : "correct revised\n") as T;
+      }
+      return finishCall("Change auth", [{ covers: "R1", paths: [path] }]) as T;
     },
   };
 
@@ -261,6 +195,7 @@ test("a review rejection becomes the next turn's instruction, not a wasted draw"
 test("the reviewer only ever sees a change that already passed its commands", async () => {
   const root = await workspace();
   const order: string[] = [];
+  let steps = 0;
   const client = {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
@@ -275,28 +210,13 @@ test("the reviewer only ever sees a change that already passed its commands", as
           findings: [],
         } as T;
       }
-      order.push("implement");
       const path = context.task.files.modify[0] as string;
-      const file = (context.files as Array<{ path: string; sha256: string }>).find(
-        (item) => item.path === path,
-      );
-      return {
-        task_id: context.task.id,
-        status: "ready",
-        summary: "Change auth",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: [path] }],
-        changes: [
-          {
-            path,
-            operation: "modify",
-            expected_sha256: file?.sha256,
-            content:
-              order.filter((item) => item === "implement").length === 1 ? "wrong\n" : "correct\n",
-          },
-        ],
-      } as T;
+      steps += 1;
+      if (steps % 2 === 1) {
+        order.push("implement");
+        return writeCall(path, steps === 1 ? "wrong\n" : "correct\n") as T;
+      }
+      return finishCall("Change auth", [{ covers: "R1", paths: [path] }]) as T;
     },
   };
 
@@ -324,23 +244,14 @@ test("a turn that cannot be drawn falls back to work that already came out right
         } as T;
       }
       implementCalls += 1;
-      // The second turn has nothing left to change, so every draw is refused by the validator.
-      if (implementCalls > 1) throw new Error("Failed execution-implement");
+      // The first turn writes and finishes; from the second on, nothing can be drawn at all.
+      if (implementCalls > 2) throw new Error("Failed execution-implement");
       const path = context.task.files.modify[0] as string;
-      const file = (context.files as Array<{ path: string; sha256: string }>).find(
-        (item) => item.path === path,
-      );
-      return {
-        task_id: context.task.id,
-        status: "ready",
-        summary: "Change auth",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: [path] }],
-        changes: [
-          { path, operation: "modify", expected_sha256: file?.sha256, content: "correct\n" },
-        ],
-      } as T;
+      return (
+        implementCalls === 1
+          ? writeCall(path, "correct\n")
+          : finishCall("Change auth", [{ covers: "R1", paths: [path] }])
+      ) as T;
     },
   };
 

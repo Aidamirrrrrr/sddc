@@ -7,6 +7,7 @@ import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
 import { executionPrompts } from "./prompts";
 import { executePlan } from "./runner";
+import { finishCall, readCall, writeCall } from "./tool-fixtures";
 
 /**
  * Always proposes a change whose verification will fail, against whatever snapshot it is given.
@@ -15,6 +16,7 @@ import { executePlan } from "./runner";
  * second turn on, the file on disk holds the previous turn's attempt.
  */
 function failingClient() {
+  let step = 0;
   return {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       if (system !== executionPrompts.implement) {
@@ -29,22 +31,12 @@ function failingClient() {
       }
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
       const file = (context.files as Array<{ path: string; sha256: string }>)[0];
-      return {
-        task_id: "T1",
-        status: "ready",
-        summary: "Change auth",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
-        changes: [
-          {
-            path: "src/auth.ts",
-            operation: "modify",
-            expected_sha256: file?.sha256,
-            content: `attempt ${file?.sha256?.slice(0, 8)}\n`,
-          },
-        ],
-      } as T;
+      step += 1;
+      return (
+        step % 2 === 1
+          ? writeCall("src/auth.ts", `attempt ${file?.sha256?.slice(0, 8)}\n`)
+          : finishCall("Change auth", [{ covers: "R1", paths: ["src/auth.ts"] }])
+      ) as T;
     },
   };
 }
@@ -161,15 +153,15 @@ test("rolling a verified task back is bounded like every other retry", async () 
 });
 
 /**
- * Moves the file out from under its own proposal, in the window the model call occupies.
+ * Moves the file out from under the loop, in the window a model call occupies.
  *
- * That window is where this really happens: a sibling's proposal was prefetched from an older
- * snapshot, or an editor saved while the model was thinking.
+ * That window is where this really happens: an editor saving, a formatter running, a sibling's
+ * snapshot read a moment earlier. It used to end the whole attempt and cost a retry at the runner.
  */
 function movingClient(root: string) {
-  let moved = false;
+  let step = 0;
   return {
-    async generateObject<T>(system: string, prompt: string): Promise<T> {
+    async generateObject<T>(system: string): Promise<T> {
       if (system !== executionPrompts.implement) {
         return {
           checks: Array.from({ length: 7 }, (_, index) => ({
@@ -180,34 +172,19 @@ function movingClient(root: string) {
           findings: [],
         } as T;
       }
-      const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
-      const file = (context.files as Array<{ path: string; sha256: string }>)[0];
-      const proposal = {
-        task_id: "T1",
-        status: "ready",
-        summary: "Change auth",
-        blocker: null,
-        needs_files: null,
-        traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
-        changes: [
-          {
-            path: "src/auth.ts",
-            operation: "modify",
-            expected_sha256: file?.sha256,
-            content: "changed\n",
-          },
-        ],
-      };
-      if (!moved) {
-        moved = true;
+      step += 1;
+      if (step === 1) {
         await Bun.write(join(root, "src/auth.ts"), "someone else got there first\n");
+        return writeCall("src/auth.ts", "changed\n") as T;
       }
-      return proposal as T;
+      if (step === 2) return readCall("it moved under me", ["src/auth.ts"]) as T;
+      if (step === 3) return writeCall("src/auth.ts", "changed\n") as T;
+      return finishCall("Change auth", [{ covers: "R1", paths: ["src/auth.ts"] }]) as T;
     },
   };
 }
 
-test("a workspace that moved under a proposal is retried, not thrown", async () => {
+test("a workspace that moved under the loop is recovered inside it", async () => {
   const root = await workspace();
   let retries = 0;
 
@@ -230,7 +207,8 @@ test("a workspace that moved under a proposal is retried, not thrown", async () 
     "trusted",
   );
 
-  // The stale draw is a retry, and the next one is built from the file as it now is.
+  // No retry at the runner at all: the write tool said the file had moved, the loop read it
+  // again and carried on. That recovery used to cost the whole attempt.
   expect(journal.status).toBe("completed");
   expect(retries).toBe(0);
   expect(await Bun.file(join(root, "src/auth.ts")).text()).toBe("changed\n");

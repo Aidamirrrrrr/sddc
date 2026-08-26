@@ -19,7 +19,6 @@ test("proposal accepts only approved task writes with current hashes", () => {
         status: "ready",
         summary: "Update auth",
         blocker: null,
-        needs_files: null,
         traceability: [
           { covers: "R1", paths: ["src/auth.ts"] },
           { covers: "A1", paths: ["src/auth.ts"] },
@@ -45,7 +44,6 @@ test("proposal accepts only approved task writes with current hashes", () => {
         status: "ready",
         summary: "Escape scope",
         blocker: null,
-        needs_files: null,
         traceability: [
           { covers: "R1", paths: [".env"] },
           { covers: "A1", paths: [".env"] },
@@ -71,7 +69,6 @@ test("proposal must implement every planned file within the size limit", () => {
     status: "ready" as const,
     summary: "Incomplete",
     blocker: null,
-    needs_files: null,
     traceability: [
       { covers: "R1", paths: ["src/auth.ts"] },
       { covers: "A1", paths: ["src/auth.ts"] },
@@ -110,7 +107,6 @@ test("a task that blocks on files it may already write is rejected, not obeyed",
       required_files: ["src/auth.ts"],
       required_decision: "Add src/auth.ts to files.modify",
     },
-    needs_files: null,
     traceability: [],
     changes: [],
   };
@@ -132,7 +128,6 @@ test("a blocker naming a file outside the approved scope still stops the run", (
       required_files: ["src/router.ts"],
       required_decision: "Extend the plan to cover routing",
     },
-    needs_files: null,
     traceability: [],
     changes: [],
   };
@@ -152,7 +147,6 @@ test("a blocker asking for a decision rather than a file is left alone", () => {
       required_files: [],
       required_decision: "Decide the duplicate-email behaviour",
     },
-    needs_files: null,
     traceability: [],
     changes: [],
   };
@@ -214,7 +208,6 @@ function blockedOn(required: string[]): ChangeProposal {
       required_files: required,
       required_decision: "Allow this task to write the implementation",
     },
-    needs_files: null,
     traceability: [],
     changes: [],
   };
@@ -228,7 +221,6 @@ test("tracing a criterion to a file the proposal only reads is explained, not ju
     status: "ready",
     summary: "Add tag tests",
     blocker: null,
-    needs_files: null,
     // The commonest wrong guess: point at the source under test rather than the file changed.
     traceability: [
       { covers: "R1", paths: ["src/store.test.ts"] },
@@ -257,7 +249,6 @@ test("a missing traceability entry says which criterion and what to point at", (
     status: "ready",
     summary: "Add tag tests",
     blocker: null,
-    needs_files: null,
     traceability: [{ covers: "R1", paths: ["src/store.test.ts"] }],
     changes: [
       {

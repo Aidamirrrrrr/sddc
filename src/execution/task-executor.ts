@@ -4,10 +4,10 @@ import { writesOnlyTests } from "../policy/paths";
 import type { Policy } from "../policy/schemas";
 import type { Spec } from "../spec/schemas";
 import type { Task } from "../tasks/schemas";
-import { runTaskAgent, WorkspaceMovedError } from "./agent";
+import { runTaskAgent } from "./agent";
 import { readTaskFiles, sha256 } from "./context";
 import { type FileBackup, restoreFiles } from "./files";
-import { buildTaskProposal, type ProposalContext } from "./pipeline";
+import type { ProposalContext } from "./pipeline";
 import { renderProposal } from "./render";
 import type { ExecutionHooks } from "./runner";
 import type { ChangeProposal, ExecutionJournal, ExecutionTaskResult } from "./schemas";
@@ -19,45 +19,17 @@ export type TaskOutcome =
   | { kind: "failed"; result: ExecutionTaskResult }
   | { kind: "blocked"; proposal: ChangeProposal };
 
-/** Everything a task needs before anything is written: the current files and the model's proposal. */
-export type TaskPreparation = {
-  files: Awaited<ReturnType<typeof readTaskFiles>>;
-  proposal: ChangeProposal;
-};
-
 /**
- * The read-only half of executing a task. Split out so independent tasks in one wave can have their
- * proposals generated concurrently while the writes that follow stay strictly ordered.
+ * The file snapshot a task starts from, read ahead of time.
+ *
+ * It used to be the whole proposal. With a loop that runs commands, generating one early would run
+ * those commands before the user had reached the task — unacceptable in strict mode and surprising
+ * in every other. Only the reading is done in advance now, which costs latency but nothing else.
  */
-export async function prepareTask(
-  client: Pick<ModelClient, "generateObject">,
-  root: string,
-  spec: Spec,
-  plan: ImplementationPlan,
-  task: Task,
-  feedback: string,
-  policy: Policy,
-  graph: Task[] = [task],
-  stage: ProposalContext = {},
-): Promise<TaskPreparation> {
-  // Read once and hand the same snapshot to the proposal. Reading twice meant the diff shown to the
-  // user and the content the proposal was validated against could come from two different moments.
-  const files = await readTaskFiles(root, task);
-  const proposal = await buildTaskProposal(
-    client,
-    root,
-    spec,
-    plan,
-    task,
-    feedback,
-    policy,
-    graph,
-    {
-      ...stage,
-      files,
-    },
-  );
-  return { files, proposal };
+export type TaskPreparation = { files: Awaited<ReturnType<typeof readTaskFiles>> };
+
+export async function prepareTask(root: string, task: Task): Promise<TaskPreparation> {
+  return { files: await readTaskFiles(root, task) };
 }
 
 export async function executeTask(
@@ -86,50 +58,25 @@ export async function executeTask(
   // scope, so the workspace is touched before the user has approved anything. That is the price of
   // letting the model see what its code actually does — and it is fully refundable: every turn folds
   // into one backup, and every path out of here either keeps the result or restores it exactly.
-  let outcome: Awaited<ReturnType<typeof runTaskAgent>>;
-  try {
-    outcome = await runTaskAgent({
-      client,
-      root,
-      spec,
-      plan,
-      task,
-      policy,
-      graph,
-      stage,
-      feedback,
-      ...(prepared && !feedback ? { prepared } : {}),
-      ...(shouldApproveCommands(task, mode) && hooks.approveCommand
-        ? { approveCommand: (item) => hooks.approveCommand?.(task, item) ?? Promise.resolve(false) }
-        : {}),
-      ...(hooks.taskProgress
-        ? { onTurn: (turn, checks) => hooks.taskProgress?.(task, turn, checks) }
-        : {}),
-      // Reading is not writing, so only strict mode stops to ask. The host checks every requested
-      // path against the same rules in every mode either way.
-      ...(mode === "strict" && hooks.approveFiles
-        ? {
-            approveFiles: (request) =>
-              hooks.approveFiles?.(task, request) ?? Promise.resolve(false),
-          }
-        : {}),
-      ...(hooks.filesRequested
-        ? {
-            onFilesRequested: (granted, refusals) =>
-              hooks.filesRequested?.(task, granted, refusals),
-          }
-        : {}),
-    });
-  } catch (error) {
-    // A workspace that moved under a proposal is a stale draw and another one fixes it. Anything
-    // else — a provider that is down, a budget spent on refusals — is not improved by asking again,
-    // so it travels on and the run names the task it could not produce.
-    if (!(error instanceof WorkspaceMovedError)) throw error;
-    return {
-      kind: "retry",
-      feedback: `The change could not be applied: ${errorMessage(error)}. Rebuild it from the supplied file contents.`,
-    };
-  }
+  const outcome = await runTaskAgent({
+    client,
+    root,
+    spec,
+    plan,
+    task,
+    policy,
+    graph,
+    stage,
+    feedback,
+    ...(prepared && !feedback ? { prepared } : {}),
+    ...(shouldApproveCommands(task, mode) && hooks.approveCommand
+      ? { approveCommand: (item) => hooks.approveCommand?.(task, item) ?? Promise.resolve(false) }
+      : {}),
+    ...(hooks.taskProgress
+      ? { onTurn: (turn, checks) => hooks.taskProgress?.(task, turn, checks) }
+      : {}),
+    ...(hooks.toolResult ? { onToolResult: (result) => hooks.toolResult?.(task, result) } : {}),
+  });
 
   if (outcome.kind === "blocked") return { kind: "blocked", proposal: outcome.proposal };
 
@@ -166,10 +113,6 @@ export async function executeTask(
     }
   }
   return { kind: "completed", result, backup: outcome.backup };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Strict mode confirms every command; anything touching the network is confirmed in every mode. */
@@ -221,7 +164,6 @@ function blockedByUser(task: Task): ChangeProposal {
       required_files: [...task.files.modify, ...task.files.create],
       required_decision: "Revise the plan or explicitly approve the sensitive operation",
     },
-    needs_files: null,
     traceability: [],
     changes: [],
   };

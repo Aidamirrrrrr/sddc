@@ -72,23 +72,6 @@ export function validateProposal(
     validateBlocker(proposal.blocker, task, graph);
     return;
   }
-  if (proposal.status === "needs_files") {
-    if (!proposal.needs_files) throw new Error(`${task.id} needs_files proposal names no files`);
-    if (proposal.changes.length > 0)
-      throw new Error(`${task.id} needs_files proposal contains changes`);
-    // A request for something already in hand is the model failing to read what it was given, and
-    // granting it again would spend an expansion on nothing. Rejected here so the draw is repaired
-    // rather than the budget spent.
-    const visible = new Set(files.map((file) => file.path));
-    const held = proposal.needs_files.paths.filter((item) => visible.has(item.path));
-    if (held.length === proposal.needs_files.paths.length) {
-      throw new Error(
-        `${task.id} asks to read ${held.map((item) => item.path).join(", ")}, which you were ` +
-          "already given in full. Re-read the supplied file contents and return the change.",
-      );
-    }
-    return;
-  }
   if (proposal.blocker) throw new Error(`${task.id} ready proposal contains a blocker`);
   if (proposal.changes.length === 0) throw new Error(`${task.id} proposal contains no changes`);
 

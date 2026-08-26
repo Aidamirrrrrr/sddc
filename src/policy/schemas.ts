@@ -69,13 +69,20 @@ export const policySchema = z.object({
      */
     max_task_attempts: z.number().int().positive(),
     /**
-     * How many times one task may ask to read a file it was not granted.
+     * How many tool calls one attempt at a task may make.
      *
-     * Its own budget rather than a share of the turns, because answering a read request is not an
-     * attempt at the work: nothing has been written and nothing has been verified. Bounded all the
-     * same — an unbounded appetite for context is how a task talks its way to the whole repository.
+     * The loop's own bound, distinct from max_task_iterations, which counts how many times the
+     * whole loop is restarted after verification came out wrong. Reading, searching and running
+     * diagnostics all draw on this, so an unbounded appetite for context is bounded here.
      */
-    max_context_expansions: z.number().int().nonnegative(),
+    max_tool_calls_per_task: z.number().int().positive(),
+    /**
+     * How many recent tool results keep their full text in the next call's context.
+     *
+     * Everything older collapses to the line it was summarised as. Without this the transcript is
+     * the one thing in the pipeline that grows without limit within a single task.
+     */
+    max_transcript_results: z.number().int().positive(),
     command_timeout_seconds: z.number().int().positive(),
     allow_git_checkpoints: z.boolean(),
   }),

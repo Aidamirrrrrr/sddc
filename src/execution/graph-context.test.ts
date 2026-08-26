@@ -5,33 +5,45 @@ import { join } from "node:path";
 import { readyPlan, readySpec } from "../planning/test-fixtures";
 import { defaultPolicy } from "../policy/load";
 import { readyTasks } from "../tasks/test-fixtures";
-import { sha256 } from "./context";
-import { buildTaskProposal } from "./pipeline";
+import { runTaskTools } from "./pipeline";
 import { executionPrompts } from "./prompts";
 
 /** Captures the context a stage was given instead of contacting a model. */
 function capturingClient(onContext: (context: Record<string, unknown>) => void) {
+  let calls = 0;
   return {
     async generateObject<T>(system: string, prompt: string): Promise<T> {
       const context = JSON.parse(prompt.split("\n\n----- stage instruction -----")[0] ?? "{}");
       if (system === executionPrompts.implement) {
         onContext(context);
-        return {
-          task_id: "T1",
-          status: "ready",
-          summary: "Change auth",
-          blocker: null,
-          needs_files: null,
-          traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
-          changes: [
-            {
-              path: "src/auth.ts",
-              operation: "modify",
-              expected_sha256: sha256("old\n"),
-              content: "new\n",
-            },
-          ],
-        } as T;
+        // Writes once, then finishes: the shortest run that still exercises the whole loop.
+        calls += 1;
+        return (
+          calls === 1
+            ? {
+                reasoning: "write the change",
+                tool: "write",
+                read: null,
+                search: null,
+                write: { path: "src/auth.ts", content: "new\n" },
+                run: null,
+                finish: null,
+                block: null,
+              }
+            : {
+                reasoning: "done",
+                tool: "finish",
+                read: null,
+                search: null,
+                write: null,
+                run: null,
+                finish: {
+                  summary: "Change auth",
+                  traceability: [{ covers: "R1", paths: ["src/auth.ts"] }],
+                },
+                block: null,
+              }
+        ) as T;
       }
       return {
         checks: Array.from({ length: 7 }, (_, index) => ({
@@ -58,7 +70,7 @@ test("a task is shown the rest of the graph, but only as an outline", async () =
   if (!first) throw new Error("Fixture must contain a task");
   first.acceptance = [];
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -85,7 +97,7 @@ test("a task never sees itself in the outline", async () => {
   if (!first) throw new Error("Fixture must contain a task");
   first.acceptance = [];
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -109,7 +121,7 @@ test("a lone task simply has no siblings to be told about", async () => {
   if (!first) throw new Error("Fixture must contain a task");
   first.acceptance = [];
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -131,7 +143,7 @@ test("the implementer is given the accepted plan, not a summary of it", async ()
   first.acceptance = [];
   const plan = readyPlan();
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -157,7 +169,7 @@ test("upstream decisions travel with the task", async () => {
   if (!first) throw new Error("Fixture must contain a task");
   first.acceptance = [];
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -182,7 +194,7 @@ test("the outline says which siblings have actually landed", async () => {
   if (!first || !second) throw new Error("Fixture must contain two tasks");
   first.acceptance = [];
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -213,7 +225,7 @@ test("under test-first a test-only task is told its command must fail", async ()
 
   // The stub proposes a source change this task may not make, so the draw is rejected. The context
   // it was given is what this test is about, and it was captured before that.
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),
@@ -235,7 +247,7 @@ test("an ordinary task is told the opposite", async () => {
   if (!first) throw new Error("Fixture must contain a task");
   first.acceptance = [];
 
-  await buildTaskProposal(
+  await runTaskTools(
     capturingClient((context) => {
       captured = context;
     }),

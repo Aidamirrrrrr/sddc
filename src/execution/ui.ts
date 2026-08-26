@@ -141,35 +141,8 @@ function createHooks(root: string, mode: ExecutionJournal["mode"], policy: Polic
         false,
       );
     },
-    async approveFiles(task, request) {
-      driver().document(
-        phrase({ en: `${task.id} wants to read more`, ru: `${task.id} просит открыть файлы` }),
-        [
-          request.reason,
-          "",
-          ...request.paths.map((item) => `${item.path}\n  ${item.reason}`),
-          "",
-          phrase({
-            en: "Read-only. The files this task may change do not change.",
-            ru: "Только чтение. Список изменяемых файлов задачи не меняется.",
-          }),
-        ].join("\n"),
-      );
-      return driver().confirm(
-        phrase({ en: "Let the task read these?", ru: "Разрешить задаче их прочитать?" }),
-        false,
-      );
-    },
-    filesRequested(task, granted, refusals) {
-      if (granted.length === 0 && refusals.length === 0) return;
-      driver().action(
-        phrase({ en: `${task.id} · context`, ru: `${task.id} · контекст` }),
-        [
-          ...granted.map((path) => phrase({ en: `read ${path}`, ru: `прочитан ${path}` })),
-          ...refusals.map((reason) => `✗ ${reason}`),
-        ],
-        refusals.length === 0 ? "info" : "warn",
-      );
+    toolResult(task, result) {
+      driver().action(`${task.id} · ${result.tool}`, [result.summary], result.ok ? "info" : "warn");
     },
     taskProgress(task, turn, verification) {
       const failed = verification.filter((item) => item.exit_code !== 0);

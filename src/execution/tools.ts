@@ -150,6 +150,8 @@ export function createToolHost(context: ToolHostContext) {
   const written = new Map<string, string>();
   const backup: FileBackup = emptyBackup();
   const supplied = new Set<string>();
+  /** What each file looked like when the model was last shown it. */
+  const shown = new Map<string, string>();
   const opened: ExecutionFile[] = [];
   let commandApproval: Promise<boolean> | undefined;
   let index: Promise<RepositoryFile[]> | undefined;
@@ -169,14 +171,26 @@ export function createToolHost(context: ToolHostContext) {
     /** Files opened during the loop, added to what the next call is shown. */
     opened: (): ExecutionFile[] => opened,
     /** Marks files the caller supplied up front, so re-reading them is refused as waste. */
-    supply(paths: string[]): void {
-      for (const path of paths) supplied.add(path);
+    supply(files: ExecutionFile[]): void {
+      for (const file of files) {
+        supplied.add(file.path);
+        shown.set(file.path, file.sha256);
+      }
     },
 
     async execute(call: ToolCall): Promise<ToolOutcome> {
       validateToolCall(call);
 
       if (call.read) {
+        // A file that changed since it was shown is worth reading again. Refusing it as "already
+        // supplied" would leave the model unable to recover from the very staleness the write tool
+        // had just told it about — the one refusal in here that is meant to be recoverable.
+        for (const path of call.read.paths) {
+          const seen = shown.get(path);
+          if (seen === undefined) continue;
+          const file = Bun.file(join(root, path));
+          if ((await file.exists()) && sha256(await file.text()) !== seen) supplied.delete(path);
+        }
         const grant = await grantRequestedFiles(
           root,
           {
@@ -188,6 +202,7 @@ export function createToolHost(context: ToolHostContext) {
         );
         for (const file of grant.granted) {
           supplied.add(file.path);
+          shown.set(file.path, file.sha256);
           opened.push(file);
         }
         const names = grant.granted.map((file) => file.path);
@@ -238,16 +253,27 @@ export function createToolHost(context: ToolHostContext) {
             `${path} exceeds the size policy allows.`,
           );
         }
-        if (
-          creatable.has(path) &&
-          !written.has(path) &&
-          (await Bun.file(join(root, path)).exists())
-        ) {
-          return failed(
-            "write",
-            `write ${path}: already exists`,
-            `${path} was listed as a file to create, but it already exists.`,
-          );
+        if (!written.has(path)) {
+          const file = Bun.file(join(root, path));
+          const exists = await file.exists();
+          if (creatable.has(path) && exists) {
+            return failed(
+              "write",
+              `write ${path}: already exists`,
+              `${path} was listed as a file to create, but it already exists.`,
+            );
+          }
+          // The staleness guard applyProposal used to provide, moved to where the writing now
+          // happens. An editor saving mid-task, or a formatter, would otherwise be overwritten
+          // silently — and unlike a rejected proposal this is recoverable: read it again.
+          const seen = shown.get(path);
+          if (exists && seen !== undefined && seen !== sha256(await file.text())) {
+            return failed(
+              "write",
+              `write ${path}: changed since you read it`,
+              `${path} has changed on disk since you were shown it. Read it again, then write.`,
+            );
+          }
         }
         await writeTracked(root, path, content, backup);
         written.set(path, content);
@@ -298,7 +324,6 @@ export function createToolHost(context: ToolHostContext) {
             status: "ready",
             summary: call.finish.summary,
             blocker: null,
-            needs_files: null,
             traceability: call.finish.traceability,
             changes: [...written].map(([path, content]) => ({
               path,
@@ -318,7 +343,6 @@ export function createToolHost(context: ToolHostContext) {
           task_id: task.id,
           status: "blocked",
           summary: call.block?.reason ?? "Task refused",
-          needs_files: null,
           blocker: call.block ?? {
             reason: "Task refused",
             required_files: [],
